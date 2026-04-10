@@ -50,6 +50,23 @@ class HashEncoder:
         """Return the encoded last name as a four-character uppercase alphanumeric hash."""
         return self._hash(name)
 
+    def encode_full_name(self, name: str) -> str:
+        """Encode a full name by applying first-name and last-name rules to each part.
+
+        The first word is treated as the first name; all remaining words are
+        joined and treated as the last name. A single-word name is treated as
+        a first name only. This ensures a first name appearing alone in a file
+        or folder name resolves to the same value as in a full name.
+        """
+        parts = name.split()
+        if not parts:
+            return name
+        if len(parts) == 1:
+            return self.encode_first_name(parts[0])
+        first = self.encode_first_name(parts[0])
+        last = self.encode_last_name(" ".join(parts[1:]))
+        return f"{first} {last}"
+
     def _hash(self, value: str) -> str:
         """Return a deterministic four-character uppercase alphanumeric string.
 
