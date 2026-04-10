@@ -400,3 +400,70 @@ body {
     color: var(--color-footer-text);
     text-align: center;
 }
+
+/* ---- Panel heading row (output panel with lang badge) ---- */
+
+.panel-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* ---- Language badge ---- */
+
+.lang-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 3px;
+    background: var(--color-primary);
+    color: #fff;
+}
+
+/* ---- Key reference section ---- */
+
+.keyref-section {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.keyref-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.keyref-table th,
+.keyref-table td {
+    text-align: left;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.keyref-table th {
+    font-weight: 600;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--color-bg);
+}
+
+.keyref-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ---- Error text ---- */
+
+.error-text {
+    color: #c0392b;
+    font-style: italic;
+    font-size: 0.875rem;
+}

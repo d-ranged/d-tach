@@ -3,10 +3,6 @@
 {% block title %}Text Mode{% endblock %}
 
 {% block content %}
-<div class="wip-banner">
-    Interface under construction — controls are not yet active.
-</div>
-
 <section class="panels">
     <div class="panel panel-input">
         <h2 class="panel-heading">Input</h2>
@@ -14,12 +10,14 @@
             class="text-area"
             id="input-text"
             placeholder="Paste text here to anonymize..."
-            disabled
         ></textarea>
     </div>
 
     <div class="panel panel-output">
-        <h2 class="panel-heading">Output</h2>
+        <div class="panel-heading-row">
+            <h2 class="panel-heading">Output</h2>
+            <span class="lang-badge" id="lang-badge" hidden></span>
+        </div>
         <div class="text-area output-area" id="output-text" aria-label="Anonymized output">
             <span class="placeholder-text">Anonymized text will appear here.</span>
         </div>
@@ -30,25 +28,31 @@
 <section class="settings-bar">
     <div class="setting-group">
         <label class="toggle-label">
-            <input type="checkbox" class="toggle" id="keyref-toggle" disabled>
+            <input type="checkbox" class="toggle" id="keyref-toggle">
             <span>Key Reference</span>
         </label>
-        <p class="setting-hint">Save a reference mapping each placeholder to the original value.</p>
+        <p class="setting-hint">Show a mapping of each placeholder back to the original value.</p>
     </div>
 
     <div class="setting-group">
         <label class="toggle-label">
-            <input type="checkbox" class="toggle" id="hashing-toggle" disabled>
+            <input
+                type="checkbox"
+                class="toggle"
+                id="hashing-toggle"
+                {% if hashing_enabled %}checked{% endif %}
+            >
             <span>Enable Hashing</span>
         </label>
-        <div class="secret-field" id="secret-field" hidden>
+        <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
             <label for="secret-input" class="secret-label">Secret</label>
             <input
                 type="password"
                 id="secret-input"
                 class="secret-input"
                 placeholder="Enter a secret phrase"
-                disabled
+                value="{{ hashing_secret }}"
+                autocomplete="off"
             >
         </div>
         <p class="setting-hint">
@@ -57,4 +61,22 @@
         </p>
     </div>
 </section>
+
+<section class="keyref-section" id="keyref-section" hidden>
+    <h2 class="section-heading">Key Reference</h2>
+    <table class="keyref-table">
+        <thead>
+            <tr>
+                <th>Placeholder</th>
+                <th>Original</th>
+                <th>Type</th>
+            </tr>
+        </thead>
+        <tbody id="keyref-body"></tbody>
+    </table>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/text_mode.js') }}"></script>
 {% endblock %}
