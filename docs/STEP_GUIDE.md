@@ -320,6 +320,78 @@ identical output for identical input and secret across sessions.
 
 ---
 
+## Step 7.5 — Hotfix: Language Selection, Date Toggle, Pattern Config Parity
+
+**Codeberg issue to create first:**
+`fix: manual language selection, optional date anonymization, pattern config in both modes`
+
+**Goal:** Correct three usability and accuracy problems identified during real-document
+testing before continuing with PDF support. This step must be complete before Step 8.
+
+### Background and reasoning
+
+Three issues were found during testing on a real internship document:
+
+**Issue 1 — Language detection is unreliable.**
+`langdetect` is probabilistic. On short texts it can misidentify the language, and on
+mixed-language documents (e.g. a Dutch report with English headings) it is inconsistent.
+In testing, names were missed in a full sentence — the most likely cause is the wrong
+spaCy model being selected because the language was detected incorrectly. The user always
+knows what language their documents are in; they should choose it.
+
+**Issue 2 — DATE_TIME anonymization is too aggressive.**
+Presidio's `DATE_TIME` entity type catches all date formats including relative dates,
+quarters, academic years, and any sequence that looks like a date. In internship and
+student documents, dates are ubiquitous (submission dates, period headings, deadlines)
+and are not personally identifying on their own. Anonymizing them makes output difficult
+to read and is rarely what the user wants. Dates of birth are the one case where dates
+ARE sensitive, but these are rare and will often be caught by context. DATE_TIME should
+be off by default and opt-in.
+
+**Issue 3 — Student number pattern config exists only in Document Mode.**
+The digit-count input for student number detection was placed in Document Mode during
+the Step 2 placeholder UI but was never added to Text Mode. Since student numbers
+appear in plain pasted text too, both modes need the control. The control does not need
+to be functional yet (that is Step 10) but it must be present in the UI now so it is
+not forgotten.
+
+### What to build
+
+**1. Manual language selection — both modes**
+- Add a language selector (EN / NL) to Text Mode settings bar and Document Mode
+  settings panel.
+- The selector replaces the automatic `LanguageDetector` call in both the
+  `/text/anonymize` and `/document/process-file` routes.
+- `LanguageDetector` can remain as a class for potential future use but is no
+  longer called at runtime.
+- `UserSettings` should persist the selected language and restore it on launch.
+
+**2. DATE_TIME opt-in toggle — both modes**
+- Add an "Anonymize dates" toggle to Text Mode settings bar and Document Mode
+  settings panel. Off by default.
+- When off, remove `DATE_TIME` from the entities list passed to Presidio.
+- When on, include it as before.
+- Persist the toggle state via `UserSettings`.
+- Update `Anonymizer.anonymize()` to accept an optional `entities` override
+  parameter, or filter the list at the route level before calling the anonymizer.
+
+**3. Student number digit count in Text Mode**
+- Add the digit count input and enable/disable toggle to the Text Mode settings
+  bar (same control as already shown in Document Mode).
+- Does not need to be wired to actual detection yet — that is Step 10.
+- The visual control must be present and its value must persist via `UserSettings`.
+
+### ✅ Step 7.5 is complete when
+- Language selector appears in both modes; selected language is used for detection;
+  selecting NL on a Dutch document with a name anonymizes it correctly
+- "Anonymize dates" toggle appears in both modes, defaults to off; dates are not
+  replaced when off; dates are replaced when on
+- Student number digit count control is present in Text Mode
+- All three settings persist between sessions
+- Existing tests still pass
+
+---
+
 ## Step 8 — FileProcessor: Single File (PDF)
 
 **Codeberg issue to create first:**
@@ -427,11 +499,57 @@ of corrupt files.
 
 ---
 
-## Nice-to-Have Steps (Post-Public)
+## Post-Public Issue Backlog
 
-Lower priority — do not block Steps 0–12.
+After the repo goes public, further development is tracked as Codeberg issues rather
+than ordered steps. Issues do not need to be done in sequence — they can be picked up
+by any contributor or by the maintainer in priority order.
 
-- **Step 13** — Visual highlighting of detected entities in Text Mode
-- **Step 14** — Drag and drop individual file in Document Mode
-- **Step 15** — Auto-clipboard on anonymization in Text Mode
-- **Step 16** — Packaging for easier installation (setup script or similar)
+Create all of these as Codeberg issues at the time of going public (Step 12) so the
+community can see the roadmap and self-assign work.
+
+### High priority (do first after public)
+
+- **Key Reference export**
+  The key reference is currently displayed on screen in Text Mode and saved as a `.txt`
+  file in Document Mode. Add a download button in Text Mode so the user can save the
+  key reference as a file (`.txt` or `.csv`). The in-UI table stays; the button adds
+  a one-click export alongside it.
+
+- **Accuracy review and model upgrade path**
+  Evaluate whether `en_core_web_lg` and `nl_core_news_lg` (the large spaCy models)
+  meaningfully improve name detection over the medium models. Document the trade-off
+  (download size vs. accuracy) and offer the larger models as an opt-in in the
+  installation guide.
+
+- **Organisation name detection review**
+  As noted in `PROJECT_GUIDE.md`, organisation names are less reliably detected and
+  may or may not be sensitive under GDPR depending on context. Assess detection quality
+  after real-world use and consider adding a confidence indicator or a review step.
+
+### Medium priority
+
+- **Visual highlighting of detected entities in Text Mode**
+  Highlight detected PII in the output panel so the user can visually verify what was
+  replaced. `Mark.js` is the documented candidate library (see `PROJECT_GUIDE.md`).
+
+- **Drag and drop individual file in Document Mode**
+  Allow a single file to be dropped onto the Document Mode panel as an alternative to
+  typing the path. When dropped, populate the file path field automatically.
+  Note: the browser security model means the server still needs the absolute path;
+  investigate the File System Access API as the mechanism.
+
+- **Auto-clipboard on anonymization in Text Mode**
+  Place the anonymized output in the clipboard automatically when processing completes,
+  so the user can paste without clicking the copy button.
+
+### Lower priority
+
+- **Batch summary log**
+  After a folder processing run, save a machine-readable summary log (JSON or CSV)
+  to the processed folder listing each file's status, entity count, and output path.
+
+- **Packaging for easier installation**
+  A setup script or packaged installer that creates the virtual environment, installs
+  dependencies, and downloads spaCy models in one step. Target audience: colleagues
+  without Python experience.

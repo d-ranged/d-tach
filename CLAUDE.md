@@ -32,6 +32,10 @@ Workflow per step:
 4. When step is complete, Claude confirms what to do: user creates the PR via Codeberg GUI with description `Closes #N`
 5. User tests, confirms working, merges via GUI, then deletes the feature branch
 
+**Exception — documentation-only changes:** Updates to `docs/STEP_GUIDE.md`,
+`docs/PROJECT_GUIDE.md`, or `CLAUDE.md` that contain no code changes may be
+committed directly to `main` without a feature branch.
+
 ## Project Documentation
 
 Before coding any feature, consult these files in order:
