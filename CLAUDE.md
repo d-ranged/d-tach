@@ -21,6 +21,21 @@ external dependencies at runtime beyond locally installed libraries.
 
 ---
 
+## Git usage
+
+Gitrea is installed on powershell, use tree to create issues and ensure commits reference issues, and branches are created on an issue and then merged after so process is for steps
+
+Create issue with appropriate title
+i.e. `tea issues create --title "Set up Python environment and install dependencies" --label "chore"`
+ensure you have issue number for commit references
+create a branch labeled issue-#-short-description
+each logical step create a commit that links to the issue
+when issue is completed ensure repo up to date
+create a merge request that has a description to close an issue
+i.e. `tea pr create --title "Python environment setup" --description "Closes #2" `
+
+I will confirm all working and then if confirmed run `tea pr merge` then clean feature branch locally and online
+
 ## Project Documentation
 
 Before coding any feature, consult these files in order:
