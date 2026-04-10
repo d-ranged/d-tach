@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Flask
+instance/
+.webassets-cache
+flask_session/
+
+# spaCy models (large — download via step guide, do not commit)
+*.model
+/models/
+
+# Environment and user settings (may contain user secret)
+.env
+.env.*
+!.env.example
+user_settings.json
+
+# d-tach output files — must never be committed
+# These may contain real PII (key reference) or anonymized content
+**/KEYREF_*
+**/ANON_*
+**/CHECKED_*
+
+# Test output
+/tests/output/
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+desktop.ini
+Thumbs.db
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
