@@ -3,34 +3,21 @@
 {% block title %}Document Mode{% endblock %}
 
 {% block content %}
-<div class="wip-banner">
-    Interface under construction — controls are not yet active.
-</div>
-
 <section class="doc-section">
-    <h2 class="section-heading">Select Folder</h2>
+    <h2 class="section-heading">File Path</h2>
     <div class="folder-input-row">
         <input
             type="text"
             class="folder-path-display"
-            id="folder-path"
-            placeholder="No folder selected"
-            readonly
-            disabled
+            id="file-path"
+            placeholder="Paste the full path to a DOCX file, e.g. C:\Documents\report.docx"
         >
-        <label class="btn btn-browse" for="folder-input">
-            Browse&hellip;
-            <input
-                type="file"
-                id="folder-input"
-                webkitdirectory
-                multiple
-                hidden
-                disabled
-            >
-        </label>
-        <button class="btn btn-primary" id="process-btn" disabled>Process</button>
+        <button class="btn btn-primary" id="process-btn">Process</button>
     </div>
+    <p class="setting-hint">
+        The anonymized output file is saved alongside the original with an
+        <code>ANON_</code> or <code>CHECKED_</code> prefix. The original is not modified.
+    </p>
 </section>
 
 <section class="doc-section">
@@ -38,7 +25,7 @@
     <div class="settings-grid">
         <div class="setting-group">
             <label class="toggle-label">
-                <input type="checkbox" class="toggle" id="keyref-toggle" disabled>
+                <input type="checkbox" class="toggle" id="keyref-toggle">
                 <span>Key Reference</span>
             </label>
             <p class="setting-hint">
@@ -49,28 +36,34 @@
 
         <div class="setting-group">
             <label class="toggle-label">
-                <input type="checkbox" class="toggle" id="names-toggle" disabled>
+                <input type="checkbox" class="toggle" id="names-toggle">
                 <span>Check file and folder names</span>
             </label>
             <p class="setting-hint">
-                Detect and rename files and folders containing PII using the
-                same rules applied to document content.
+                Detect and rename output files containing PII using the same
+                rules applied to document content.
             </p>
         </div>
 
         <div class="setting-group">
             <label class="toggle-label">
-                <input type="checkbox" class="toggle" id="hashing-toggle" disabled>
+                <input
+                    type="checkbox"
+                    class="toggle"
+                    id="hashing-toggle"
+                    {% if hashing_enabled %}checked{% endif %}
+                >
                 <span>Enable Hashing</span>
             </label>
-            <div class="secret-field" id="secret-field" hidden>
+            <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
                 <label for="secret-input" class="secret-label">Secret</label>
                 <input
                     type="password"
                     id="secret-input"
                     class="secret-input"
                     placeholder="Enter a secret phrase"
-                    disabled
+                    value="{{ hashing_secret }}"
+                    autocomplete="off"
                 >
             </div>
             <p class="setting-hint">
@@ -86,14 +79,14 @@
                 type="number"
                 id="digit-count"
                 class="digit-input"
-                value="7"
+                value="{{ pattern_config.digit_count }}"
                 min="4"
                 max="12"
                 disabled
             >
             <p class="setting-hint">
-                Detect sequences of exactly this many consecutive digits as
-                student numbers. Currency amounts are excluded.
+                Student number detection is configured here and will be active
+                in a future step.
             </p>
         </div>
     </div>
@@ -109,7 +102,11 @@
 <section class="doc-section" id="summary-section">
     <h2 class="section-heading">Results</h2>
     <div class="summary-area" id="summary-area">
-        <span class="muted">Summary will appear here after processing.</span>
+        <span class="muted">Results will appear here after processing.</span>
     </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/document_mode.js') }}"></script>
 {% endblock %}
