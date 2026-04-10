@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Text Mode{% endblock %}
+
+{% block content %}
+<div class="wip-banner">
+    Interface under construction — controls are not yet active.
+</div>
+
+<section class="panels">
+    <div class="panel panel-input">
+        <h2 class="panel-heading">Input</h2>
+        <textarea
+            class="text-area"
+            id="input-text"
+            placeholder="Paste text here to anonymize..."
+            disabled
+        ></textarea>
+    </div>
+
+    <div class="panel panel-output">
+        <h2 class="panel-heading">Output</h2>
+        <div class="text-area output-area" id="output-text" aria-label="Anonymized output">
+            <span class="placeholder-text">Anonymized text will appear here.</span>
+        </div>
+        <button class="btn btn-copy" id="copy-btn" disabled>Copy to clipboard</button>
+    </div>
+</section>
+
+<section class="settings-bar">
+    <div class="setting-group">
+        <label class="toggle-label">
+            <input type="checkbox" class="toggle" id="keyref-toggle" disabled>
+            <span>Key Reference</span>
+        </label>
+        <p class="setting-hint">Save a reference mapping each placeholder to the original value.</p>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle-label">
+            <input type="checkbox" class="toggle" id="hashing-toggle" disabled>
+            <span>Enable Hashing</span>
+        </label>
+        <div class="secret-field" id="secret-field" hidden>
+            <label for="secret-input" class="secret-label">Secret</label>
+            <input
+                type="password"
+                id="secret-input"
+                class="secret-input"
+                placeholder="Enter a secret phrase"
+                disabled
+            >
+        </div>
+        <p class="setting-hint">
+            Produce consistent pseudonyms (e.g. Craig &#8594; Cr-A2T5) instead of
+            sequential placeholders.
+        </p>
+    </div>
+</section>
+{% endblock %}
