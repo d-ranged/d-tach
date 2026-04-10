@@ -23,18 +23,14 @@ external dependencies at runtime beyond locally installed libraries.
 
 ## Git usage
 
-Gitrea is installed on powershell, use tree to create issues and ensure commits reference issues, and branches are created on an issue and then merged after so process is for steps
+Issues are created manually via the Codeberg GUI. Claude references issue numbers in commits and branch names.
 
-Create issue with appropriate title
-i.e. `tea issues create --title "Set up Python environment and install dependencies" --label "chore"`
-ensure you have issue number for commit references
-create a branch labeled issue-#-short-description
-each logical step create a commit that links to the issue
-when issue is completed ensure repo up to date
-create a merge request that has a description to close an issue
-i.e. `tea pr create --title "Python environment setup" --description "Closes #2" `
-
-I will confirm all working and then if confirmed run `tea pr merge` then clean feature branch locally and online
+Workflow per step:
+1. User creates the issue on Codeberg GUI and provides the issue number
+2. Claude creates a branch: `chore/issue-N-short-description` or `feature/issue-N-short-description`
+3. Claude commits regularly, each message referencing the issue: `Description of change (issue #N)`
+4. When step is complete, Claude confirms what to do: user creates the PR via Codeberg GUI with description `Closes #N`
+5. User tests, confirms working, merges via GUI, then deletes the feature branch
 
 ## Project Documentation
 
