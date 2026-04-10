@@ -19,6 +19,13 @@ def create_app() -> Flask:
         settings_path=Path(app.root_path).parent / "user_settings.json"
     )
 
+    from app.services.file_processor import FileProcessor
+
+    app.file_processor = FileProcessor(  # type: ignore[attr-defined]
+        anonymizer=app.anonymizer,
+        language_detector=app.language_detector,
+    )
+
     from app.routes.text_routes import bp as text_bp
     from app.routes.document_routes import bp as document_bp
 

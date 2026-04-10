@@ -467,3 +467,9 @@ body {
     font-style: italic;
     font-size: 0.875rem;
 }
+
+/* ---- Error state for progress / summary areas ---- */
+
+.area-error {
+    color: #c0392b;
+}
