@@ -69,3 +69,6 @@ htmlcov/
 # Logs
 *.log
 logs/
+
+# secrets
+/secrets
