@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>d-tach — {% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-inner">
+            <span class="app-name">d-tach</span>
+            <nav class="mode-nav">
+                <a href="{{ url_for('text.text_mode') }}"
+                   class="nav-link {% if active_mode == 'text' %}active{% endif %}">
+                    Text Mode
+                </a>
+                <a href="{{ url_for('document.document_mode') }}"
+                   class="nav-link {% if active_mode == 'document' %}active{% endif %}">
+                    Document Mode
+                </a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+        <p class="disclaimer">
+            &#9888; Pattern matching may produce false positives.
+            Review the key reference file before sharing anonymized output.
+        </p>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

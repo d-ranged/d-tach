@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Document Mode{% endblock %}
+
+{% block content %}
+<div class="wip-banner">
+    Interface under construction — controls are not yet active.
+</div>
+
+<section class="doc-section">
+    <h2 class="section-heading">Select Folder</h2>
+    <div class="folder-input-row">
+        <input
+            type="text"
+            class="folder-path-display"
+            id="folder-path"
+            placeholder="No folder selected"
+            readonly
+            disabled
+        >
+        <label class="btn btn-browse" for="folder-input">
+            Browse&hellip;
+            <input
+                type="file"
+                id="folder-input"
+                webkitdirectory
+                multiple
+                hidden
+                disabled
+            >
+        </label>
+        <button class="btn btn-primary" id="process-btn" disabled>Process</button>
+    </div>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Settings</h2>
+    <div class="settings-grid">
+        <div class="setting-group">
+            <label class="toggle-label">
+                <input type="checkbox" class="toggle" id="keyref-toggle" disabled>
+                <span>Key Reference</span>
+            </label>
+            <p class="setting-hint">
+                Save a <code>KEYREF_</code> file alongside each anonymized output
+                mapping placeholders back to original values.
+            </p>
+        </div>
+
+        <div class="setting-group">
+            <label class="toggle-label">
+                <input type="checkbox" class="toggle" id="names-toggle" disabled>
+                <span>Check file and folder names</span>
+            </label>
+            <p class="setting-hint">
+                Detect and rename files and folders containing PII using the
+                same rules applied to document content.
+            </p>
+        </div>
+
+        <div class="setting-group">
+            <label class="toggle-label">
+                <input type="checkbox" class="toggle" id="hashing-toggle" disabled>
+                <span>Enable Hashing</span>
+            </label>
+            <div class="secret-field" id="secret-field" hidden>
+                <label for="secret-input" class="secret-label">Secret</label>
+                <input
+                    type="password"
+                    id="secret-input"
+                    class="secret-input"
+                    placeholder="Enter a secret phrase"
+                    disabled
+                >
+            </div>
+            <p class="setting-hint">
+                Produce consistent pseudonyms instead of sequential placeholders.
+            </p>
+        </div>
+
+        <div class="setting-group">
+            <label class="field-label" for="digit-count">
+                Student number digit count
+            </label>
+            <input
+                type="number"
+                id="digit-count"
+                class="digit-input"
+                value="7"
+                min="4"
+                max="12"
+                disabled
+            >
+            <p class="setting-hint">
+                Detect sequences of exactly this many consecutive digits as
+                student numbers. Currency amounts are excluded.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="doc-section" id="progress-section">
+    <h2 class="section-heading">Progress</h2>
+    <div class="progress-area" id="progress-area">
+        <span class="muted">No processing in progress.</span>
+    </div>
+</section>
+
+<section class="doc-section" id="summary-section">
+    <h2 class="section-heading">Results</h2>
+    <div class="summary-area" id="summary-area">
+        <span class="muted">Summary will appear here after processing.</span>
+    </div>
+</section>
+{% endblock %}
