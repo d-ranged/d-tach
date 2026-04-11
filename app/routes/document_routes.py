@@ -94,6 +94,12 @@ def process_folder():
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
 
+    # Capture app-level objects now, while the application context is active.
+    # The stream() generator runs lazily after the request context ends, so
+    # accessing current_app inside the generator raises RuntimeError.
+    folder_processor = current_app.folder_processor
+    user_settings = current_app.user_settings
+
     def stream():
         if not folder_path_str:
             yield _sse({"type": "error", "message": "No folder path provided."})
@@ -121,7 +127,7 @@ def process_folder():
         )
 
         all_results = []
-        for result, n, total in current_app.folder_processor.process(
+        for result, n, total in folder_processor.process(
             folder, processing_settings
         ):
             all_results.append(result)
@@ -136,7 +142,7 @@ def process_folder():
                 "error_message": result.error_message,
             })
 
-        summary = current_app.folder_processor.summarise(all_results)
+        summary = folder_processor.summarise(all_results)
         yield _sse({
             "type": "summary",
             "total": summary.total,
@@ -147,7 +153,6 @@ def process_folder():
         })
 
         # Persist settings after successful run
-        user_settings = current_app.user_settings
         user_settings.language = language
         user_settings.hashing_enabled = hashing_enabled
         user_settings.anonymize_dates = anonymize_dates
