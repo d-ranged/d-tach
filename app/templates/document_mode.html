@@ -112,9 +112,11 @@
         </div>
 
         <div class="setting-group">
-            <label class="field-label" for="digit-count">
-                Student number digits
+            <label class="toggle-label">
+                <input type="checkbox" class="toggle" id="student-number-toggle" {% if pattern_config.student_number_enabled %}checked{% endif %}>
+                <span>Detect student numbers</span>
             </label>
+            <label class="field-label" for="digit-count">Digit count</label>
             <input
                 type="number"
                 id="digit-count"
@@ -122,9 +124,8 @@
                 value="{{ pattern_config.digit_count }}"
                 min="4"
                 max="12"
-                disabled
             >
-            <p class="setting-hint">Detection active in a future step.</p>
+            <p class="setting-hint">Detect sequences of exactly N digits as student numbers.</p>
         </div>
     </div>
 </section>

@@ -10,14 +10,15 @@ CURRENCY_SYMBOLS: Final[str] = "€$£"
 class PatternConfig:
     """Holds active custom pattern detection settings.
 
-    Controls student number detection (exact digit count) and whether
-    file and folder names are included in PII scanning.
+    Controls student number detection (exact digit count, enable toggle) and
+    whether file and folder names are included in PII scanning.
     """
 
     def __init__(
         self,
         digit_count: int = DEFAULT_DIGIT_COUNT,
         check_file_names: bool = False,
+        student_number_enabled: bool = False,
     ) -> None:
         """Initialise with validated settings.
 
@@ -25,6 +26,7 @@ class PatternConfig:
         """
         self.digit_count = digit_count
         self.check_file_names = check_file_names
+        self.student_number_enabled = student_number_enabled
 
     @property
     def digit_count(self) -> int:
@@ -59,6 +61,7 @@ class PatternConfig:
         return {
             "digit_count": self._digit_count,
             "check_file_names": self.check_file_names,
+            "student_number_enabled": self.student_number_enabled,
         }
 
     @classmethod
@@ -67,4 +70,5 @@ class PatternConfig:
         return cls(
             digit_count=data.get("digit_count", DEFAULT_DIGIT_COUNT),
             check_file_names=data.get("check_file_names", False),
+            student_number_enabled=data.get("student_number_enabled", False),
         )

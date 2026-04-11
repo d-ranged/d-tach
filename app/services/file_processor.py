@@ -6,10 +6,16 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from app.services.anonymizer import Anonymizer, DetectedEntity
+from app.services.anonymizer import (
+    Anonymizer,
+    DetectedEntity,
+    STUDENT_NUMBER_ENTITY,
+    build_student_number_recognizer,
+)
 from app.services.document_processor import DocumentProcessor
 from app.services.hash_encoder import HashEncoder
 from app.services.language_detector import LanguageDetector
+from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +27,18 @@ SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf"})
 MIN_ENTITY_TEXT_LENGTH: int = 3
 
 
-def _build_entity_list(anonymize_dates: bool) -> list[str]:
+def _build_entity_list(anonymize_dates: bool, student_number_enabled: bool = False) -> list[str]:
     """Return the entity list to pass to the Anonymizer.
 
     DATE_TIME is excluded unless the user has opted in, as dates are
     ubiquitous in academic documents and rarely personally identifying.
+    STUDENT_NUMBER is included only when student number detection is enabled.
     """
     from app.services.anonymizer import ENTITIES
-    if anonymize_dates:
-        return list(ENTITIES)
-    return [e for e in ENTITIES if e != "DATE_TIME"]
+    result = list(ENTITIES) if anonymize_dates else [e for e in ENTITIES if e != "DATE_TIME"]
+    if student_number_enabled:
+        result.append(STUDENT_NUMBER_ENTITY)
+    return result
 
 
 @dataclass
@@ -43,6 +51,8 @@ class ProcessingSettings:
     check_file_names: bool = False
     language: str = "en"
     anonymize_dates: bool = False
+    student_number_enabled: bool = False
+    digit_count: int = 7
 
 
 @dataclass
@@ -114,8 +124,9 @@ class FileProcessor:
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates)
-        result = self._anonymizer.anonymize(text, language, entities=entities)
+        entities = _build_entity_list(settings.anonymize_dates, settings.student_number_enabled)
+        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
+        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
             output_path = path.parent / f"CHECKED_{path.name}"
@@ -163,8 +174,9 @@ class FileProcessor:
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates)
-        result = self._anonymizer.anonymize(text, language, entities=entities)
+        entities = _build_entity_list(settings.anonymize_dates, settings.student_number_enabled)
+        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
+        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
             doc.close()
@@ -194,6 +206,18 @@ class FileProcessor:
             keyref_path=keyref_path,
             entities_found=len({e.original_text for e in result.entities}),
         )
+
+    def _build_ad_hoc_recognizers(
+        self, settings: ProcessingSettings, language: str
+    ) -> list:
+        """Return a list of ad-hoc recognizers for this processing run.
+
+        Includes a StudentNumberRecognizer when student number detection is enabled.
+        """
+        if not settings.student_number_enabled:
+            return []
+        config = PatternConfig(digit_count=settings.digit_count)
+        return [build_student_number_recognizer(config, language)]
 
     def _build_replacements(
         self,
@@ -250,7 +274,12 @@ class FileProcessor:
             readable = readable.replace(original, placeholder)
 
         # Run anonymizer on whatever remains for any additional entities
-        anon_result = self._anonymizer.anonymize(readable, language, entities=_build_entity_list(settings.anonymize_dates))
+        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
+        anon_result = self._anonymizer.anonymize(
+            readable, language,
+            entities=_build_entity_list(settings.anonymize_dates, settings.student_number_enabled),
+            ad_hoc_recognizers=ad_hoc,
+        )
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         remaining = self._build_replacements(anon_result.entities, encoder)
 

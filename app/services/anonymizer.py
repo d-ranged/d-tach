@@ -5,6 +5,8 @@ from typing import Final, Optional
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
+from app.services.pattern_config import PatternConfig
+
 logger = logging.getLogger(__name__)
 
 _NLP_CONFIGURATION: Final[dict] = {
@@ -25,6 +27,8 @@ ENTITIES: Final[list[str]] = [
     "IBAN_CODE",
     "NL_BSN",
 ]
+
+STUDENT_NUMBER_ENTITY: Final[str] = "STUDENT_NUMBER"
 
 
 @dataclass
@@ -74,6 +78,37 @@ class DutchBsnRecognizer(PatternRecognizer):
         return total % 11 == 0
 
 
+class StudentNumberRecognizer(PatternRecognizer):
+    """Recognizes student numbers as an exact count of consecutive digits.
+
+    Uses the regex from PatternConfig to match the configured digit count and
+    excludes sequences immediately preceded by a currency symbol (€, $, £).
+    """
+
+    SUPPORTED_ENTITY: Final[str] = STUDENT_NUMBER_ENTITY
+
+    def __init__(self, pattern_config: PatternConfig, language: str) -> None:
+        """Build a recognizer for the given digit count and language.
+
+        Args:
+            pattern_config: Active PatternConfig supplying the digit count and regex.
+            language: The processing language this recognizer should be registered for.
+        """
+        regex = pattern_config.build_student_number_regex()
+        super().__init__(
+            supported_entity=self.SUPPORTED_ENTITY,
+            patterns=[Pattern("STUDENT_NUMBER", regex, 0.85)],
+            supported_language=language,
+        )
+
+
+def build_student_number_recognizer(
+    pattern_config: PatternConfig, language: str
+) -> StudentNumberRecognizer:
+    """Return a StudentNumberRecognizer configured for the given language."""
+    return StudentNumberRecognizer(pattern_config, language)
+
+
 class Anonymizer:
     """Detects and replaces PII in text using Presidio with English and Dutch spaCy models."""
 
@@ -92,6 +127,7 @@ class Anonymizer:
         text: str,
         language: str,
         entities: Optional[list[str]] = None,
+        ad_hoc_recognizers: Optional[list[PatternRecognizer]] = None,
     ) -> AnonymizationResult:
         """Replace PII in text with sequential placeholders and return the result.
 
@@ -101,6 +137,10 @@ class Anonymizer:
 
         Pass a custom ``entities`` list to restrict or expand which entity types
         are detected. When None, the default ENTITIES list is used.
+
+        Pass ``ad_hoc_recognizers`` to add per-request recognizers (e.g. a
+        StudentNumberRecognizer built from the current PatternConfig) without
+        modifying the shared analyzer registry.
         """
         if not text or not text.strip():
             return AnonymizationResult(anonymized_text=text)
@@ -112,6 +152,7 @@ class Anonymizer:
                 text=text,
                 language=language,
                 entities=active_entities,
+                ad_hoc_recognizers=ad_hoc_recognizers or [],
             )
         except Exception as exc:
             logger.error("Presidio analysis failed (language=%s): %s", language, exc)
@@ -122,7 +163,7 @@ class Anonymizer:
 
         counters: dict[str, int] = {}
         placeholder_map: dict[str, str] = {}
-        entities: list[DetectedEntity] = []
+        detected: list[DetectedEntity] = []
 
         for result in sorted(results, key=lambda r: r.start):
             original = text[result.start:result.end]
@@ -131,7 +172,7 @@ class Anonymizer:
                 counters[entity_type] = counters.get(entity_type, 0) + 1
                 placeholder_map[original] = f"{entity_type}_{counters[entity_type]}"
 
-            entities.append(DetectedEntity(
+            detected.append(DetectedEntity(
                 entity_type=result.entity_type,
                 start=result.start,
                 end=result.end,
@@ -141,11 +182,11 @@ class Anonymizer:
 
         # Replace from end of string to preserve earlier character positions
         anonymized = text
-        for entity in sorted(entities, key=lambda e: e.start, reverse=True):
+        for entity in sorted(detected, key=lambda e: e.start, reverse=True):
             anonymized = (
                 anonymized[:entity.start]
                 + entity.placeholder
                 + anonymized[entity.end:]
             )
 
-        return AnonymizationResult(anonymized_text=anonymized, entities=entities)
+        return AnonymizationResult(anonymized_text=anonymized, entities=detected)

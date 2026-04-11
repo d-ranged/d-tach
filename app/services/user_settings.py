@@ -17,6 +17,7 @@ _DEFAULTS: Final[dict] = {
     "pattern_config": {
         "digit_count": 7,
         "check_file_names": False,
+        "student_number_enabled": False,
     },
 }
 
@@ -144,4 +145,6 @@ class UserSettings:
                 merged["pattern_config"]["digit_count"] = pc["digit_count"]
             if isinstance(pc.get("check_file_names"), bool):
                 merged["pattern_config"]["check_file_names"] = pc["check_file_names"]
+            if isinstance(pc.get("student_number_enabled"), bool):
+                merged["pattern_config"]["student_number_enabled"] = pc["student_number_enabled"]
         return merged
