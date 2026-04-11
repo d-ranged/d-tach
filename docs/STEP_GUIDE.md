@@ -510,6 +510,18 @@ community can see the roadmap and self-assign work.
 
 ### High priority (do first after public)
 
+- **Improve NER detection accuracy — names in tables and less common names**
+  During real-document testing, names in the first-page table of an internship
+  document were inconsistently detected: the student name in the table was found
+  but a supervisor name in an adjacent row was missed. Names later in the document
+  were found normally. Two likely causes: (1) the medium spaCy models (`_md`) have
+  lower recall than the large models (`_lg`) for less common names; (2) table cell
+  text is fed to the NER model in short isolated chunks, which reduces context and
+  hurts detection. Suggested investigation: test with `en_core_web_lg` /
+  `nl_core_news_lg`; consider concatenating table row text before analysis to give
+  the model more context. Create a small anonymized test corpus of representative
+  document structures to make accuracy improvements measurable and repeatable.
+
 - **Key Reference export**
   The key reference is currently displayed on screen in Text Mode and saved as a `.txt`
   file in Document Mode. Add a download button in Text Mode so the user can save the
