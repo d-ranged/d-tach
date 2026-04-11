@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 
 from flask import Blueprint, jsonify
 
@@ -6,9 +8,32 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint("browse", __name__)
 
+_TCL_FIXED = False
+
+
+def _ensure_tcl_available() -> None:
+    """Set TCL_LIBRARY for pyenv-win installations where Tcl path isn't auto-detected.
+
+    On a standard Windows Python install this is a no-op.
+    On macOS and Linux tkinter finds Tcl without any env var help, so the
+    platform guard makes this function a no-op on those platforms too.
+    """
+    global _TCL_FIXED
+    if _TCL_FIXED or sys.platform != "win32" or os.environ.get("TCL_LIBRARY"):
+        return
+    python_dir = os.path.dirname(sys.executable)
+    tcl_dir = os.path.join(python_dir, "tcl", "tcl8.6")
+    tk_dir = os.path.join(python_dir, "tcl", "tk8.6")
+    if os.path.isdir(tcl_dir):
+        os.environ["TCL_LIBRARY"] = tcl_dir
+    if os.path.isdir(tk_dir):
+        os.environ["TK_LIBRARY"] = tk_dir
+    _TCL_FIXED = True
+
 
 def _open_file_dialog() -> str:
     """Open a native OS file picker and return the selected path, or empty string."""
+    _ensure_tcl_available()
     import tkinter as tk
     from tkinter import filedialog
 
@@ -30,6 +55,7 @@ def _open_file_dialog() -> str:
 
 def _open_folder_dialog() -> str:
     """Open a native OS folder picker and return the selected path, or empty string."""
+    _ensure_tcl_available()
     import tkinter as tk
     from tkinter import filedialog
 
