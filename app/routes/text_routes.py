@@ -2,9 +2,19 @@ import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+from app.services.anonymizer import ENTITIES
 from app.services.hash_encoder import HashEncoder
 
 bp = Blueprint("text", __name__)
+
+_SUPPORTED_LANGUAGES = ("en", "nl")
+
+
+def _build_entity_list(anonymize_dates: bool) -> list[str]:
+    """Return entity list with DATE_TIME included only when opted in."""
+    if anonymize_dates:
+        return list(ENTITIES)
+    return [e for e in ENTITIES if e != "DATE_TIME"]
 
 
 @bp.route("/")
@@ -24,37 +34,41 @@ def anonymize():
     """Anonymize submitted text and return the result as JSON.
 
     Expects JSON body:
-        text                 (str)  — the text to anonymize
-        hashing_enabled      (bool) — whether to apply hash encoding to names
-        secret               (str)  — required when hashing_enabled is true
-        key_reference_enabled (bool) — whether to include a key reference in the response
+        text                  (str)  — the text to anonymize
+        language              (str)  — 'en' or 'nl', user-selected
+        hashing_enabled       (bool)
+        secret                (str)  — required when hashing_enabled is true
+        key_reference_enabled (bool)
+        anonymize_dates       (bool) — include DATE_TIME entities; default false
 
     Returns JSON:
         anonymized_text   (str)
-        detected_language (str)  — 'en' or 'nl'
         entities          (list) — [{type, original, placeholder}, …]
-        key_reference     (list) — deduplicated entity list when key_reference_enabled
-        error             (str)  — present only when a validation error occurs
+        key_reference     (list) — deduplicated list when key_reference_enabled
+        error             (str)  — present only on validation error
     """
     data = request.get_json(force=True, silent=True) or {}
     text: str = data.get("text", "")
+    language: str = data.get("language", "en")
     hashing_enabled: bool = bool(data.get("hashing_enabled", False))
     secret: str = data.get("secret", "")
     key_reference_enabled: bool = bool(data.get("key_reference_enabled", False))
+    anonymize_dates: bool = bool(data.get("anonymize_dates", False))
 
     if not text.strip():
-        return jsonify({"anonymized_text": "", "entities": [], "key_reference": [],
-                        "detected_language": "en"})
+        return jsonify({"anonymized_text": "", "entities": [], "key_reference": []})
+
+    if language not in _SUPPORTED_LANGUAGES:
+        language = "en"
 
     if hashing_enabled and not secret.strip():
         return jsonify({"error": "Enter a secret phrase to use hashing."}), 400
 
-    language: str = current_app.language_detector.detect(text)
-    result = current_app.anonymizer.anonymize(text, language)
+    entities_to_detect = _build_entity_list(anonymize_dates)
+    result = current_app.anonymizer.anonymize(text, language, entities=entities_to_detect)
 
     anonymized = result.anonymized_text
 
-    # Build placeholder → hashed-name map for PERSON entities when hashing is on
     hash_replacements: dict[str, str] = {}
     if hashing_enabled:
         encoder = HashEncoder(secret)
@@ -64,7 +78,6 @@ def anonymize():
                     entity.original_text
                 )
         if hash_replacements:
-            # Replace all at once; sort by length descending to avoid partial matches
             pattern = re.compile(
                 "|".join(
                     re.escape(k)
@@ -73,7 +86,6 @@ def anonymize():
             )
             anonymized = pattern.sub(lambda m: hash_replacements[m.group()], anonymized)
 
-    # Build entities output list with final placeholders
     entities_out = []
     for entity in result.entities:
         placeholder = hash_replacements.get(entity.placeholder, entity.placeholder)
@@ -85,12 +97,13 @@ def anonymize():
 
     # Persist settings
     settings = current_app.user_settings
+    settings.language = language
     settings.hashing_enabled = hashing_enabled
+    settings.anonymize_dates = anonymize_dates
     if hashing_enabled and secret.strip():
         settings.hashing_secret = secret
     settings.save()
 
-    # Deduplicate key reference; only include placeholders present in the final text
     key_reference = []
     if key_reference_enabled:
         seen: set[tuple[str, str]] = set()
@@ -102,15 +115,10 @@ def anonymize():
 
     return jsonify({
         "anonymized_text": anonymized,
-        "detected_language": language,
         "entities": entities_out,
         "key_reference": key_reference,
     })
 
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
 
 def _render_text_mode():
     """Render text_mode.html with current UserSettings restored from disk."""
@@ -118,6 +126,9 @@ def _render_text_mode():
     return render_template(
         "text_mode.html",
         active_mode="text",
+        language=settings.language,
         hashing_enabled=settings.hashing_enabled,
         hashing_secret=settings.hashing_secret,
+        anonymize_dates=settings.anonymize_dates,
+        pattern_config=settings.pattern_config,
     )

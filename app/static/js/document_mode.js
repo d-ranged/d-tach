@@ -7,8 +7,24 @@ const secretField    = document.getElementById("secret-field");
 const secretInput    = document.getElementById("secret-input");
 const keyrefToggle   = document.getElementById("keyref-toggle");
 const namesToggle    = document.getElementById("names-toggle");
+const datesToggle    = document.getElementById("dates-toggle");
+const langSelector   = document.getElementById("lang-selector");
 const progressArea   = document.getElementById("progress-area");
 const summaryArea    = document.getElementById("summary-area");
+
+let selectedLanguage = INITIAL_LANGUAGE;
+
+// ---------------------------------------------------------------------------
+// Language selector
+// ---------------------------------------------------------------------------
+
+langSelector.addEventListener("click", (e) => {
+    const btn = e.target.closest(".lang-btn");
+    if (!btn) return;
+    selectedLanguage = btn.dataset.lang;
+    langSelector.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+});
 
 // ---------------------------------------------------------------------------
 // Process button
@@ -42,10 +58,12 @@ async function runProcess() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 file_path: filePath,
+                language: selectedLanguage,
                 hashing_enabled: hashingToggle.checked,
                 secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
                 check_file_names: namesToggle.checked,
+                anonymize_dates: datesToggle.checked,
             }),
         });
 

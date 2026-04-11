@@ -12,6 +12,8 @@ SETTINGS_FILE: Final[Path] = Path("user_settings.json")
 _DEFAULTS: Final[dict] = {
     "hashing_enabled": False,
     "hashing_secret": "",
+    "language": "en",
+    "anonymize_dates": False,
     "pattern_config": {
         "digit_count": 7,
         "check_file_names": False,
@@ -22,7 +24,8 @@ _DEFAULTS: Final[dict] = {
 class UserSettings:
     """Persists user preferences to a local JSON file and restores them on launch.
 
-    Stores: hashing toggle state, hashing secret, and PatternConfig settings.
+    Stores: hashing toggle state, hashing secret, selected language,
+    anonymize dates toggle, and PatternConfig settings.
     The settings file is excluded from version control (see .gitignore).
     """
 
@@ -55,6 +58,26 @@ class UserSettings:
         self._data["hashing_secret"] = str(value)
 
     @property
+    def language(self) -> str:
+        """The user-selected processing language ('en' or 'nl')."""
+        return self._data["language"]
+
+    @language.setter
+    def language(self, value: str) -> None:
+        if value not in ("en", "nl"):
+            raise ValueError(f"language must be 'en' or 'nl', got {value!r}.")
+        self._data["language"] = value
+
+    @property
+    def anonymize_dates(self) -> bool:
+        """Whether DATE_TIME entities should be anonymized."""
+        return self._data["anonymize_dates"]
+
+    @anonymize_dates.setter
+    def anonymize_dates(self, value: bool) -> None:
+        self._data["anonymize_dates"] = bool(value)
+
+    @property
     def pattern_config(self) -> PatternConfig:
         """The active PatternConfig instance."""
         return PatternConfig.from_dict(self._data["pattern_config"])
@@ -84,8 +107,7 @@ class UserSettings:
     def _load(self) -> None:
         """Read settings from disk, falling back to defaults on any error."""
         if not self._path.exists():
-            self._data = dict(_DEFAULTS)
-            self._data["pattern_config"] = dict(_DEFAULTS["pattern_config"])
+            self._data = self._fresh_defaults()
             return
 
         try:
@@ -95,18 +117,27 @@ class UserSettings:
             logger.warning(
                 "Could not read settings from %s (%s); using defaults.", self._path, exc
             )
-            self._data = dict(_DEFAULTS)
-            self._data["pattern_config"] = dict(_DEFAULTS["pattern_config"])
+            self._data = self._fresh_defaults()
+
+    @staticmethod
+    def _fresh_defaults() -> dict:
+        """Return a fresh copy of the default settings dict."""
+        d = dict(_DEFAULTS)
+        d["pattern_config"] = dict(_DEFAULTS["pattern_config"])
+        return d
 
     @staticmethod
     def _merge_with_defaults(raw: dict) -> dict:
         """Return raw data with any missing keys filled from defaults."""
-        merged = dict(_DEFAULTS)
-        merged["pattern_config"] = dict(_DEFAULTS["pattern_config"])
+        merged = UserSettings._fresh_defaults()
         if isinstance(raw.get("hashing_enabled"), bool):
             merged["hashing_enabled"] = raw["hashing_enabled"]
         if isinstance(raw.get("hashing_secret"), str):
             merged["hashing_secret"] = raw["hashing_secret"]
+        if raw.get("language") in ("en", "nl"):
+            merged["language"] = raw["language"]
+        if isinstance(raw.get("anonymize_dates"), bool):
+            merged["anonymize_dates"] = raw["anonymize_dates"]
         if isinstance(raw.get("pattern_config"), dict):
             pc = raw["pattern_config"]
             if isinstance(pc.get("digit_count"), int):

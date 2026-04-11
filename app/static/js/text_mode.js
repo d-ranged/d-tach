@@ -9,10 +9,25 @@ const secretInput   = document.getElementById("secret-input");
 const keyrefToggle  = document.getElementById("keyref-toggle");
 const keyrefSection = document.getElementById("keyref-section");
 const keyrefBody    = document.getElementById("keyref-body");
-const langBadge     = document.getElementById("lang-badge");
+const datesToggle   = document.getElementById("dates-toggle");
+const langSelector  = document.getElementById("lang-selector");
 
 const DEBOUNCE_MS = 600;
 let debounceTimer = null;
+let selectedLanguage = INITIAL_LANGUAGE;
+
+// ---------------------------------------------------------------------------
+// Language selector
+// ---------------------------------------------------------------------------
+
+langSelector.addEventListener("click", (e) => {
+    const btn = e.target.closest(".lang-btn");
+    if (!btn) return;
+    selectedLanguage = btn.dataset.lang;
+    langSelector.querySelectorAll(".lang-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    if (inputEl.value.trim()) runAnonymize();
+});
 
 // ---------------------------------------------------------------------------
 // Anonymize
@@ -43,9 +58,11 @@ async function runAnonymize() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 text,
+                language: selectedLanguage,
                 hashing_enabled: hashingToggle.checked,
                 secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
+                anonymize_dates: datesToggle.checked,
             }),
         });
 
@@ -69,9 +86,6 @@ async function runAnonymize() {
 function renderOutput(data) {
     outputEl.textContent = data.anonymized_text;
     copyBtn.disabled = false;
-
-    langBadge.textContent = data.detected_language.toUpperCase();
-    langBadge.hidden = false;
 
     if (keyrefToggle.checked && data.key_reference.length > 0) {
         renderKeyReference(data.key_reference);
@@ -101,7 +115,6 @@ function renderKeyReference(entries) {
 function resetOutput() {
     outputEl.innerHTML = '<span class="placeholder-text">Anonymized text will appear here.</span>';
     copyBtn.disabled = true;
-    langBadge.hidden = true;
     keyrefSection.hidden = true;
 }
 
@@ -133,32 +146,24 @@ copyBtn.addEventListener("click", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Toggle: hashing
+// Toggles
 // ---------------------------------------------------------------------------
 
 hashingToggle.addEventListener("change", () => {
     secretField.hidden = !hashingToggle.checked;
-    if (!hashingToggle.checked) {
-        secretInput.value = "";
-    }
+    if (!hashingToggle.checked) secretInput.value = "";
     if (inputEl.value.trim()) runAnonymize();
 });
 
 secretInput.addEventListener("input", scheduleAnonymize);
 
-// ---------------------------------------------------------------------------
-// Toggle: key reference
-// ---------------------------------------------------------------------------
-
-keyrefToggle.addEventListener("change", () => {
-    if (!keyrefToggle.checked) {
-        keyrefSection.hidden = true;
-    }
+datesToggle.addEventListener("change", () => {
     if (inputEl.value.trim()) runAnonymize();
 });
 
-// ---------------------------------------------------------------------------
-// Main input
-// ---------------------------------------------------------------------------
+keyrefToggle.addEventListener("change", () => {
+    if (!keyrefToggle.checked) keyrefSection.hidden = true;
+    if (inputEl.value.trim()) runAnonymize();
+});
 
 inputEl.addEventListener("input", scheduleAnonymize);
