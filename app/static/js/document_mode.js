@@ -1,13 +1,15 @@
 "use strict";
 
 // ---- Elements ----
-const hashingToggle     = document.getElementById("hashing-toggle");
-const secretField       = document.getElementById("secret-field");
-const secretInput       = document.getElementById("secret-input");
-const keyrefToggle      = document.getElementById("keyref-toggle");
-const namesToggle       = document.getElementById("names-toggle");
-const datesToggle       = document.getElementById("dates-toggle");
-const langSelector      = document.getElementById("lang-selector");
+const hashingToggle          = document.getElementById("hashing-toggle");
+const secretField            = document.getElementById("secret-field");
+const secretInput            = document.getElementById("secret-input");
+const keyrefToggle           = document.getElementById("keyref-toggle");
+const namesToggle            = document.getElementById("names-toggle");
+const datesToggle            = document.getElementById("dates-toggle");
+const studentNumberToggle    = document.getElementById("student-number-toggle");
+const digitCountInput        = document.getElementById("digit-count");
+const langSelector           = document.getElementById("lang-selector");
 const progressArea      = document.getElementById("progress-area");
 const progressBarWrap   = document.getElementById("progress-bar-wrap");
 const progressBar       = document.getElementById("progress-bar");
@@ -88,6 +90,8 @@ async function runProcessFile() {
                 key_reference_enabled: keyrefToggle.checked,
                 check_file_names: namesToggle.checked,
                 anonymize_dates: datesToggle.checked,
+                student_number_enabled: studentNumberToggle.checked,
+                digit_count: parseInt(digitCountInput.value, 10) || 7,
             }),
         });
         const data = await response.json();
@@ -155,6 +159,8 @@ function runProcessFolder() {
         key_reference_enabled: keyrefToggle.checked,
         check_file_names: namesToggle.checked,
         anonymize_dates: datesToggle.checked,
+        student_number_enabled: studentNumberToggle.checked,
+        digit_count: parseInt(digitCountInput.value, 10) || 7,
     });
 
     activeEventSource = new EventSource(`/document/process-folder?${params}`);

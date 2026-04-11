@@ -1,16 +1,18 @@
 "use strict";
 
-const inputEl       = document.getElementById("input-text");
-const outputEl      = document.getElementById("output-text");
-const copyBtn       = document.getElementById("copy-btn");
-const hashingToggle = document.getElementById("hashing-toggle");
-const secretField   = document.getElementById("secret-field");
-const secretInput   = document.getElementById("secret-input");
-const keyrefToggle  = document.getElementById("keyref-toggle");
-const keyrefSection = document.getElementById("keyref-section");
-const keyrefBody    = document.getElementById("keyref-body");
-const datesToggle   = document.getElementById("dates-toggle");
-const langSelector  = document.getElementById("lang-selector");
+const inputEl              = document.getElementById("input-text");
+const outputEl             = document.getElementById("output-text");
+const copyBtn              = document.getElementById("copy-btn");
+const hashingToggle        = document.getElementById("hashing-toggle");
+const secretField          = document.getElementById("secret-field");
+const secretInput          = document.getElementById("secret-input");
+const keyrefToggle         = document.getElementById("keyref-toggle");
+const keyrefSection        = document.getElementById("keyref-section");
+const keyrefBody           = document.getElementById("keyref-body");
+const datesToggle          = document.getElementById("dates-toggle");
+const studentNumberToggle  = document.getElementById("student-number-toggle");
+const digitCountInput      = document.getElementById("digit-count");
+const langSelector         = document.getElementById("lang-selector");
 
 const DEBOUNCE_MS = 600;
 let debounceTimer = null;
@@ -63,6 +65,8 @@ async function runAnonymize() {
                 secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
                 anonymize_dates: datesToggle.checked,
+                student_number_enabled: studentNumberToggle.checked,
+                digit_count: parseInt(digitCountInput.value, 10) || 7,
             }),
         });
 
@@ -159,6 +163,14 @@ secretInput.addEventListener("input", scheduleAnonymize);
 
 datesToggle.addEventListener("change", () => {
     if (inputEl.value.trim()) runAnonymize();
+});
+
+studentNumberToggle.addEventListener("change", () => {
+    if (inputEl.value.trim()) runAnonymize();
+});
+
+digitCountInput.addEventListener("change", () => {
+    if (studentNumberToggle.checked && inputEl.value.trim()) runAnonymize();
 });
 
 keyrefToggle.addEventListener("change", () => {
