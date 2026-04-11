@@ -1,18 +1,49 @@
 "use strict";
 
-const filePathInput  = document.getElementById("file-path");
-const processBtn     = document.getElementById("process-btn");
-const hashingToggle  = document.getElementById("hashing-toggle");
-const secretField    = document.getElementById("secret-field");
-const secretInput    = document.getElementById("secret-input");
-const keyrefToggle   = document.getElementById("keyref-toggle");
-const namesToggle    = document.getElementById("names-toggle");
-const datesToggle    = document.getElementById("dates-toggle");
-const langSelector   = document.getElementById("lang-selector");
-const progressArea   = document.getElementById("progress-area");
-const summaryArea    = document.getElementById("summary-area");
+// ---- Elements ----
+const hashingToggle     = document.getElementById("hashing-toggle");
+const secretField       = document.getElementById("secret-field");
+const secretInput       = document.getElementById("secret-input");
+const keyrefToggle      = document.getElementById("keyref-toggle");
+const namesToggle       = document.getElementById("names-toggle");
+const datesToggle       = document.getElementById("dates-toggle");
+const langSelector      = document.getElementById("lang-selector");
+const progressArea      = document.getElementById("progress-area");
+const progressBarWrap   = document.getElementById("progress-bar-wrap");
+const progressBar       = document.getElementById("progress-bar");
+const progressLog       = document.getElementById("progress-log");
+const summaryArea       = document.getElementById("summary-area");
+
+// ---- File tab ----
+const filePathInput     = document.getElementById("file-path");
+const processFileBtn    = document.getElementById("process-file-btn");
+
+// ---- Folder tab ----
+const folderPathInput   = document.getElementById("folder-path");
+const processFolderBtn  = document.getElementById("process-folder-btn");
+const cancelBtn         = document.getElementById("cancel-btn");
+
+// ---- Tabs ----
+const tabFile           = document.getElementById("tab-file");
+const tabFolder         = document.getElementById("tab-folder");
+const panelFile         = document.getElementById("panel-file");
+const panelFolder       = document.getElementById("panel-folder");
 
 let selectedLanguage = INITIAL_LANGUAGE;
+let activeEventSource = null;
+
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+
+[tabFile, tabFolder].forEach(tab => {
+    tab.addEventListener("click", () => {
+        tabFile.classList.toggle("active", tab === tabFile);
+        tabFolder.classList.toggle("active", tab === tabFolder);
+        panelFile.hidden = tab !== tabFile;
+        panelFolder.hidden = tab !== tabFolder;
+    });
+});
 
 // ---------------------------------------------------------------------------
 // Language selector
@@ -27,30 +58,23 @@ langSelector.addEventListener("click", (e) => {
 });
 
 // ---------------------------------------------------------------------------
-// Process button
+// Single file processing
 // ---------------------------------------------------------------------------
 
-processBtn.addEventListener("click", runProcess);
+processFileBtn.addEventListener("click", runProcessFile);
+filePathInput.addEventListener("keydown", e => { if (e.key === "Enter") runProcessFile(); });
 
-filePathInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") runProcess();
-});
-
-async function runProcess() {
+async function runProcessFile() {
     const filePath = filePathInput.value.trim();
-    if (!filePath) {
-        setProgress("Enter a file path to process.");
-        return;
-    }
-
+    if (!filePath) { setProgress("Enter a file path to process."); return; }
     if (hashingToggle.checked && !secretInput.value.trim()) {
-        setProgress("Enter a secret phrase to use hashing.");
-        return;
+        setProgress("Enter a secret phrase to use hashing."); return;
     }
 
     setProgress("Processing\u2026");
-    setSummary("");
-    processBtn.disabled = true;
+    resetSummary();
+    resetLog();
+    processFileBtn.disabled = true;
 
     try {
         const response = await fetch("/document/process-file", {
@@ -66,35 +90,26 @@ async function runProcess() {
                 anonymize_dates: datesToggle.checked,
             }),
         });
-
         const data = await response.json();
-
         if (data.error) {
             setProgress(data.error, true);
         } else {
             setProgress("Done.");
-            renderResult(data);
+            renderFileSummary(data);
         }
     } catch {
         setProgress("Processing failed \u2014 please try again.", true);
     } finally {
-        processBtn.disabled = false;
+        processFileBtn.disabled = false;
     }
 }
 
-// ---------------------------------------------------------------------------
-// Result rendering
-// ---------------------------------------------------------------------------
-
-function renderResult(data) {
+function renderFileSummary(data) {
     const lines = [];
-
     if (data.status === "anonymized") {
         lines.push(`\u2714 Anonymized \u2014 ${data.entities_found} unique value(s) replaced.`);
         lines.push(`Output: ${data.output_path}`);
-        if (data.keyref_path) {
-            lines.push(`Key reference: ${data.keyref_path}`);
-        }
+        if (data.keyref_path) lines.push(`Key reference: ${data.keyref_path}`);
     } else if (data.status === "clean") {
         lines.push(`\u2714 No PII detected \u2014 file copied with CHECKED_ prefix.`);
         lines.push(`Output: ${data.output_path}`);
@@ -103,9 +118,132 @@ function renderResult(data) {
     } else {
         lines.push(`\u2718 Error: ${data.error_message}`);
     }
-
     setSummary(lines.join("\n"), data.status === "error" || data.status === "skipped");
 }
+
+// ---------------------------------------------------------------------------
+// Folder processing (SSE)
+// ---------------------------------------------------------------------------
+
+processFolderBtn.addEventListener("click", runProcessFolder);
+folderPathInput.addEventListener("keydown", e => { if (e.key === "Enter") runProcessFolder(); });
+cancelBtn.addEventListener("click", cancelFolderProcessing);
+
+function runProcessFolder() {
+    const folderPath = folderPathInput.value.trim();
+    if (!folderPath) { setProgress("Enter a folder path to process."); return; }
+    if (hashingToggle.checked && !secretInput.value.trim()) {
+        setProgress("Enter a secret phrase to use hashing."); return;
+    }
+
+    if (activeEventSource) activeEventSource.close();
+
+    setProgress("Starting\u2026");
+    resetSummary();
+    resetLog();
+    progressBarWrap.hidden = false;
+    progressLog.hidden = false;
+    setProgressBar(0);
+    processFolderBtn.disabled = true;
+    cancelBtn.hidden = false;
+
+    const params = new URLSearchParams({
+        folder_path: folderPath,
+        language: selectedLanguage,
+        hashing_enabled: hashingToggle.checked,
+        secret: secretInput.value,
+        key_reference_enabled: keyrefToggle.checked,
+        check_file_names: namesToggle.checked,
+        anonymize_dates: datesToggle.checked,
+    });
+
+    activeEventSource = new EventSource(`/document/process-folder?${params}`);
+
+    activeEventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "error") {
+            setProgress(data.message, true);
+            finishFolderProcessing();
+            return;
+        }
+
+        if (data.type === "progress") {
+            setProgress(`Processing file ${data.n} of ${data.total}: ${data.file_name}`);
+            setProgressBar(data.n / data.total * 100);
+            appendLogEntry(data);
+        }
+
+        if (data.type === "summary") {
+            setProgress("Done.");
+            setProgressBar(100);
+            renderFolderSummary(data);
+            finishFolderProcessing();
+        }
+    };
+
+    activeEventSource.onerror = () => {
+        setProgress("Connection lost \u2014 processing may have completed.", true);
+        finishFolderProcessing();
+    };
+}
+
+function cancelFolderProcessing() {
+    if (activeEventSource) {
+        activeEventSource.close();
+        activeEventSource = null;
+    }
+    setProgress("Cancelled.");
+    finishFolderProcessing();
+}
+
+function finishFolderProcessing() {
+    if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+    processFolderBtn.disabled = false;
+    cancelBtn.hidden = true;
+}
+
+function appendLogEntry(data) {
+    const line = document.createElement("div");
+    line.className = "log-entry log-" + data.status;
+    const icon = data.status === "anonymized" ? "\u2714"
+               : data.status === "clean"      ? "\u2714"
+               : data.status === "skipped"    ? "\u26A0"
+               : "\u2718";
+    const detail = data.status === "anonymized"
+        ? ` \u2014 ${data.entities_found} value(s) replaced`
+        : data.error_message ? ` \u2014 ${data.error_message}` : "";
+    line.textContent = `${icon} ${data.file_name}${detail}`;
+    progressLog.appendChild(line);
+    progressLog.scrollTop = progressLog.scrollHeight;
+}
+
+function renderFolderSummary(data) {
+    if (data.total === 0) {
+        setSummary("No supported files found in this folder.");
+        return;
+    }
+    const lines = [
+        `Processed ${data.total} file(s):`,
+        `  \u2714 Anonymized: ${data.anonymized}`,
+        `  \u2714 Clean (no PII): ${data.clean}`,
+    ];
+    if (data.skipped) lines.push(`  \u26A0 Skipped: ${data.skipped}`);
+    if (data.errors)  lines.push(`  \u2718 Errors: ${data.errors}`);
+    setSummary(lines.join("\n"), data.errors > 0);
+}
+
+// ---------------------------------------------------------------------------
+// Progress bar
+// ---------------------------------------------------------------------------
+
+function setProgressBar(pct) {
+    progressBar.style.width = `${Math.min(100, pct)}%`;
+}
+
+// ---------------------------------------------------------------------------
+// Shared UI helpers
+// ---------------------------------------------------------------------------
 
 function setProgress(message, isError = false) {
     progressArea.textContent = message;
@@ -113,16 +251,24 @@ function setProgress(message, isError = false) {
 }
 
 function setSummary(message, isError = false) {
-    if (!message) {
-        summaryArea.innerHTML = '<span class="muted">Results will appear here after processing.</span>';
-        return;
-    }
     summaryArea.textContent = message;
     summaryArea.className = "summary-area" + (isError ? " area-error" : "");
 }
 
+function resetSummary() {
+    summaryArea.innerHTML = '<span class="muted">Results will appear here after processing.</span>';
+    summaryArea.className = "summary-area";
+}
+
+function resetLog() {
+    progressLog.innerHTML = "";
+    progressLog.hidden = true;
+    progressBarWrap.hidden = true;
+    setProgressBar(0);
+}
+
 // ---------------------------------------------------------------------------
-// Hashing toggle
+// Toggles
 // ---------------------------------------------------------------------------
 
 hashingToggle.addEventListener("change", () => {
