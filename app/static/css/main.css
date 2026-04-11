@@ -511,3 +511,103 @@ body {
     background: var(--color-primary);
     color: #fff;
 }
+
+/* ---- Input mode tabs (document mode) ---- */
+
+.input-mode-tabs {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    width: fit-content;
+}
+
+.input-tab {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    border: none;
+    padding: 0.4rem 1.1rem;
+    font-family: var(--font);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.input-tab + .input-tab {
+    border-left: 1px solid var(--color-border);
+}
+
+.input-tab:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+.input-tab.active {
+    background: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ---- Secondary button ---- */
+
+.btn-secondary {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--color-bg);
+}
+
+/* ---- Progress bar ---- */
+
+.progress-bar-wrap {
+    height: 8px;
+    background: var(--color-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--color-primary);
+    border-radius: 4px;
+    transition: width 0.25s ease;
+}
+
+/* ---- Progress log ---- */
+
+.progress-log {
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    font-family: var(--font);
+}
+
+.log-entry {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.log-anonymized,
+.log-clean {
+    color: var(--color-text);
+}
+
+.log-skipped {
+    color: #a06000;
+}
+
+.log-error {
+    color: #c0392b;
+}

@@ -4,20 +4,45 @@
 
 {% block content %}
 <section class="doc-section">
-    <h2 class="section-heading">File Path</h2>
-    <div class="folder-input-row">
-        <input
-            type="text"
-            class="folder-path-display"
-            id="file-path"
-            placeholder="Paste the full path to a DOCX file, e.g. C:\Documents\report.docx"
-        >
-        <button class="btn btn-primary" id="process-btn">Process</button>
+    <h2 class="section-heading">Input</h2>
+
+    <div class="input-mode-tabs">
+        <button class="input-tab active" id="tab-file" data-tab="file">Single File</button>
+        <button class="input-tab" id="tab-folder" data-tab="folder">Folder</button>
     </div>
-    <p class="setting-hint">
-        The anonymized output file is saved alongside the original with an
-        <code>ANON_</code> or <code>CHECKED_</code> prefix. The original is not modified.
-    </p>
+
+    <div id="panel-file" class="input-panel">
+        <div class="folder-input-row">
+            <input
+                type="text"
+                class="folder-path-display"
+                id="file-path"
+                placeholder="Paste the full path to a DOCX or PDF file"
+            >
+            <button class="btn btn-primary" id="process-file-btn">Process File</button>
+        </div>
+        <p class="setting-hint">
+            Output saved alongside the original with an <code>ANON_</code> or
+            <code>CHECKED_</code> prefix. The original is not modified.
+        </p>
+    </div>
+
+    <div id="panel-folder" class="input-panel" hidden>
+        <div class="folder-input-row">
+            <input
+                type="text"
+                class="folder-path-display"
+                id="folder-path"
+                placeholder="Paste the full path to a folder"
+            >
+            <button class="btn btn-primary" id="process-folder-btn">Process Folder</button>
+            <button class="btn btn-secondary" id="cancel-btn" hidden>Cancel</button>
+        </div>
+        <p class="setting-hint">
+            All DOCX and PDF files in the folder and its subfolders are processed.
+            Output files are saved alongside the originals.
+        </p>
+    </div>
 </section>
 
 <section class="doc-section">
@@ -38,8 +63,7 @@
                 <span>Key Reference</span>
             </label>
             <p class="setting-hint">
-                Save a <code>KEYREF_</code> file alongside each anonymized output
-                mapping placeholders back to original values.
+                Save a <code>KEYREF_</code> file alongside each anonymized output.
             </p>
         </div>
 
@@ -57,8 +81,7 @@
                 <span>Check file and folder names</span>
             </label>
             <p class="setting-hint">
-                Detect and rename output files containing PII using the same
-                rules applied to document content.
+                Detect and rename output files containing PII.
             </p>
         </div>
 
@@ -101,9 +124,7 @@
                 max="12"
                 disabled
             >
-            <p class="setting-hint">
-                Detection active in a future step.
-            </p>
+            <p class="setting-hint">Detection active in a future step.</p>
         </div>
     </div>
 </section>
@@ -113,6 +134,10 @@
     <div class="progress-area" id="progress-area">
         <span class="muted">No processing in progress.</span>
     </div>
+    <div class="progress-bar-wrap" id="progress-bar-wrap" hidden>
+        <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="progress-log" id="progress-log" hidden></div>
 </section>
 
 <section class="doc-section" id="summary-section">

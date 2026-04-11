@@ -20,10 +20,14 @@ def create_app() -> Flask:
     )
 
     from app.services.file_processor import FileProcessor
+    from app.services.folder_processor import FolderProcessor
 
     app.file_processor = FileProcessor(  # type: ignore[attr-defined]
         anonymizer=app.anonymizer,
         language_detector=app.language_detector,
+    )
+    app.folder_processor = FolderProcessor(  # type: ignore[attr-defined]
+        file_processor=app.file_processor,
     )
 
     from app.routes.text_routes import bp as text_bp
