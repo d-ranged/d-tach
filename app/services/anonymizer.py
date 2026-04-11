@@ -87,21 +87,31 @@ class Anonymizer:
         )
         self._analyzer.registry.add_recognizer(DutchBsnRecognizer())
 
-    def anonymize(self, text: str, language: str) -> AnonymizationResult:
+    def anonymize(
+        self,
+        text: str,
+        language: str,
+        entities: Optional[list[str]] = None,
+    ) -> AnonymizationResult:
         """Replace PII in text with sequential placeholders and return the result.
 
         Each unique piece of original text maps to one placeholder so the same
         name appearing twice always produces the same replacement within a call.
         Entities are numbered per type: PERSON_1, PERSON_2, EMAIL_ADDRESS_1, etc.
+
+        Pass a custom ``entities`` list to restrict or expand which entity types
+        are detected. When None, the default ENTITIES list is used.
         """
         if not text or not text.strip():
             return AnonymizationResult(anonymized_text=text)
+
+        active_entities = entities if entities is not None else ENTITIES
 
         try:
             results = self._analyzer.analyze(
                 text=text,
                 language=language,
-                entities=ENTITIES,
+                entities=active_entities,
             )
         except Exception as exc:
             logger.error("Presidio analysis failed (language=%s): %s", language, exc)

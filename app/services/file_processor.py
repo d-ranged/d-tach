@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx"})
 
 
+def _build_entity_list(anonymize_dates: bool) -> list[str]:
+    """Return the entity list to pass to the Anonymizer.
+
+    DATE_TIME is excluded unless the user has opted in, as dates are
+    ubiquitous in academic documents and rarely personally identifying.
+    """
+    from app.services.anonymizer import ENTITIES
+    if anonymize_dates:
+        return list(ENTITIES)
+    return [e for e in ENTITIES if e != "DATE_TIME"]
+
+
 @dataclass
 class ProcessingSettings:
     """Configuration for a single file processing run."""
@@ -24,6 +36,8 @@ class ProcessingSettings:
     secret: str = ""
     key_reference_enabled: bool = False
     check_file_names: bool = False
+    language: str = "en"
+    anonymize_dates: bool = False
 
 
 @dataclass
@@ -91,8 +105,9 @@ class FileProcessor:
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
-        language = self._language_detector.detect(text)
-        result = self._anonymizer.anonymize(text, language)
+        language = settings.language
+        entities = _build_entity_list(settings.anonymize_dates)
+        result = self._anonymizer.anonymize(text, language, entities=entities)
 
         if not result.entities:
             output_path = path.parent / f"CHECKED_{path.name}"
@@ -171,7 +186,7 @@ class FileProcessor:
             readable = readable.replace(original, placeholder)
 
         # Run anonymizer on whatever remains for any additional entities
-        anon_result = self._anonymizer.anonymize(readable, language)
+        anon_result = self._anonymizer.anonymize(readable, language, entities=_build_entity_list(settings.anonymize_dates))
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         remaining = self._build_replacements(anon_result.entities, encoder)
 

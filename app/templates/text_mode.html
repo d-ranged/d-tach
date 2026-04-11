@@ -16,7 +16,6 @@
     <div class="panel panel-output">
         <div class="panel-heading-row">
             <h2 class="panel-heading">Output</h2>
-            <span class="lang-badge" id="lang-badge" hidden></span>
         </div>
         <div class="text-area output-area" id="output-text" aria-label="Anonymized output">
             <span class="placeholder-text">Anonymized text will appear here.</span>
@@ -27,11 +26,42 @@
 
 <section class="settings-bar">
     <div class="setting-group">
+        <label class="field-label">Language</label>
+        <div class="lang-selector" id="lang-selector">
+            <button class="lang-btn {% if language == 'en' %}active{% endif %}" data-lang="en">EN</button>
+            <button class="lang-btn {% if language == 'nl' %}active{% endif %}" data-lang="nl">NL</button>
+        </div>
+        <p class="setting-hint">Select the language of your text.</p>
+    </div>
+
+    <div class="setting-group">
         <label class="toggle-label">
             <input type="checkbox" class="toggle" id="keyref-toggle">
             <span>Key Reference</span>
         </label>
         <p class="setting-hint">Show a mapping of each placeholder back to the original value.</p>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle-label">
+            <input type="checkbox" class="toggle" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
+            <span>Anonymize dates</span>
+        </label>
+        <p class="setting-hint">Off by default. Enable to replace dates and time references.</p>
+    </div>
+
+    <div class="setting-group">
+        <label class="field-label" for="digit-count">Student number digits</label>
+        <input
+            type="number"
+            id="digit-count"
+            class="digit-input"
+            value="{{ pattern_config.digit_count }}"
+            min="4"
+            max="12"
+            disabled
+        >
+        <p class="setting-hint">Detection active in a future step.</p>
     </div>
 
     <div class="setting-group">
@@ -78,5 +108,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script>const INITIAL_LANGUAGE = "{{ language }}";</script>
 <script src="{{ url_for('static', filename='js/text_mode.js') }}"></script>
 {% endblock %}

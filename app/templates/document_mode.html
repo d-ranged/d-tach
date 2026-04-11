@@ -24,6 +24,15 @@
     <h2 class="section-heading">Settings</h2>
     <div class="settings-grid">
         <div class="setting-group">
+            <label class="field-label">Language</label>
+            <div class="lang-selector" id="lang-selector">
+                <button class="lang-btn {% if language == 'en' %}active{% endif %}" data-lang="en">EN</button>
+                <button class="lang-btn {% if language == 'nl' %}active{% endif %}" data-lang="nl">NL</button>
+            </div>
+            <p class="setting-hint">Select the language of the documents being processed.</p>
+        </div>
+
+        <div class="setting-group">
             <label class="toggle-label">
                 <input type="checkbox" class="toggle" id="keyref-toggle">
                 <span>Key Reference</span>
@@ -32,6 +41,14 @@
                 Save a <code>KEYREF_</code> file alongside each anonymized output
                 mapping placeholders back to original values.
             </p>
+        </div>
+
+        <div class="setting-group">
+            <label class="toggle-label">
+                <input type="checkbox" class="toggle" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
+                <span>Anonymize dates</span>
+            </label>
+            <p class="setting-hint">Off by default. Enable to replace dates and time references.</p>
         </div>
 
         <div class="setting-group">
@@ -73,7 +90,7 @@
 
         <div class="setting-group">
             <label class="field-label" for="digit-count">
-                Student number digit count
+                Student number digits
             </label>
             <input
                 type="number"
@@ -85,8 +102,7 @@
                 disabled
             >
             <p class="setting-hint">
-                Student number detection is configured here and will be active
-                in a future step.
+                Detection active in a future step.
             </p>
         </div>
     </div>
@@ -108,5 +124,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script>const INITIAL_LANGUAGE = "{{ language }}";</script>
 <script src="{{ url_for('static', filename='js/document_mode.js') }}"></script>
 {% endblock %}
