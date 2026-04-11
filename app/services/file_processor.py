@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf"})
 
+# Entities whose matched text is shorter than this are almost certainly PDF
+# ligature extraction artefacts (e.g. "ci", "fi") rather than real PII.
+# Replacing them would corrupt the entire document, so they are skipped.
+MIN_ENTITY_TEXT_LENGTH: int = 3
+
 
 def _build_entity_list(anonymize_dates: bool) -> list[str]:
     """Return the entity list to pass to the Anonymizer.
@@ -204,6 +209,15 @@ class FileProcessor:
         replacements: dict[str, str] = {}
         for entity in entities:
             if entity.original_text in replacements:
+                continue
+            if len(entity.original_text) < MIN_ENTITY_TEXT_LENGTH:
+                logger.warning(
+                    "Skipping entity %r (type=%s, length=%d) — likely a PDF "
+                    "ligature extraction artefact.",
+                    entity.original_text,
+                    entity.entity_type,
+                    len(entity.original_text),
+                )
                 continue
             if encoder and entity.entity_type == "PERSON":
                 replacements[entity.original_text] = encoder.encode_full_name(
