@@ -37,7 +37,7 @@ def process_file():
         key_reference_enabled    (bool)
         check_file_names         (bool)
         anonymize_dates          (bool)
-        student_number_enabled   (bool)
+        numeric_id_enabled   (bool)
         digit_count              (int)
     """
     data = request.get_json(force=True, silent=True) or {}
@@ -74,7 +74,7 @@ def process_folder():
     Query parameters mirror the JSON body of process-file:
         folder_path, language, hashing_enabled, secret,
         key_reference_enabled, check_file_names, anonymize_dates,
-        student_number_enabled, digit_count
+        numeric_id_enabled, digit_count
 
     Streams Server-Sent Events. Each event is a JSON object:
         type: "progress"  — one file completed
@@ -92,7 +92,7 @@ def process_folder():
     key_reference_enabled = args.get("key_reference_enabled", "false").lower() == "true"
     check_file_names = args.get("check_file_names", "false").lower() == "true"
     anonymize_dates = args.get("anonymize_dates", "false").lower() == "true"
-    student_number_enabled = args.get("student_number_enabled", "false").lower() == "true"
+    numeric_id_enabled = args.get("numeric_id_enabled", "false").lower() == "true"
     digit_count_raw = args.get("digit_count", "7")
     try:
         digit_count = int(digit_count_raw)
@@ -133,7 +133,7 @@ def process_folder():
             check_file_names=check_file_names,
             language=language,
             anonymize_dates=anonymize_dates,
-            student_number_enabled=student_number_enabled,
+            numeric_id_enabled=numeric_id_enabled,
             digit_count=digit_count,
         )
 
@@ -172,7 +172,7 @@ def process_folder():
             user_settings.hashing_secret = secret
         user_settings.pattern_config = PatternConfig(
             digit_count=digit_count,
-            student_number_enabled=student_number_enabled,
+            numeric_id_enabled=numeric_id_enabled,
         )
         user_settings.save()
 
@@ -208,7 +208,7 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
         check_file_names=bool(data.get("check_file_names", False)),
         language=language,
         anonymize_dates=bool(data.get("anonymize_dates", False)),
-        student_number_enabled=bool(data.get("student_number_enabled", False)),
+        numeric_id_enabled=bool(data.get("numeric_id_enabled", False)),
         digit_count=digit_count,
     ), ""
 
@@ -229,10 +229,10 @@ def _persist_settings(data: dict) -> None:
         digit_count = int(data.get("digit_count", 7))
     except (ValueError, TypeError):
         digit_count = 7
-    student_number_enabled = bool(data.get("student_number_enabled", False))
+    numeric_id_enabled = bool(data.get("numeric_id_enabled", False))
     user_settings.pattern_config = PatternConfig(
         digit_count=digit_count,
-        student_number_enabled=student_number_enabled,
+        numeric_id_enabled=numeric_id_enabled,
     )
     user_settings.save()
 

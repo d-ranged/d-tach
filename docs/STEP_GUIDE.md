@@ -449,12 +449,13 @@ of corrupt files.
 
 ---
 
-## Step 10 — Custom Pattern: Student Numbers
+## Step 10 — Custom Pattern: Numeric ID Detection
 
 **Codeberg issue to create first:**
-`feature: implement configurable student number pattern detection`
+`feature: implement configurable numeric ID pattern detection`
 
-**Goal:** User can configure digit count for student number detection.
+**Goal:** User can configure digit count for numeric ID detection (student numbers,
+employee numbers, or any fixed-length numeric identifier).
 
 ### What to build
 
@@ -462,23 +463,157 @@ of corrupt files.
 - Applied in both Text Mode and Document Mode
 - Currency prefix exclusion rule applied
 - UI allows user to set digit count and enable/disable detection
+- Entity type named `NUMERIC_ID` (generic, not domain-specific)
 
 ### ✅ Step 10 is complete when
-- A 7-digit student number (or configured count) is detected and anonymized
+- A 7-digit numeric ID (or configured count) is detected and anonymized
 - A currency amount with same digit count is not flagged
 - Setting persists between sessions
 
 ---
 
-## Step 11 — Pre-Public Review
+## Step 10.5 — Usability and Accuracy Fixes
+
+**Codeberg issue:** `d-craig/d-tach#23`
+
+**Goal:** Fix four issues identified during real-document testing.
+
+### Changes
+
+#### 1. Native OS file/folder browser buttons
+`app/routes/browse_routes.py` — new Blueprint with two endpoints:
+- `GET /browse/file` — opens `tkinter.filedialog.askopenfilename` (DOCX/PDF filter)
+  and returns `{"path": "..."}` or `{"error": "..."}`.
+- `GET /browse/folder` — opens `tkinter.filedialog.askdirectory` and returns the same
+  shape.
+
+`app/__init__.py` — registers `browse_bp`.
+
+`app/templates/document_mode.html` — adds **Browse…** buttons next to both path inputs.
+
+`app/static/js/document_mode.js` — adds click handlers that `fetch()` the browse
+endpoints and populate the path inputs.
+
+**Note:** `tkinter` is blocking. This is acceptable for a single-user local app.
+The dialog opens in front of the browser window via `root.wm_attributes("-topmost", True)`.
+
+#### 2. Case-insensitive filename renaming
+`app/services/file_processor.py` — `_anonymize_filename()` previously used
+`str.replace()` which is case-sensitive. Real documents had filenames like
+`nick_surname_1234567.docx` where the NER engine detected `Nick Surname` (title case)
+in the document body. The case mismatch meant the filename was never rewritten.
+
+Fix: replace `readable.replace(original, placeholder)` with
+`re.sub(re.escape(original), placeholder, readable, flags=re.IGNORECASE)`.
+
+#### 3. NUMERIC_ID rename (student_number → numeric_id)
+The entity type `STUDENT_NUMBER` and all associated identifiers are renamed to
+`NUMERIC_ID` throughout:
+- `app/services/anonymizer.py` — `NUMERIC_ID_ENTITY`, `NumericIdRecognizer`,
+  `build_numeric_id_recognizer`
+- `app/services/pattern_config.py` — `numeric_id_enabled`, `build_numeric_id_regex()`
+- `app/services/user_settings.py` — default key `numeric_id_enabled`; migration in
+  `_merge_with_defaults` accepts the old `student_number_enabled` key
+- Routes, templates, JS — all updated to match
+- `tests/test_student_number.py` — deleted; replaced by `tests/test_numeric_id.py`
+
+**Migration:** `PatternConfig.from_dict()` accepts either `numeric_id_enabled` (new) or
+`student_number_enabled` (old), preferring the new key. Existing `user_settings.json`
+files on disk migrate transparently on first load.
+
+#### 4. Table row NER context fix
+`app/services/document_processor.py` — `_extract_docx_text()` previously fed each
+table cell paragraph to the NER model as an isolated short string. Single-word cells
+("Nick") provided too little context for spaCy to classify them as `PERSON`.
+
+Fix: join all cell text in a row into one string (`row_text`) before appending to the
+NER input list. This mirrors the fix recommended in the post-public backlog and is
+applied here since it is a one-line change with no side effects on the replacement path.
+
+### ✅ Step 10.5 is complete when
+- Browse buttons open native OS picker and populate the path fields
+- A file named after a person detected in its content is correctly renamed
+- `NUMERIC_ID` entity name appears in output; old `STUDENT_NUMBER` name gone
+- Names in table cells are detected when they appear alongside other cell text
+- All 103 tests pass
+
+---
+
+## Step 11 — Pre-Public Review and Launcher Scripts
 *Do this before making the repo public*
 
 **Codeberg issue to create first:**
-`chore: pre-public review and repo preparation`
+`chore: pre-public review, README completion, and launcher scripts`
 
-### Checklist
+### Goal
+Prepare the repo for public release and make the application accessible to
+colleagues who do not have Python installed or are not comfortable with the command line.
 
-- [ ] README.md complete with installation instructions and usage guide
+### Part A — Launcher Scripts
+
+Create two scripts in the project root that non-technical users can double-click:
+
+**`launch.bat` (Windows)**
+```bat
+@echo off
+cd /d "%~dp0"
+call .venv\Scripts\activate.bat
+python run.py
+pause
+```
+
+**`launch.sh` (macOS / Linux)**
+```bash
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+source .venv/bin/activate
+python run.py
+```
+
+Both scripts assume the virtual environment already exists at `.venv/`. If it does not,
+they should print a friendly message directing the user to the README setup section.
+
+Add a check to `launch.bat`:
+```bat
+if not exist ".venv\Scripts\activate.bat" (
+    echo Virtual environment not found. Please follow the setup instructions in README.md.
+    pause
+    exit /b 1
+)
+```
+
+Similarly in `launch.sh`:
+```bash
+if [ ! -f ".venv/bin/activate" ]; then
+    echo "Virtual environment not found. Please follow the setup instructions in README.md."
+    exit 1
+fi
+```
+
+### Part B — Non-Developer README
+
+`README.md` must be rewritten (or completed) to address two audiences:
+
+**For technical users (developers, IT-literate colleagues):**
+- Prerequisites: Python 3.11+
+- Clone / download the repo
+- `python -m venv .venv && .venv/Scripts/activate`
+- `pip install -r requirements.txt`
+- `python -m spacy download en_core_web_md && python -m spacy download nl_core_news_md`
+- `python run.py` (or double-click `launch.bat`)
+
+**For non-technical users (educators, assessors):**
+- "Download" section with a link to the zip download on Codeberg
+- Step-by-step with screenshots where possible
+- Explain what the application does in plain language
+- Explain that it never sends data anywhere
+- Explain that nothing is installed system-wide — it runs from a folder
+- Point to the launcher scripts as the way to start the application
+
+### Part C — Pre-Public Checklist
+
+- [ ] `launch.bat` and `launch.sh` created and tested
+- [ ] README.md complete with instructions for both audiences
 - [ ] `requirements.txt` accurate and pinned to tested versions
 - [ ] No real student or personal data anywhere in repo or git history
 - [ ] EUPL-1.2 `LICENSE` file present
@@ -561,7 +696,11 @@ community can see the roadmap and self-assign work.
   After a folder processing run, save a machine-readable summary log (JSON or CSV)
   to the processed folder listing each file's status, entity count, and output path.
 
-- **Packaging for easier installation**
-  A setup script or packaged installer that creates the virtual environment, installs
-  dependencies, and downloads spaCy models in one step. Target audience: colleagues
-  without Python experience.
+- **Standalone packaged installer (PyInstaller)**
+  Use PyInstaller to produce a single-folder distribution that includes the Python
+  interpreter, all dependencies, and the spaCy models. Target audience: colleagues
+  without Python experience who cannot or will not run the launcher scripts.
+  The launcher scripts in Step 11 are a stepping stone; PyInstaller is the full
+  zero-install solution. Known challenges: spaCy model size, Flask static file
+  paths under PyInstaller's `sys._MEIPASS`, and `tkinter` bundling on macOS.
+  Investigate once the app is stable post-public.

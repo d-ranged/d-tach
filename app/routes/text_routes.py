@@ -2,7 +2,7 @@ import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from app.services.anonymizer import ENTITIES, STUDENT_NUMBER_ENTITY, build_student_number_recognizer
+from app.services.anonymizer import ENTITIES, NUMERIC_ID_ENTITY, build_numeric_id_recognizer
 from app.services.hash_encoder import HashEncoder
 from app.services.pattern_config import PatternConfig
 
@@ -11,10 +11,10 @@ bp = Blueprint("text", __name__)
 _SUPPORTED_LANGUAGES = ("en", "nl")
 
 
-def _build_entity_list(anonymize_dates: bool, student_number_enabled: bool = False) -> list[str]:
+def _build_entity_list(anonymize_dates: bool, numeric_id_enabled: bool = False) -> list[str]:
     """Return entity list with DATE_TIME and STUDENT_NUMBER included only when opted in."""
     result = list(ENTITIES) if anonymize_dates else [e for e in ENTITIES if e != "DATE_TIME"]
-    if student_number_enabled:
+    if numeric_id_enabled:
         result.append(STUDENT_NUMBER_ENTITY)
     return result
 
@@ -42,7 +42,7 @@ def anonymize():
         secret                   (str)  — required when hashing_enabled is true
         key_reference_enabled    (bool)
         anonymize_dates          (bool) — include DATE_TIME entities; default false
-        student_number_enabled   (bool) — detect student numbers; default false
+        numeric_id_enabled   (bool) — detect student numbers; default false
         digit_count              (int)  — exact digit count for student numbers
 
     Returns JSON:
@@ -58,7 +58,7 @@ def anonymize():
     secret: str = data.get("secret", "")
     key_reference_enabled: bool = bool(data.get("key_reference_enabled", False))
     anonymize_dates: bool = bool(data.get("anonymize_dates", False))
-    student_number_enabled: bool = bool(data.get("student_number_enabled", False))
+    numeric_id_enabled: bool = bool(data.get("numeric_id_enabled", False))
     try:
         digit_count = int(data.get("digit_count", 7))
     except (ValueError, TypeError):
@@ -73,12 +73,12 @@ def anonymize():
     if hashing_enabled and not secret.strip():
         return jsonify({"error": "Enter a secret phrase to use hashing."}), 400
 
-    entities_to_detect = _build_entity_list(anonymize_dates, student_number_enabled)
+    entities_to_detect = _build_entity_list(anonymize_dates, numeric_id_enabled)
 
     ad_hoc = []
-    if student_number_enabled:
+    if numeric_id_enabled:
         config = PatternConfig(digit_count=digit_count)
-        ad_hoc = [build_student_number_recognizer(config, language)]
+        ad_hoc = [build_numeric_id_recognizer(config, language)]
 
     result = current_app.anonymizer.anonymize(
         text, language, entities=entities_to_detect, ad_hoc_recognizers=ad_hoc
@@ -121,7 +121,7 @@ def anonymize():
         settings.hashing_secret = secret
     settings.pattern_config = PatternConfig(
         digit_count=digit_count,
-        student_number_enabled=student_number_enabled,
+        numeric_id_enabled=numeric_id_enabled,
     )
     settings.save()
 

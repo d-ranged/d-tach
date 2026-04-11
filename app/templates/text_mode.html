@@ -52,8 +52,8 @@
 
     <div class="setting-group">
         <label class="toggle-label">
-            <input type="checkbox" class="toggle" id="student-number-toggle" {% if pattern_config.student_number_enabled %}checked{% endif %}>
-            <span>Detect student numbers</span>
+            <input type="checkbox" class="toggle" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
+            <span>Detect ID numbers</span>
         </label>
         <label class="field-label" for="digit-count">Digit count</label>
         <input
@@ -64,7 +64,7 @@
             min="4"
             max="12"
         >
-        <p class="setting-hint">Detect sequences of exactly N digits as student numbers.</p>
+        <p class="setting-hint">Detect sequences of exactly N consecutive digits as numeric identifiers (student IDs, employee numbers, etc.).</p>
     </div>
 
     <div class="setting-group">
