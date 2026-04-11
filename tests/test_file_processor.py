@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import fitz
 import pytest
 from docx import Document
 
@@ -16,6 +17,18 @@ def make_docx(path: Path, paragraphs: list[str]) -> None:
     for text in paragraphs:
         doc.add_paragraph(text)
     doc.save(str(path))
+
+
+def make_pdf(path: Path, lines: list[str]) -> None:
+    """Create a simple PDF with the given lines for use in tests."""
+    doc = fitz.open()
+    page = doc.new_page()
+    y = 72
+    for line in lines:
+        page.insert_text((72, y), line)
+        y += 20
+    doc.save(str(path))
+    doc.close()
 
 
 @pytest.fixture(scope="session")
@@ -116,3 +129,55 @@ class TestProcessDocx:
         make_docx(source, ["My name is John Smith."])
         result = file_processor.process(source, ProcessingSettings())
         assert result.entities_found > 0
+
+
+class TestProcessPdf:
+    def test_pdf_with_pii_produces_anon_prefix(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.pdf"
+        make_pdf(source, ["My name is John Smith and I work here."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "anonymized"
+        assert result.output_path is not None
+        assert result.output_path.name.startswith("ANON_")
+
+    def test_pdf_with_pii_removes_name_from_output(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.pdf"
+        make_pdf(source, ["My name is John Smith and I work here."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.output_path is not None
+        out_doc = fitz.open(str(result.output_path))
+        text = out_doc[0].get_text()
+        out_doc.close()
+        assert "John Smith" not in text
+
+    def test_pdf_without_pii_produces_checked_prefix(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "clean.pdf"
+        make_pdf(source, ["The results showed a fifteen percent improvement."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "clean"
+        assert result.output_path is not None
+        assert result.output_path.name.startswith("CHECKED_")
+
+    def test_pdf_original_not_modified(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.pdf"
+        make_pdf(source, ["My name is John Smith."])
+        original_mtime = source.stat().st_mtime
+        file_processor.process(source, ProcessingSettings())
+        assert source.stat().st_mtime == original_mtime
+
+    def test_pdf_keyref_created_when_enabled(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.pdf"
+        make_pdf(source, ["My name is John Smith."])
+        result = file_processor.process(source, ProcessingSettings(key_reference_enabled=True))
+        assert result.keyref_path is not None
+        assert result.keyref_path.exists()

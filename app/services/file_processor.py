@@ -13,7 +13,12 @@ from app.services.language_detector import LanguageDetector
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx"})
+SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf"})
+
+# Entities whose matched text is shorter than this are almost certainly PDF
+# ligature extraction artefacts (e.g. "ci", "fi") rather than real PII.
+# Replacing them would corrupt the entire document, so they are skipped.
+MIN_ENTITY_TEXT_LENGTH: int = 3
 
 
 def _build_entity_list(anonymize_dates: bool) -> list[str]:
@@ -82,8 +87,11 @@ class FileProcessor:
                 error_message=f"Unsupported file type: {path.suffix}",
             )
 
+        ext = path.suffix.lower()
         try:
-            return self._process_docx(path, settings)
+            if ext == ".docx":
+                return self._process_docx(path, settings)
+            return self._process_pdf(path, settings)
         except Exception as exc:
             logger.error("Failed to process %s: %s", path, exc)
             return FileResult(
@@ -140,6 +148,53 @@ class FileProcessor:
             entities_found=len({e.original_text for e in result.entities}),
         )
 
+    def _process_pdf(self, path: Path, settings: ProcessingSettings) -> FileResult:
+        """Core PDF processing logic using pymupdf in-place redaction."""
+        import fitz  # local import — only needed for PDF path
+
+        text, doc = self._doc_processor.load_pdf(path)
+
+        if not text.strip():
+            doc.close()
+            output_path = path.parent / f"CHECKED_{path.name}"
+            clean_doc = fitz.open(str(path))
+            self._doc_processor.save_pdf_copy(clean_doc, output_path)
+            clean_doc.close()
+            return FileResult(status="clean", source_path=path, output_path=output_path)
+
+        language = settings.language
+        entities = _build_entity_list(settings.anonymize_dates)
+        result = self._anonymizer.anonymize(text, language, entities=entities)
+
+        if not result.entities:
+            doc.close()
+            output_path = path.parent / f"CHECKED_{path.name}"
+            clean_doc = fitz.open(str(path))
+            self._doc_processor.save_pdf_copy(clean_doc, output_path)
+            clean_doc.close()
+            return FileResult(status="clean", source_path=path, output_path=output_path)
+
+        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
+        replacements = self._build_replacements(result.entities, encoder)
+
+        output_name = f"ANON_{path.name}"
+        output_path = path.parent / output_name
+        self._doc_processor.save_pdf_with_replacements(doc, output_path, replacements)
+        doc.close()
+
+        keyref_path: Optional[Path] = None
+        if settings.key_reference_enabled:
+            keyref_path = path.parent / f"KEYREF_{path.stem}.txt"
+            self._write_keyref(keyref_path, path, replacements, result.entities)
+
+        return FileResult(
+            status="anonymized",
+            source_path=path,
+            output_path=output_path,
+            keyref_path=keyref_path,
+            entities_found=len({e.original_text for e in result.entities}),
+        )
+
     def _build_replacements(
         self,
         entities: list[DetectedEntity],
@@ -154,6 +209,15 @@ class FileProcessor:
         replacements: dict[str, str] = {}
         for entity in entities:
             if entity.original_text in replacements:
+                continue
+            if len(entity.original_text) < MIN_ENTITY_TEXT_LENGTH:
+                logger.warning(
+                    "Skipping entity %r (type=%s, length=%d) — likely a PDF "
+                    "ligature extraction artefact.",
+                    entity.original_text,
+                    entity.entity_type,
+                    len(entity.original_text),
+                )
                 continue
             if encoder and entity.entity_type == "PERSON":
                 replacements[entity.original_text] = encoder.encode_full_name(

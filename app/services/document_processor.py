@@ -1,36 +1,36 @@
 import logging
 from pathlib import Path
 
+import fitz  # pymupdf
 from docx import Document
-from docx.oxml.ns import qn
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentProcessor:
-    """Handles DOCX file reading and anonymized writing using python-docx.
+    """Handles DOCX and PDF file reading and anonymized writing.
 
-    Text extraction concatenates all paragraph text from the body, tables,
-    and headers/footers. Replacement is applied run-by-run, so entities that
-    span a formatting boundary (split across runs) may not be replaced. This
-    is a known limitation of the run-based approach.
+    DOCX: text extraction and run-level replacement via python-docx.
+    PDF: text extraction and in-place redaction via pymupdf.
+
+    The original file is never written to by either method.
     """
 
-    def load_docx(self, path: Path) -> tuple[str, Document]:
-        """Load a DOCX file and return its full text and the Document object.
+    # ------------------------------------------------------------------
+    # DOCX methods
+    # ------------------------------------------------------------------
 
-        The Document object is used by save_docx_with_replacements. The
-        original file is never written to.
-        """
+    def load_docx(self, path: Path) -> tuple[str, Document]:
+        """Load a DOCX file and return its full text and the Document object."""
         doc = Document(str(path))
-        text = self._extract_text(doc)
+        text = self._extract_docx_text(doc)
         return text, doc
 
     def save_docx_with_replacements(
         self, doc: Document, dest_path: Path, replacements: dict[str, str]
     ) -> None:
         """Apply replacements to all text runs in doc and save to dest_path."""
-        self._apply_replacements(doc, replacements)
+        self._apply_docx_replacements(doc, replacements)
         doc.save(str(dest_path))
 
     def save_docx_copy(self, doc: Document, dest_path: Path) -> None:
@@ -38,10 +38,56 @@ class DocumentProcessor:
         doc.save(str(dest_path))
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # PDF methods
     # ------------------------------------------------------------------
 
-    def _extract_text(self, doc: Document) -> str:
+    def load_pdf(self, path: Path) -> tuple[str, fitz.Document]:
+        """Load a PDF and return its full text and the fitz Document object.
+
+        Text from all pages is joined with newlines. The fitz Document is
+        used by save_pdf_with_replacements; it must be closed by the caller
+        when no longer needed.
+        """
+        doc = fitz.open(str(path))
+        text = self._extract_pdf_text(doc)
+        return text, doc
+
+    def save_pdf_with_replacements(
+        self,
+        doc: fitz.Document,
+        dest_path: Path,
+        replacements: dict[str, str],
+    ) -> None:
+        """Apply redaction annotations for all replacements and save to dest_path.
+
+        Each occurrence of an original string on each page is replaced with its
+        placeholder using pymupdf's redaction API. The replacement text is drawn
+        at the same position in the default font. Layout of surrounding content
+        is preserved.
+        """
+        # Sort longest first to avoid replacing a substring before the full match
+        sorted_replacements = sorted(
+            replacements.items(), key=lambda x: len(x[0]), reverse=True
+        )
+
+        for page in doc:
+            for original, placeholder in sorted_replacements:
+                rects = page.search_for(original)
+                for rect in rects:
+                    page.add_redact_annot(rect, text=placeholder, fontsize=11)
+            page.apply_redactions()
+
+        doc.save(str(dest_path))
+
+    def save_pdf_copy(self, doc: fitz.Document, dest_path: Path) -> None:
+        """Save an unmodified copy of the PDF to dest_path."""
+        doc.save(str(dest_path))
+
+    # ------------------------------------------------------------------
+    # DOCX internal helpers
+    # ------------------------------------------------------------------
+
+    def _extract_docx_text(self, doc: Document) -> str:
         """Return all readable text from the document joined by newlines."""
         parts: list[str] = []
 
@@ -66,7 +112,9 @@ class DocumentProcessor:
 
         return "\n".join(parts)
 
-    def _apply_replacements(self, doc: Document, replacements: dict[str, str]) -> None:
+    def _apply_docx_replacements(
+        self, doc: Document, replacements: dict[str, str]
+    ) -> None:
         """Replace all occurrences of original text with placeholders in every run."""
         for para in doc.paragraphs:
             self._replace_in_paragraph(para, replacements)
@@ -91,3 +139,17 @@ class DocumentProcessor:
             for original, placeholder in replacements.items():
                 text = text.replace(original, placeholder)
             run.text = text
+
+    # ------------------------------------------------------------------
+    # PDF internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_pdf_text(doc: fitz.Document) -> str:
+        """Return all text from all pages joined by newlines."""
+        parts: list[str] = []
+        for page in doc:
+            page_text = page.get_text()
+            if page_text.strip():
+                parts.append(page_text)
+        return "\n".join(parts)
