@@ -190,6 +190,11 @@ class FileProcessor:
         replacements = self._build_replacements(result.entities, encoder)
 
         output_name = f"ANON_{path.name}"
+        if settings.check_file_names:
+            output_name = self._anonymize_filename(
+                f"ANON_{path.stem}", path.suffix, replacements, settings, language
+            )
+
         output_path = path.parent / output_name
         self._doc_processor.save_pdf_with_replacements(doc, output_path, replacements)
         doc.close()
