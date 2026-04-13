@@ -1,10 +1,14 @@
 # d-tach
 
-**d-tach** anonymizes names, contact details, and other personal data from text, Word documents, and PDFs before you share them for review or assessment.
+**d-tach** anonymizes names, contact details, and other personal data from text, Word documents, PDFs, and Markdown files before you share them for review or assessment.
 
 Everything runs locally on your machine. No files or text are ever sent anywhere.
 
-Licensed under [EUPL-1.2](LICENSE).
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://codeberg.org/d-craig/d-tach/releases)
+&nbsp;
+[![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-green)](LICENSE)
+
+[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)
 
 ---
 
@@ -40,7 +44,7 @@ You need **Python 3.11 or newer** installed on your machine. This is a one-time 
 
 ### Installation and first run (Windows)
 
-1. Download the repository as a zip file from Codeberg and extract it to a folder of your choice.
+1. Click **[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
 2. Double-click **`launch.bat`**.
 
 On first run, the launcher installs all required dependencies automatically. This takes a few minutes and only happens once. On all future runs it starts immediately.
@@ -49,7 +53,7 @@ A browser window will open at `http://localhost:5000`. Keep the terminal window 
 
 ### Installation and first run (macOS / Linux)
 
-1. Download the repository as a zip file and extract it to a folder of your choice.
+1. Click **[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
 2. Open Terminal, navigate to the extracted folder, and make the launcher executable (one time only):
    ```bash
    chmod +x launch.sh

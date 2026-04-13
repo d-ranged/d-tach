@@ -7,7 +7,7 @@ from app.services.file_processor import FileProcessor, FileResult, ProcessingSet
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf"})
+SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf", ".md"})
 
 
 @dataclass

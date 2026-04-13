@@ -19,7 +19,7 @@ from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf"})
+SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf", ".md"})
 
 # Entities whose matched text is shorter than this are almost certainly PDF
 # ligature extraction artefacts (e.g. "ci", "fi") rather than real PII.
@@ -101,6 +101,8 @@ class FileProcessor:
         try:
             if ext == ".docx":
                 return self._process_docx(path, settings)
+            if ext == ".md":
+                return self._process_markdown(path, settings)
             return self._process_pdf(path, settings)
         except Exception as exc:
             logger.error("Failed to process %s: %s", path, exc)
@@ -218,6 +220,66 @@ class FileProcessor:
         output_path = path.parent / output_name
         self._doc_processor.save_pdf_with_replacements(doc, output_path, replacements)
         doc.close()
+
+        keyref_path: Optional[Path] = None
+        if settings.key_reference_enabled:
+            keyref_path = path.parent / f"KEYREF_{path.stem}.txt"
+            self._write_keyref(keyref_path, path, replacements, result.entities)
+
+        return FileResult(
+            status="anonymized",
+            source_path=path,
+            output_path=output_path,
+            keyref_path=keyref_path,
+            entities_found=len({e.original_text for e in result.entities}),
+        )
+
+    def _process_markdown(self, path: Path, settings: ProcessingSettings) -> FileResult:
+        """Core Markdown processing logic.
+
+        Markdown files are treated as plain text: the full content is fed to
+        the anonymizer and replacements are written back with str.replace().
+        Markdown syntax is preserved because PII replacements only touch the
+        matched text spans, not surrounding formatting characters.
+        """
+        text = self._doc_processor.load_md(path)
+
+        if not text.strip():
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
+                )
+            output_path = path.parent / output_name
+            self._doc_processor.save_md_copy(text, output_path)
+            return FileResult(status="clean", source_path=path, output_path=output_path)
+
+        language = settings.language
+        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled)
+        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
+        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
+
+        if not result.entities:
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
+                )
+            output_path = path.parent / output_name
+            self._doc_processor.save_md_copy(text, output_path)
+            return FileResult(status="clean", source_path=path, output_path=output_path)
+
+        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
+        replacements = self._build_replacements(result.entities, encoder)
+
+        output_name = f"ANON_{path.name}"
+        if settings.check_file_names:
+            output_name = self._anonymize_filename(
+                f"ANON_{path.stem}", path.suffix, replacements, settings, language
+            )
+
+        output_path = path.parent / output_name
+        self._doc_processor.save_md_with_replacements(text, output_path, replacements)
 
         keyref_path: Optional[Path] = None
         if settings.key_reference_enabled:

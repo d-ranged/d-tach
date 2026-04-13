@@ -629,8 +629,22 @@ fi
 ## Step 12 — Make Repo Public
 
 ### Actions
-1. Codeberg → Settings → Danger Zone → Make Public
-2. Announce if relevant (colleagues, LinkedIn, Saxion community)
+1. Verify all items in `craig_check.md` are ticked.
+2. Codeberg → Settings → Danger Zone → Make Public.
+3. Create the first release on Codeberg: Releases → New Release → tag `v1.0.0` → publish.
+4. Announce if relevant (colleagues, LinkedIn, Saxion community).
+
+### Release process (for all future versions)
+
+Each release follows this sequence:
+
+1. Bump `__version__` in `app/__init__.py`.
+2. Update the version badge in `README.md` (the `version-X.X.X-blue` string).
+3. Add a new entry to `CHANGELOG.md` with the version number, date, and a summary of changes.
+4. Commit: `Update version to vX.X.X (issue #N)`.
+5. Tag: `git tag vX.X.X -m "Release vX.X.X"`.
+6. Push commits and tag: `git push && git push origin vX.X.X`.
+7. Codeberg → Releases → New Release → select the tag → paste the CHANGELOG entry as release notes → publish.
 
 ---
 
@@ -642,6 +656,12 @@ by any contributor or by the maintainer in priority order.
 
 Create all of these as Codeberg issues at the time of going public (Step 12) so the
 community can see the roadmap and self-assign work.
+
+**When completing any post-public issue that ships a change to users:**
+- Decide whether it is a PATCH (bug fix), MINOR (new feature), or MAJOR (overhaul).
+- Follow the release process in Step 12 above.
+- Add an entry to `CHANGELOG.md` before tagging.
+- Update the version badge in `README.md`.
 
 ### High priority (do first after public)
 
