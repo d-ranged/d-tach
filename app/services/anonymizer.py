@@ -28,7 +28,7 @@ ENTITIES: Final[list[str]] = [
     "NL_BSN",
 ]
 
-STUDENT_NUMBER_ENTITY: Final[str] = "STUDENT_NUMBER"
+NUMERIC_ID_ENTITY: Final[str] = "NUMERIC_ID"
 
 
 @dataclass
@@ -78,14 +78,14 @@ class DutchBsnRecognizer(PatternRecognizer):
         return total % 11 == 0
 
 
-class StudentNumberRecognizer(PatternRecognizer):
-    """Recognizes student numbers as an exact count of consecutive digits.
+class NumericIdRecognizer(PatternRecognizer):
+    """Recognizes fixed-length numeric identifiers (student IDs, employee numbers, etc.).
 
     Uses the regex from PatternConfig to match the configured digit count and
     excludes sequences immediately preceded by a currency symbol (€, $, £).
     """
 
-    SUPPORTED_ENTITY: Final[str] = STUDENT_NUMBER_ENTITY
+    SUPPORTED_ENTITY: Final[str] = NUMERIC_ID_ENTITY
 
     def __init__(self, pattern_config: PatternConfig, language: str) -> None:
         """Build a recognizer for the given digit count and language.
@@ -94,19 +94,19 @@ class StudentNumberRecognizer(PatternRecognizer):
             pattern_config: Active PatternConfig supplying the digit count and regex.
             language: The processing language this recognizer should be registered for.
         """
-        regex = pattern_config.build_student_number_regex()
+        regex = pattern_config.build_numeric_id_regex()
         super().__init__(
             supported_entity=self.SUPPORTED_ENTITY,
-            patterns=[Pattern("STUDENT_NUMBER", regex, 0.85)],
+            patterns=[Pattern("NUMERIC_ID", regex, 0.85)],
             supported_language=language,
         )
 
 
-def build_student_number_recognizer(
+def build_numeric_id_recognizer(
     pattern_config: PatternConfig, language: str
-) -> StudentNumberRecognizer:
-    """Return a StudentNumberRecognizer configured for the given language."""
-    return StudentNumberRecognizer(pattern_config, language)
+) -> NumericIdRecognizer:
+    """Return a NumericIdRecognizer configured for the given language."""
+    return NumericIdRecognizer(pattern_config, language)
 
 
 class Anonymizer:
@@ -139,7 +139,7 @@ class Anonymizer:
         are detected. When None, the default ENTITIES list is used.
 
         Pass ``ad_hoc_recognizers`` to add per-request recognizers (e.g. a
-        StudentNumberRecognizer built from the current PatternConfig) without
+        NumericIdRecognizer built from the current PatternConfig) without
         modifying the shared analyzer registry.
         """
         if not text or not text.strip():

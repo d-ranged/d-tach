@@ -32,8 +32,10 @@ def create_app() -> Flask:
 
     from app.routes.text_routes import bp as text_bp
     from app.routes.document_routes import bp as document_bp
+    from app.routes.browse_routes import bp as browse_bp
 
     app.register_blueprint(text_bp)
     app.register_blueprint(document_bp)
+    app.register_blueprint(browse_bp)
 
     return app

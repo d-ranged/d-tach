@@ -97,10 +97,18 @@ class DocumentProcessor:
 
         for table in doc.tables:
             for row in table.rows:
-                for cell in row.cells:
-                    for para in cell.paragraphs:
-                        if para.text.strip():
-                            parts.append(para.text)
+                # Concatenate all cell text in the row as a single unit so the
+                # NER model receives enough context to identify names. Feeding
+                # each cell in isolation produces very short strings ("Nick")
+                # that the spaCy medium model often fails to classify as PERSON.
+                row_text = " ".join(
+                    para.text.strip()
+                    for cell in row.cells
+                    for para in cell.paragraphs
+                    if para.text.strip()
+                )
+                if row_text:
+                    parts.append(row_text)
 
         for section in doc.sections:
             for para in section.header.paragraphs:

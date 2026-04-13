@@ -7,7 +7,7 @@ const secretInput            = document.getElementById("secret-input");
 const keyrefToggle           = document.getElementById("keyref-toggle");
 const namesToggle            = document.getElementById("names-toggle");
 const datesToggle            = document.getElementById("dates-toggle");
-const studentNumberToggle    = document.getElementById("student-number-toggle");
+const numericIdToggle    = document.getElementById("numeric-id-toggle");
 const digitCountInput        = document.getElementById("digit-count");
 const langSelector           = document.getElementById("lang-selector");
 const progressArea      = document.getElementById("progress-area");
@@ -18,10 +18,12 @@ const summaryArea       = document.getElementById("summary-area");
 
 // ---- File tab ----
 const filePathInput     = document.getElementById("file-path");
+const browseFileBtn     = document.getElementById("browse-file-btn");
 const processFileBtn    = document.getElementById("process-file-btn");
 
 // ---- Folder tab ----
 const folderPathInput   = document.getElementById("folder-path");
+const browseFolderBtn   = document.getElementById("browse-folder-btn");
 const processFolderBtn  = document.getElementById("process-folder-btn");
 const cancelBtn         = document.getElementById("cancel-btn");
 
@@ -45,6 +47,44 @@ let activeEventSource = null;
         panelFile.hidden = tab !== tabFile;
         panelFolder.hidden = tab !== tabFolder;
     });
+});
+
+// ---------------------------------------------------------------------------
+// Browse buttons (native OS file/folder picker via Flask/tkinter)
+// ---------------------------------------------------------------------------
+
+browseFileBtn.addEventListener("click", async () => {
+    browseFileBtn.disabled = true;
+    try {
+        const response = await fetch("/browse/file");
+        const data = await response.json();
+        if (data.error) {
+            setProgress("Could not open file browser: " + data.error, true);
+        } else if (data.path) {
+            filePathInput.value = data.path;
+        }
+    } catch {
+        setProgress("Could not open file browser.", true);
+    } finally {
+        browseFileBtn.disabled = false;
+    }
+});
+
+browseFolderBtn.addEventListener("click", async () => {
+    browseFolderBtn.disabled = true;
+    try {
+        const response = await fetch("/browse/folder");
+        const data = await response.json();
+        if (data.error) {
+            setProgress("Could not open folder browser: " + data.error, true);
+        } else if (data.path) {
+            folderPathInput.value = data.path;
+        }
+    } catch {
+        setProgress("Could not open folder browser.", true);
+    } finally {
+        browseFolderBtn.disabled = false;
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -90,7 +130,7 @@ async function runProcessFile() {
                 key_reference_enabled: keyrefToggle.checked,
                 check_file_names: namesToggle.checked,
                 anonymize_dates: datesToggle.checked,
-                student_number_enabled: studentNumberToggle.checked,
+                numeric_id_enabled: numericIdToggle.checked,
                 digit_count: parseInt(digitCountInput.value, 10) || 7,
             }),
         });
@@ -159,7 +199,7 @@ function runProcessFolder() {
         key_reference_enabled: keyrefToggle.checked,
         check_file_names: namesToggle.checked,
         anonymize_dates: datesToggle.checked,
-        student_number_enabled: studentNumberToggle.checked,
+        numeric_id_enabled: numericIdToggle.checked,
         digit_count: parseInt(digitCountInput.value, 10) || 7,
     });
 

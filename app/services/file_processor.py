@@ -9,8 +9,8 @@ from typing import Optional
 from app.services.anonymizer import (
     Anonymizer,
     DetectedEntity,
-    STUDENT_NUMBER_ENTITY,
-    build_student_number_recognizer,
+    NUMERIC_ID_ENTITY,
+    build_numeric_id_recognizer,
 )
 from app.services.document_processor import DocumentProcessor
 from app.services.hash_encoder import HashEncoder
@@ -27,17 +27,17 @@ SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf"})
 MIN_ENTITY_TEXT_LENGTH: int = 3
 
 
-def _build_entity_list(anonymize_dates: bool, student_number_enabled: bool = False) -> list[str]:
+def _build_entity_list(anonymize_dates: bool, numeric_id_enabled: bool = False) -> list[str]:
     """Return the entity list to pass to the Anonymizer.
 
     DATE_TIME is excluded unless the user has opted in, as dates are
     ubiquitous in academic documents and rarely personally identifying.
-    STUDENT_NUMBER is included only when student number detection is enabled.
+    NUMERIC_ID is included only when numeric ID detection is enabled.
     """
     from app.services.anonymizer import ENTITIES
     result = list(ENTITIES) if anonymize_dates else [e for e in ENTITIES if e != "DATE_TIME"]
-    if student_number_enabled:
-        result.append(STUDENT_NUMBER_ENTITY)
+    if numeric_id_enabled:
+        result.append(NUMERIC_ID_ENTITY)
     return result
 
 
@@ -51,7 +51,7 @@ class ProcessingSettings:
     check_file_names: bool = False
     language: str = "en"
     anonymize_dates: bool = False
-    student_number_enabled: bool = False
+    numeric_id_enabled: bool = False
     digit_count: int = 7
 
 
@@ -119,17 +119,27 @@ class FileProcessor:
         text, doc = self._doc_processor.load_docx(path)
 
         if not text.strip():
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
+                )
+            output_path = path.parent / output_name
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.student_number_enabled)
+        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled)
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
+                )
+            output_path = path.parent / output_name
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
@@ -166,21 +176,31 @@ class FileProcessor:
         text, doc = self._doc_processor.load_pdf(path)
 
         if not text.strip():
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
+                )
             doc.close()
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_path = path.parent / output_name
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.student_number_enabled)
+        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled)
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
+                )
             doc.close()
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_path = path.parent / output_name
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
@@ -190,6 +210,11 @@ class FileProcessor:
         replacements = self._build_replacements(result.entities, encoder)
 
         output_name = f"ANON_{path.name}"
+        if settings.check_file_names:
+            output_name = self._anonymize_filename(
+                f"ANON_{path.stem}", path.suffix, replacements, settings, language
+            )
+
         output_path = path.parent / output_name
         self._doc_processor.save_pdf_with_replacements(doc, output_path, replacements)
         doc.close()
@@ -212,12 +237,12 @@ class FileProcessor:
     ) -> list:
         """Return a list of ad-hoc recognizers for this processing run.
 
-        Includes a StudentNumberRecognizer when student number detection is enabled.
+        Includes a NumericIdRecognizer when numeric ID detection is enabled.
         """
-        if not settings.student_number_enabled:
+        if not settings.numeric_id_enabled:
             return []
         config = PatternConfig(digit_count=settings.digit_count)
-        return [build_student_number_recognizer(config, language)]
+        return [build_numeric_id_recognizer(config, language)]
 
     def _build_replacements(
         self,
@@ -261,23 +286,31 @@ class FileProcessor:
     ) -> str:
         """Return an anonymized filename by checking the stem for PII.
 
-        First applies any replacements already found in the document content,
-        then runs the anonymizer on the stem itself to catch standalone names.
+        First applies content_replacements (names found in the document body)
+        using case-insensitive matching, then runs the anonymizer on whatever
+        remains to catch any additional entities.
+
+        Case-insensitive matching is necessary because filenames often use
+        different capitalisation than the text in the document body (e.g.
+        'nick_surname' in a filename vs 'Nick Surname' detected in the text).
+        The replacement placeholder is always written in its original form
+        (uppercase entity type + counter, or hash-encoded for PERSON).
         """
         # Treat underscores and hyphens as spaces for analysis
         readable = re.sub(r"[_\-]+", " ", stem)
 
-        # Apply known content replacements first (longest first to avoid partials)
+        # Apply known content replacements first using case-insensitive matching,
+        # sorted longest-first to avoid replacing a substring before the full match.
         for original, placeholder in sorted(
             content_replacements.items(), key=lambda x: len(x[0]), reverse=True
         ):
-            readable = readable.replace(original, placeholder)
+            readable = re.sub(re.escape(original), placeholder, readable, flags=re.IGNORECASE)
 
         # Run anonymizer on whatever remains for any additional entities
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         anon_result = self._anonymizer.anonymize(
             readable, language,
-            entities=_build_entity_list(settings.anonymize_dates, settings.student_number_enabled),
+            entities=_build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled),
             ad_hoc_recognizers=ad_hoc,
         )
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None

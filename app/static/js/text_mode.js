@@ -10,7 +10,7 @@ const keyrefToggle         = document.getElementById("keyref-toggle");
 const keyrefSection        = document.getElementById("keyref-section");
 const keyrefBody           = document.getElementById("keyref-body");
 const datesToggle          = document.getElementById("dates-toggle");
-const studentNumberToggle  = document.getElementById("student-number-toggle");
+const numericIdToggle  = document.getElementById("numeric-id-toggle");
 const digitCountInput      = document.getElementById("digit-count");
 const langSelector         = document.getElementById("lang-selector");
 
@@ -65,7 +65,7 @@ async function runAnonymize() {
                 secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
                 anonymize_dates: datesToggle.checked,
-                student_number_enabled: studentNumberToggle.checked,
+                numeric_id_enabled: numericIdToggle.checked,
                 digit_count: parseInt(digitCountInput.value, 10) || 7,
             }),
         });
@@ -165,12 +165,12 @@ datesToggle.addEventListener("change", () => {
     if (inputEl.value.trim()) runAnonymize();
 });
 
-studentNumberToggle.addEventListener("change", () => {
+numericIdToggle.addEventListener("change", () => {
     if (inputEl.value.trim()) runAnonymize();
 });
 
 digitCountInput.addEventListener("change", () => {
-    if (studentNumberToggle.checked && inputEl.value.trim()) runAnonymize();
+    if (numericIdToggle.checked && inputEl.value.trim()) runAnonymize();
 });
 
 keyrefToggle.addEventListener("change", () => {

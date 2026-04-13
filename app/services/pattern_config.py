@@ -10,7 +10,7 @@ CURRENCY_SYMBOLS: Final[str] = "€$£"
 class PatternConfig:
     """Holds active custom pattern detection settings.
 
-    Controls student number detection (exact digit count, enable toggle) and
+    Controls numeric ID detection (exact digit count, enable toggle) and
     whether file and folder names are included in PII scanning.
     """
 
@@ -18,7 +18,7 @@ class PatternConfig:
         self,
         digit_count: int = DEFAULT_DIGIT_COUNT,
         check_file_names: bool = False,
-        student_number_enabled: bool = False,
+        numeric_id_enabled: bool = False,
     ) -> None:
         """Initialise with validated settings.
 
@@ -26,11 +26,11 @@ class PatternConfig:
         """
         self.digit_count = digit_count
         self.check_file_names = check_file_names
-        self.student_number_enabled = student_number_enabled
+        self.numeric_id_enabled = numeric_id_enabled
 
     @property
     def digit_count(self) -> int:
-        """Exact number of consecutive digits that constitute a student number."""
+        """Exact number of consecutive digits that constitute a numeric ID."""
         return self._digit_count
 
     @digit_count.setter
@@ -47,7 +47,7 @@ class PatternConfig:
             )
         self._digit_count = value
 
-    def build_student_number_regex(self) -> str:
+    def build_numeric_id_regex(self) -> str:
         """Return a regex pattern matching exactly digit_count digits.
 
         Requires a non-digit (or string boundary) on each side and excludes
@@ -61,7 +61,7 @@ class PatternConfig:
         return {
             "digit_count": self._digit_count,
             "check_file_names": self.check_file_names,
-            "student_number_enabled": self.student_number_enabled,
+            "numeric_id_enabled": self.numeric_id_enabled,
         }
 
     @classmethod
@@ -70,5 +70,8 @@ class PatternConfig:
         return cls(
             digit_count=data.get("digit_count", DEFAULT_DIGIT_COUNT),
             check_file_names=data.get("check_file_names", False),
-            student_number_enabled=data.get("student_number_enabled", False),
+            # Accept both old key name (student_number_enabled) and new for migration
+            numeric_id_enabled=data.get(
+                "numeric_id_enabled", data.get("student_number_enabled", False)
+            ),
         )
