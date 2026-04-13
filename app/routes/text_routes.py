@@ -12,10 +12,10 @@ _SUPPORTED_LANGUAGES = ("en", "nl")
 
 
 def _build_entity_list(anonymize_dates: bool, numeric_id_enabled: bool = False) -> list[str]:
-    """Return entity list with DATE_TIME and STUDENT_NUMBER included only when opted in."""
+    """Return entity list with DATE_TIME and NUMERIC_ID included only when opted in."""
     result = list(ENTITIES) if anonymize_dates else [e for e in ENTITIES if e != "DATE_TIME"]
     if numeric_id_enabled:
-        result.append(STUDENT_NUMBER_ENTITY)
+        result.append(NUMERIC_ID_ENTITY)
     return result
 
 

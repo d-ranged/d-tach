@@ -119,7 +119,12 @@ class FileProcessor:
         text, doc = self._doc_processor.load_docx(path)
 
         if not text.strip():
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
+                )
+            output_path = path.parent / output_name
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
@@ -129,7 +134,12 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
+                )
+            output_path = path.parent / output_name
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
@@ -166,8 +176,13 @@ class FileProcessor:
         text, doc = self._doc_processor.load_pdf(path)
 
         if not text.strip():
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
+                )
             doc.close()
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_path = path.parent / output_name
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
@@ -179,8 +194,13 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
+            output_name = f"CHECKED_{path.name}"
+            if settings.check_file_names:
+                output_name = self._anonymize_filename(
+                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
+                )
             doc.close()
-            output_path = path.parent / f"CHECKED_{path.name}"
+            output_path = path.parent / output_name
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
