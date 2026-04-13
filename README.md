@@ -22,9 +22,9 @@ Paste text or select a document and d-tach replaces personal details — names, 
 
 You choose:
 - **Text mode** — paste text directly and copy the anonymized result.
-- **Document mode** — select a single file or an entire folder; anonymized copies are saved in the same location.
+- **Document mode** — select a single file or an entire folder; anonymized copies are saved in the same location with an `ANON_` prefix (or `CHECKED_` if no personal data was found).
 
-A key reference file can be generated so you can reverse the anonymization if needed.
+A key reference file can be generated alongside the output so the anonymization can be reversed if needed.
 
 ### What it does not do
 
@@ -33,86 +33,44 @@ A key reference file can be generated so you can reverse the anonymization if ne
 
 ### Prerequisites
 
-You need **Python 3.11 or newer** installed on your machine.
+You need **Python 3.11 or newer** installed on your machine. This is a one-time requirement.
 
 - **Windows:** Download from [python.org/downloads](https://www.python.org/downloads/). During installation, tick **"Add Python to PATH"**.
-- **macOS / Linux:** Python is often pre-installed. Open a terminal and run `python3 --version` to check.
+- **macOS:** Python is often pre-installed. Open Terminal and run `python3 --version` to check.
 
-### Setup (Windows)
-
-Do this once, the first time you use d-tach.
+### Installation and first run (Windows)
 
 1. Download the repository as a zip file from Codeberg and extract it to a folder of your choice.
+2. Double-click **`launch.bat`**.
 
-2. Open the extracted folder. You should see files including `launch.bat`, `run.py`, and `requirements.txt`.
+On first run, the launcher installs all required dependencies automatically. This takes a few minutes and only happens once. On all future runs it starts immediately.
 
-3. Open **Command Prompt** in that folder:
-   - Hold **Shift** and right-click inside the folder.
-   - Choose **"Open PowerShell window here"** or **"Open command window here"**.
+A browser window will open at `http://localhost:5000`. Keep the terminal window open while you use the application — closing it stops the server.
 
-4. Run the following commands one at a time, pressing Enter after each:
-
-   ```
-   python -m venv .venv
-   .venv\Scripts\activate
-   pip install -r requirements.txt
-   python -m spacy download en_core_web_md
-   python -m spacy download nl_core_news_md
-   ```
-
-   This takes a few minutes the first time. It only needs to be done once.
-
-5. Once complete, close the command window.
-
-### Setup (macOS / Linux)
-
-Do this once, the first time you use d-tach.
+### Installation and first run (macOS / Linux)
 
 1. Download the repository as a zip file and extract it to a folder of your choice.
-
-2. Open a terminal and navigate to the extracted folder:
-   ```bash
-   cd /path/to/d-tach
-   ```
-
-3. Run the following commands one at a time:
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   python -m spacy download en_core_web_md
-   python -m spacy download nl_core_news_md
-   ```
-
-   Make the launcher script executable (one time only):
+2. Open Terminal, navigate to the extracted folder, and make the launcher executable (one time only):
    ```bash
    chmod +x launch.sh
+   ./launch.sh
    ```
 
-### Starting the application
-
-**Windows:** Double-click `launch.bat` in the d-tach folder.
-
-**macOS / Linux:** Double-click `launch.sh`, or run `./launch.sh` from a terminal.
-
-A browser window will open automatically at `http://localhost:5000`. Keep the terminal window open while you use the application — closing it will stop the server.
-
-To stop the application, close the terminal window or press **Ctrl + C** inside it.
+On first run, dependencies are installed automatically. Subsequent runs start immediately.
 
 ### Using the application
 
 **Text mode**
 1. Paste your text into the left panel.
 2. Select the language (EN or NL).
-3. Adjust settings as needed (hashing, date anonymization, student number detection).
+3. Adjust settings as needed — hashing, date anonymization, student number detection.
 4. Click **Anonymize**. The result appears on the right.
 5. Click **Copy** to copy it to the clipboard.
 
 **Document mode**
 1. Click **Browse…** to select a file or folder, or type the path directly.
 2. Adjust settings as needed.
-3. Click **Process**. Anonymized copies are saved in the same folder as the originals with an `ANON_` prefix, or `CHECKED_` if no personal data was found.
+3. Click **Process**. Anonymized copies are saved to the same folder as the originals.
 
 ---
 
@@ -148,7 +106,7 @@ python -m spacy download nl_core_news_md
 python run.py
 ```
 
-Or double-click `launch.bat` (Windows) / `launch.sh` (macOS / Linux).
+Or double-click `launch.bat` (Windows) / run `./launch.sh` (macOS / Linux). Both launchers handle first-time setup automatically.
 
 The app is available at `http://localhost:5000`.
 
@@ -169,8 +127,8 @@ d-tach/
 │   └── templates/       # HTML templates
 ├── tests/
 ├── docs/                # PROJECT_GUIDE.md, STEP_GUIDE.md
-├── launch.bat           # Windows launcher
-├── launch.sh            # macOS / Linux launcher
+├── launch.bat           # Windows launcher (auto-setup on first run)
+├── launch.sh            # macOS / Linux launcher (auto-setup on first run)
 ├── run.py               # Application entry point
 └── requirements.txt
 ```
@@ -184,3 +142,10 @@ d-tach/
 - **HashEncoder** provides optional consistent pseudonymization using a user-supplied secret as salt.
 
 See `docs/PROJECT_GUIDE.md` for full design decisions and `docs/STEP_GUIDE.md` for the build plan.
+
+---
+
+## Authors
+
+- **Craig Bradley** — creator and maintainer
+- **Claude Sonnet 4.6** (Anthropic) — AI pair-programmer
