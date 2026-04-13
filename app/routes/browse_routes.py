@@ -21,7 +21,7 @@ def _ensure_tcl_available() -> None:
     global _TCL_FIXED
     if _TCL_FIXED or sys.platform != "win32" or os.environ.get("TCL_LIBRARY"):
         return
-    python_dir = os.path.dirname(sys.executable)
+    python_dir = sys.base_prefix  # base install, not the venv
     tcl_dir = os.path.join(python_dir, "tcl", "tcl8.6")
     tk_dir = os.path.join(python_dir, "tcl", "tk8.6")
     if os.path.isdir(tcl_dir):
