@@ -2,10 +2,17 @@ from pathlib import Path
 
 from flask import Flask
 
+__version__ = "1.0.0"
+
 
 def create_app() -> Flask:
     """Create and configure the Flask application instance."""
     app = Flask(__name__)
+
+    @app.context_processor
+    def inject_version() -> dict:
+        """Make app_version available in all templates."""
+        return {"app_version": __version__}
 
     # Initialise long-lived services once so spaCy models load only at startup.
     # These are attached to the app object and accessed via current_app in routes.

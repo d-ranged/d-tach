@@ -75,3 +75,6 @@ logs/
 
 # Claude Code local settings
 .claude/settings.json
+
+# Personal review checklist — local only, never committed
+craig_check.md

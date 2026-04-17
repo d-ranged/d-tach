@@ -149,6 +149,33 @@ class DocumentProcessor:
             run.text = text
 
     # ------------------------------------------------------------------
+    # Markdown methods
+    # ------------------------------------------------------------------
+
+    def load_md(self, path: Path) -> str:
+        """Load a Markdown file and return its full text content."""
+        return path.read_text(encoding="utf-8")
+
+    def save_md_with_replacements(
+        self, text: str, dest_path: Path, replacements: dict[str, str]
+    ) -> None:
+        """Apply replacements to markdown text and save to dest_path.
+
+        Replacements are applied longest-first to avoid replacing a substring
+        before the full match (e.g. replacing 'Craig' before 'Craig Bradley').
+        """
+        sorted_replacements = sorted(
+            replacements.items(), key=lambda x: len(x[0]), reverse=True
+        )
+        for original, placeholder in sorted_replacements:
+            text = text.replace(original, placeholder)
+        dest_path.write_text(text, encoding="utf-8")
+
+    def save_md_copy(self, text: str, dest_path: Path) -> None:
+        """Save an unmodified copy of the markdown text to dest_path."""
+        dest_path.write_text(text, encoding="utf-8")
+
+    # ------------------------------------------------------------------
     # PDF internal helpers
     # ------------------------------------------------------------------
 

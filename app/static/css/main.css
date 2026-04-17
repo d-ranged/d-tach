@@ -401,6 +401,14 @@ body {
     text-align: center;
 }
 
+.version {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--color-footer-text);
+    opacity: 0.5;
+    margin: 0.25rem auto 0;
+}
+
 /* ---- Panel heading row (output panel with lang badge) ---- */
 
 .panel-heading-row {
