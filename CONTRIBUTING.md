@@ -152,20 +152,33 @@ do not close and reopen the PR.
 
 ## Setting up branch protection on Codeberg (maintainers)
 
-To protect `main` so that direct pushes and unreviewed merges are blocked:
+To protect `main` so that only pull requests (approved by the maintainer) can be merged:
 
 1. Go to the repository on Codeberg.
-2. **Settings → Branches → Add Branch Protection Rule**.
-3. Set **Branch name pattern** to `main`.
-4. Enable:
-   - **Require pull requests before merging**
-   - **Dismiss stale approvals when new commits are pushed**
-   - **Require approval from** — set to 1 (the maintainer, or a trusted contributor once established)
-   - **Block force pushes**
-5. Save the rule.
+2. **Settings → Branches → Add rule**.
+3. Fill in the form as follows:
 
-After this is set up, even the repository owner cannot push directly to `main`
-without going through a pull request.
+   | Field | Value |
+   |---|---|
+   | Protected branch name pattern | `main` |
+   | Push | **Whitelist restricted push** → add `d-craig` |
+   | Required approvals | `1` |
+   | Restrict approvals to whitelisted users | ✅ tick → add `d-craig` |
+   | Dismiss stale approvals | ✅ tick |
+   | Block merge on rejected reviews | ✅ tick |
+   | Pull request merge | **Enable merge whitelist** → add `d-craig` |
+
+4. Save the rule.
+
+**Why whitelist restricted push rather than disable push entirely?**
+Disabling push completely would also block pushing version tags for releases.
+Whitelisting the maintainer preserves that workflow while preventing contributors
+from pushing directly to `main`.
+
+**Note — enabling Releases on Codeberg:**
+Releases is not enabled by default. Go to **Settings → Units** and tick the
+**Releases** checkbox. A Releases tab will then appear on the repository page,
+where you can create releases from existing tags.
 
 ---
 
