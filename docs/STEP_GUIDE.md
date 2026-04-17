@@ -663,6 +663,94 @@ community can see the roadmap and self-assign work.
 - Add an entry to `CHANGELOG.md` before tagging.
 - Update the version badge in `README.md`.
 
+---
+
+### Planned for v1.1.0
+
+The three items below were identified during the v1.0.0 fresh-machine test.
+Implement all three on a single `feature/issue-N-v1-1-0` branch and release together.
+
+- **fix: Browse button crashes on macOS when tkinter is not installed**
+  On macOS, `tkinter` is not bundled with all Python distributions (e.g. Homebrew Python
+  requires a separate `python-tk@3.x` package). Two changes required:
+  1. **`launch.sh` setup check:** during first-run setup, after pip install, run
+     `python3 -c "import tkinter" 2>/dev/null` and if it fails print a clear one-line
+     warning: `"Note: tkinter not found — Browse buttons will be disabled. To enable,
+     run: brew install python-tk@3.x"`. Setup should continue; this is a warning not a
+     blocker.
+  2. **Graceful fallback in the app:** wrap the `tkinter` import in `browse_routes.py`
+     in a try/except; if it fails, the `/browse/file` and `/browse/folder` endpoints
+     return a clear error, and the JS hides the Browse buttons and shows a small inline
+     note so the user can still type the path manually. The app must not crash.
+  tkinter cannot be installed via pip — it is a system package. Auto-installing it from
+  the script is not feasible; the warning and graceful fallback are the correct fix.
+
+- **fix: PDF replacement text uses wrong font size**
+  PyMuPDF's `apply_redactions()` inserts replacement text at a default font size that
+  often differs from the original, making redacted PDFs look inconsistent. Fix: before
+  calling `add_redact_annot()`, read the font size of the original text span from the
+  page's text dict (`page.get_text("dict")`). Pass that size to `add_redact_annot()`
+  via the `fontsize` parameter so the replacement text matches the surrounding content.
+
+- **change: Standardise placeholder format to `[PLACEHOLDER]` across all output**
+  Currently replacements appear as bare identifiers: `PERSON_1`, `EMAIL_ADDRESS_1`.
+  Change the format to `[PERSON_1]`, `[EMAIL_ADDRESS_1]` throughout — text mode,
+  DOCX, PDF, Markdown, and Excel output, and the key reference file. Brackets are the
+  recognised redaction convention, look intentional in a document, and make replacements
+  immediately distinguishable from surrounding text. This is a visible output change;
+  update the CHANGELOG entry and mention it clearly in the v1.1.0 release notes.
+  Also update any test assertions that match the bare placeholder format.
+
+- **fix: README macOS instructions — add `bash launch.sh` as simpler alternative**
+  The current README requires `chmod +x launch.sh && ./launch.sh` for first run, which
+  involves an unfamiliar terminal command. Non-technical macOS users can instead run
+  `bash launch.sh` directly without needing `chmod`. Update the macOS installation
+  section to show `bash launch.sh` as the primary instruction, with `chmod +x` noted
+  as an optional step for users who want to double-click the script in future.
+
+- **fix: Launcher scripts do not open the browser automatically**
+  After setup completes, `launch.bat` and `launch.sh` start the Flask server but leave
+  the user staring at a terminal URL. Non-technical users may not know to copy it into
+  a browser. Fix: after starting the server process, call `start http://localhost:5000`
+  (Windows `.bat`) or `open http://localhost:5000` (macOS `.sh`) /
+  `xdg-open http://localhost:5000` (Linux `.sh`). Add a short sleep (1–2 s) before
+  opening to allow Flask to finish binding the port. This is a PATCH-level fix but is
+  bundled with the two features below into a MINOR release.
+
+- **feature: Excel file (.xlsx) anonymization**
+  Add `.xlsx` to the list of supported file types in `FileProcessor` and
+  `FolderProcessor`. Use `openpyxl` to read cell values, run them through `Anonymizer`,
+  and write replacements back to a copy of the file. Preserve cell formatting and
+  formulas — only replace string cell values that contain detected PII. Add
+  `openpyxl>=3.1` to `requirements.txt`. Implement a `load_xlsx` /
+  `save_xlsx_with_replacements` / `save_xlsx_copy` pattern in `DocumentProcessor`
+  matching the existing DOCX and PDF methods.
+
+- **feature: Key reference export — folder mode and improved single-file export**
+  The key reference is currently shown on screen (Text Mode) and saved per-document
+  (Document Mode). Expand this in two directions:
+  - **Folder mode:** When the key reference toggle is enabled and a folder is processed,
+    save a single consolidated `KEYREF_<folder-name>.txt` (or `.csv`) at the root of
+    the selected folder, listing all placeholder → original mappings across all files
+    in the run. Design the format so it is readable by non-technical users — consider
+    a simple two-column CSV: `Placeholder, Original value`.
+  - **Text Mode and single-file mode:** Add an explicit **Export** button alongside the
+    on-screen key reference table so the user can save it as a file with one click. The
+    in-UI table remains; the button is additive.
+  This replaces the "Key Reference export" entry in the High priority section below.
+
+---
+
+### Infrastructure: Codeberg storage quota
+
+The free Codeberg plan has a limited LFS/release storage quota. When a packaged release
+(PyInstaller — see lower priority items below) is created, the binary will likely exceed
+the default limit. Before publishing a packaged release, apply for additional quota via
+the Codeberg Community issue tracker: describe the project, its privacy-first purpose,
+and the intended audience (colleagues without Python experience).
+
+---
+
 ### High priority (do first after public)
 
 - **Improve NER detection accuracy — names in tables and less common names**
@@ -677,11 +765,10 @@ community can see the roadmap and self-assign work.
   the model more context. Create a small anonymized test corpus of representative
   document structures to make accuracy improvements measurable and repeatable.
 
-- **Key Reference export**
-  The key reference is currently displayed on screen in Text Mode and saved as a `.txt`
-  file in Document Mode. Add a download button in Text Mode so the user can save the
-  key reference as a file (`.txt` or `.csv`). The in-UI table stays; the button adds
-  a one-click export alongside it.
+- **Key Reference export** *(see full spec in "Planned for v1.1.0" above)*
+  Expanded scope: Text Mode export button + consolidated folder-level key reference file.
+  Original single-file export behaviour remains; folder mode and explicit export button
+  are additive.
 
 - **Accuracy review and model upgrade path**
   Evaluate whether `en_core_web_lg` and `nl_core_news_lg` (the large spaCy models)
