@@ -47,7 +47,9 @@ You need **Python 3.11 or newer** installed on your machine. This is a one-time 
 1. Click **[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
 2. Double-click **`launch.bat`**.
 
-On first run, the launcher installs all required dependencies automatically. This takes a few minutes and only happens once. On all future runs it starts immediately.
+On first run, the launcher checks your Python version, then installs all required dependencies automatically. This takes a few minutes and only happens once. On all future runs it starts immediately.
+
+> **Python not installed yet?** The launcher will display a clear error message with a download link and step-by-step instructions. Install Python, then double-click `launch.bat` again.
 
 A browser window will open at `http://localhost:5000`. Keep the terminal window open while you use the application — closing it stops the server.
 
@@ -60,7 +62,9 @@ A browser window will open at `http://localhost:5000`. Keep the terminal window 
    ./launch.sh
    ```
 
-On first run, dependencies are installed automatically. Subsequent runs start immediately.
+On first run, the launcher checks your Python version, then installs all dependencies automatically. Subsequent runs start immediately.
+
+> **Python not installed or too old?** The launcher will display a clear error message. Install Python 3.11+ and run `./launch.sh` again.
 
 ### Using the application
 
