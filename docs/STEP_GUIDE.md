@@ -667,8 +667,20 @@ community can see the roadmap and self-assign work.
 
 ### Planned for v1.1.0
 
-The three items below were identified during the v1.0.0 fresh-machine test.
-Implement all three on a single `feature/issue-N-v1-1-0` branch and release together.
+See `docs/STEP_1.1.0.md` for the full step-by-step build plan for this release.
+Items below are the feature-level overview; the step doc has implementation detail and
+Codeberg issue instructions.
+
+- **feature: d-ranged branding and three-theme switcher**
+  Add the d-ranged logo (`D-.png`) to the application header. Clicking the logo cycles
+  through three themes: neutral default, SA green (`#007A4D`), Dutch orange (`#FF6600`).
+  Theme implemented via CSS custom properties scoped to a `data-theme` attribute on
+  `<body>`. Theme preference persisted in `localStorage`. Guard rail: if any theme looks
+  unprofessional, it is removed rather than shipped. Clean wins over branded.
+  See `STEP_1.1.0.md` Step 2 for full spec.
+
+- **change: standardise placeholder format to [PLACEHOLDER]**
+  See `STEP_1.1.0.md` Step 1. Do this first — it touches tests in every mode.
 
 - **fix: Browse button crashes on macOS when tkinter is not installed**
   On macOS, `tkinter` is not bundled with all Python distributions (e.g. Homebrew Python
