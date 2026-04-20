@@ -34,51 +34,49 @@ mode and output type — do it first so tests only need updating once.
 ## Step 2 — Branding and Theme System
 
 **Codeberg issue to create first:**
-`feature: add d-ranged branding and three-theme switcher`
+`feature: add d-ranged branding and two-theme toggle`
 
-**Goal:** Apply a clean, professional identity to the application. Users can cycle
-through three themes by tapping the logo. Default theme is neutral. The two
-additional themes incorporate the d-ranged colours (SA green + Dutch orange).
-If the result looks cluttered or unprofessional, the feature is dropped — clean
-wins over branded.
+**Goal:** Apply the d-ranged identity to the application. The default theme uses
+SA green + Dutch orange (Dual Identity). Clicking the logo toggles to a neutral
+professional theme and back. Decisions are recorded in `d-ranged/d-sign/THEME_GUIDE.md`
+— consult that file for exact values before building.
+
+**Prerequisite:** Logo finalised and `favicon.png` created before starting this step.
+See THEME_GUIDE.md for current status.
 
 ### Assets
-- Logo: `D-.png` from the d-ranged logo folder (LTD-free PNG) — or a new clean
-  export from the SVG source once the LTD is removed
-- SA green: official Springbok / South African flag green (`#007A4D`)
-- Dutch orange: official Dutch orange (`#FF6600` or closest official match)
-- Confirm exact hex values before building — they should look right, not just be
-  technically correct
+- Logo PNG: `d-ranged/logo/D2.png` — copy into `app/static/` as `d-logo.png`
+- Favicon: `d-ranged/logo/favicon.png` — copy into `app/static/`
+- SA green: `#007A4D` (primary accent)
+- Dutch orange: `#C85A00` (hover and secondary)
+- Full colour reference: `d-ranged/d-sign/THEME_GUIDE.md`
 
-### Themes (3 total)
-| Theme | Background | Accent | Logo tint |
-|---|---|---|---|
-| Default (neutral) | White / light grey | Dark neutral | None |
-| SA green | Light green tint | `#007A4D` | Green accent |
-| Dutch orange | Light warm white | `#FF6600` | Orange accent |
+### Themes (2 total, toggle not cycle)
+| ID | Name | Nav bg | Accent | State |
+|---|---|---|---|---|
+| T4 | Dual Identity | `#005738` | `#007A4D` SA green | Default |
+| T1 | Neutral Professional | `#2c3e50` | `#4a6fa5` muted blue | Logo-click toggle |
 
 ### What to build
-- Add logo image to `app/static/` (optimise for web — small PNG or SVG)
-- Add logo to `base.html` — clickable, positioned top-left or centre of nav
-- JavaScript click handler on logo cycles `data-theme` attribute on `<body>`
-  (or `<html>`) between three values: `default`, `sa-green`, `dutch-orange`
-- CSS custom properties (`--accent`, `--accent-light`, `--bg-tint`) scoped to
-  each `[data-theme]` value — no duplication of layout rules
-- Persist selected theme in `localStorage` so it survives page reload
-- Theme preference does NOT need to go into `UserSettings` (server-side) —
-  `localStorage` is sufficient for a UI-only preference
+- Copy `d-logo.png` and `favicon.png` into `app/static/`
+- Add logo `<img>` to `base.html` nav — clickable, top-left
+- JavaScript click handler on logo toggles `data-theme` on `<html>` between
+  `T4` and `T1`
+- CSS custom properties (`--accent`, `--nav-bg`, `--accent-hover`) scoped to
+  `[data-theme="T4"]` and `[data-theme="T1"]`
+- Persist selected theme in `localStorage`
+- Theme preference does NOT need to go into `UserSettings` — `localStorage` only
 
 ### Guard rails
-- Review the result at each theme before committing — if any theme looks amateur,
-  remove it rather than ship it
-- The default (neutral) theme must remain the cleanest and most professional option
-- Do not change layout, spacing, or font choices — only colour and the logo addition
+- Do not change layout, spacing, or font choices — colour and logo only
+- If either theme looks unprofessional in the actual app, revert to T1 only
+- The neutral theme (T1) must always be clean and usable as the default fallback
 
 ### ✅ Complete when
-- Logo appears in the app and looks right at default size
-- Clicking logo cycles through three themes visibly
+- Logo appears in the nav and looks right at default size
+- Clicking logo toggles between T4 and T1 visibly
 - Theme persists on page reload
-- All three themes pass a visual check — clean and readable
+- Both themes pass a visual check in the actual app
 - No regressions in existing functionality
 
 ---
