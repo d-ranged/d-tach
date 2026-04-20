@@ -811,6 +811,29 @@ and the intended audience (colleagues without Python experience).
 
 ### Lower priority
 
+- **Multi-language architecture — language selectable at install, addable post-install**
+  Currently d-tach supports EN and NL only, both baked in. A more extensible approach
+  would let users select the active language(s) during first-run setup (spaCy model
+  downloaded at that point rather than always both), and add further languages post-install
+  via a CLI command or in-app settings panel.
+
+  Key design questions to resolve before starting:
+  - Is the install-time selection worth the complexity? Most users will want both EN and NL.
+    A simpler alternative: ship EN + NL always, make adding a third language a documented
+    manual step.
+  - Language packages: each language requires a spaCy model download and potentially custom
+    Presidio recognizer rules for local PII formats (e.g. German Personalausweis, French
+    NIR). Scope this carefully — the NL implementation took non-trivial effort.
+  - UI impact: the language selector currently has two fixed options. A dynamic list driven
+    by installed models is straightforward but requires a model discovery utility.
+
+  Suggested approach: build a `LanguageRegistry` class that scans installed spaCy models
+  and exposes only the languages that have both a model and a Presidio recognizer set.
+  Adding a language = adding a model + a recognizer module + registering it. This keeps
+  the core app unchanged and makes contributions tractable.
+
+  **Earliest version:** v1.2.0. Do not start until v1.1.0 is shipped.
+
 - **Batch summary log**
   After a folder processing run, save a machine-readable summary log (JSON or CSV)
   to the processed folder listing each file's status, entity count, and output path.
