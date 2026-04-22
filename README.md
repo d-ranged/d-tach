@@ -134,7 +134,7 @@ d-tach/
 │   ├── static/          # CSS and JavaScript
 │   └── templates/       # HTML templates
 ├── tests/
-├── docs/                # PROJECT_GUIDE.md, STEP_GUIDE.md
+├── docs/                # PROJECT_GUIDE.md, ORIGINAL_STEPS.md, ROADMAP.md
 ├── launch.bat           # Windows launcher (auto-setup on first run)
 ├── launch.sh            # macOS / Linux launcher (auto-setup on first run)
 ├── run.py               # Application entry point
@@ -149,7 +149,7 @@ d-tach/
 - **UserSettings** persists preferences to a local `user_settings.json` (gitignored).
 - **HashEncoder** provides optional consistent pseudonymization using a user-supplied secret as salt.
 
-See `docs/PROJECT_GUIDE.md` for full design decisions and `docs/STEP_GUIDE.md` for the build plan.
+See `docs/PROJECT_GUIDE.md` for full design decisions and `docs/ORIGINAL_STEPS.md` for the build plan.
 
 ---
 

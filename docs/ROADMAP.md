@@ -1,0 +1,148 @@
+# ROADMAP.md — d-tach Future Development
+
+Issues and ideas for versions after v1.0.0. Items here do not need to be done
+in sequence — pick up by priority or contributor interest.
+
+When an item is selected for a release, move it into a versioned step file
+(e.g. `STEP_1.2.0.md`) and create the corresponding Codeberg issues before
+starting work.
+
+**When completing any issue that ships a change to users:**
+- Decide whether it is a PATCH (bug fix), MINOR (new feature), or MAJOR (overhaul).
+- Follow the release process in `ORIGINAL_STEPS.md` Step 12.
+- Add an entry to `CHANGELOG.md` before tagging.
+- Update the version badge in `README.md`.
+
+---
+
+## Planned for v1.1.0
+
+See `docs/STEP_1.1.0.md` for the full step-by-step build plan for this release.
+
+- **feature: d-ranged branding and two-theme toggle** — See `STEP_1.1.0.md` Step 2.
+- **change: standardise placeholder format to [PLACEHOLDER]** — See `STEP_1.1.0.md` Step 1.
+- **fix: PDF replacement text font size and readability** — See `STEP_1.1.0.md` Step 3.
+- **feature: Excel file (.xlsx) anonymization** — See `STEP_1.1.0.md` Step 4.
+- **feature: Key reference export improvements** — See `STEP_1.1.0.md` Step 5.
+- **fix: Launcher UX and macOS tkinter fallback** — See `STEP_1.1.0.md` Step 6.
+
+---
+
+## Infrastructure: Codeberg storage quota
+
+The free Codeberg plan has a limited LFS/release storage quota. When a packaged
+release (PyInstaller) is created, the binary will likely exceed the default limit.
+Before publishing a packaged release, apply for additional quota via the Codeberg
+Community issue tracker: describe the project, its privacy-first purpose, and the
+intended audience (colleagues without Python experience).
+
+---
+
+## High priority
+
+- **Improve NER detection accuracy — names in tables and less common names**
+  During real-document testing, names in the first-page table of an internship
+  document were inconsistently detected: the student name in the table was found
+  but a supervisor name in an adjacent row was missed. Names later in the document
+  were found normally. Two likely causes: (1) the medium spaCy models (`_md`) have
+  lower recall than the large models (`_lg`) for less common names; (2) table cell
+  text is fed to the NER model in short isolated chunks, which reduces context and
+  hurts detection. Suggested investigation: test with `en_core_web_lg` /
+  `nl_core_news_lg`; consider concatenating table row text before analysis to give
+  the model more context. Create a small anonymized test corpus of representative
+  document structures to make accuracy improvements measurable and repeatable.
+
+- **Key reference export — folder mode and improved single-file export**
+  - **Folder mode:** consolidated `KEYREF_<folder-name>.csv` at the root of the
+    processed folder, listing all placeholder → original mappings across all files.
+    Two-column CSV readable by non-technical users in Excel.
+  - **Text Mode / single-file mode:** add an explicit **Export** button alongside
+    the on-screen key reference table so the user can save it with one click.
+    The in-UI table remains; the button is additive.
+
+- **Accuracy review and model upgrade path**
+  Evaluate whether `en_core_web_lg` and `nl_core_news_lg` meaningfully improve
+  name detection over the medium models. Document the trade-off (download size vs.
+  accuracy) and offer the larger models as an opt-in in the installation guide.
+
+- **Organisation name detection review**
+  Organisation names are less reliably detected and may or may not be sensitive
+  under GDPR depending on context. Assess detection quality after real-world use
+  and consider adding a confidence indicator or a review step.
+
+- **Shorten entity type labels in placeholder output**
+  Currently placeholder labels use the full Presidio entity type name:
+  `[EMAIL_ADDRESS_1]`, `[PHONE_NUMBER_1]`, `[NUMERIC_ID_1]`. In PDF output where
+  space is constrained, shorter labels (`[EMAIL_1]`, `[PHONE_1]`, `[ID_1]`) reduce
+  the length mismatch between original text and placeholder, improving readability
+  of the anonymized document without relying purely on font scaling.
+  Decision needed before implementing: shorten labels everywhere (text, DOCX, key
+  reference, PDF) for consistency, or only in PDF output via a mapping layer.
+  Shortening everywhere is simpler and makes the key reference more readable too;
+  PDF-only shortening preserves existing output for other modes but adds complexity.
+  Either way this is a visible output change — note it clearly in the release that
+  ships it and update the CHANGELOG.
+
+---
+
+## Medium priority
+
+- **Visual highlighting of detected entities in Text Mode**
+  Highlight detected PII in the output panel so the user can visually verify what
+  was replaced. `Mark.js` is the documented candidate library (see `PROJECT_GUIDE.md`).
+
+- **Drag and drop individual file in Document Mode**
+  Allow a single file to be dropped onto the Document Mode panel as an alternative
+  to typing the path. When dropped, populate the file path field automatically.
+  Note: the browser security model means the server still needs the absolute path;
+  investigate the File System Access API as the mechanism.
+
+- **Auto-clipboard on anonymization in Text Mode**
+  Place the anonymized output in the clipboard automatically when processing
+  completes, so the user can paste without clicking the copy button.
+
+- **Browser opens before Flask is ready**
+  The launcher scripts open the browser after a fixed delay, which is not always
+  long enough for Flask and the spaCy models to finish loading. Replace the fixed
+  delay with a poll loop (`curl` on Windows bat, `curl` on shell) that waits until
+  port 5000 responds before opening the browser. Already planned for Step 6a in
+  `STEP_1.1.0.md`; log here in case it slips to a later version.
+
+---
+
+## Lower priority
+
+- **Multi-language architecture — language selectable at install, addable post-install**
+  Currently d-tach supports EN and NL only, both baked in. A more extensible
+  approach would let users select the active language(s) during first-run setup
+  (spaCy model downloaded at that point rather than always both), and add further
+  languages post-install via a CLI command or in-app settings panel.
+
+  Key design questions to resolve before starting:
+  - Is the install-time selection worth the complexity? Most users will want both
+    EN and NL. A simpler alternative: ship EN + NL always, make adding a third
+    language a documented manual step.
+  - Language packages: each language requires a spaCy model download and
+    potentially custom Presidio recognizer rules for local PII formats (e.g.
+    German Personalausweis, French NIR). Scope carefully.
+  - UI impact: the language selector currently has two fixed options. A dynamic
+    list driven by installed models requires a model discovery utility.
+
+  Suggested approach: build a `LanguageRegistry` class that scans installed spaCy
+  models and exposes only languages that have both a model and a Presidio
+  recognizer set. Adding a language = adding a model + a recognizer module +
+  registering it.
+
+  **Earliest version:** v1.2.0. Do not start until v1.1.0 is shipped.
+
+- **Batch summary log**
+  After a folder processing run, save a machine-readable summary log (JSON or CSV)
+  to the processed folder listing each file's status, entity count, and output path.
+
+- **Standalone packaged installer (PyInstaller)**
+  Use PyInstaller to produce a single-folder distribution that includes the Python
+  interpreter, all dependencies, and the spaCy models. Target audience: colleagues
+  without Python experience who cannot or will not run the launcher scripts.
+  Known challenges: spaCy model size, Flask static file paths under
+  `sys._MEIPASS`, and `tkinter` bundling on macOS. Investigate once the app is
+  stable post-public.

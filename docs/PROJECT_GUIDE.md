@@ -37,7 +37,7 @@ run as a non-profit, hosted in Germany.
 
 The repository is kept private during initial development and made public after
 Step 9 of the build plan (pre-public review complete, first working increment
-verified). See `docs/STEP_GUIDE.md`.
+verified). See `docs/ORIGINAL_STEPS.md`.
 
 ---
 

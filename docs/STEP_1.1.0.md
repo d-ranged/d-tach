@@ -3,7 +3,7 @@
 This document breaks the v1.1.0 planned work into ordered, testable steps.
 Each step should map to one or more Codeberg issues created before starting.
 
-Consult `STEP_GUIDE.md` for the full background and rationale on each item.
+Consult `ORIGINAL_STEPS.md` for the full background and rationale on each item.
 Consult `PROJECT_GUIDE.md` for architectural decisions and documented alternatives.
 
 ---
