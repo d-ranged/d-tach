@@ -21,7 +21,7 @@ See `docs/STEP_1.1.0.md` for the full step-by-step build plan for this release.
 
 - **feature: d-ranged branding and two-theme toggle** — See `STEP_1.1.0.md` Step 2.
 - **change: standardise placeholder format to [PLACEHOLDER]** — See `STEP_1.1.0.md` Step 1.
-- **fix: PDF replacement text font size and readability** — See `STEP_1.1.0.md` Step 3.
+- ~~**fix: PDF replacement text font size and readability**~~ — **Dropped.** Step 3 failed; reverted. See `STEP_1.1.0.md` Step 3 and ROADMAP section below.
 - **feature: Excel file (.xlsx) anonymization** — See `STEP_1.1.0.md` Step 4.
 - **feature: Key reference export improvements** — See `STEP_1.1.0.md` Step 5.
 - **fix: Launcher UX and macOS tkinter fallback** — See `STEP_1.1.0.md` Step 6.
@@ -35,6 +35,39 @@ release (PyInstaller) is created, the binary will likely exceed the default limi
 Before publishing a packaged release, apply for additional quota via the Codeberg
 Community issue tracker: describe the project, its privacy-first purpose, and the
 intended audience (colleagues without Python experience).
+
+---
+
+## Deferred — PDF in-place text replacement (Step 3 attempt, v1.1.0)
+
+**Background:** Attempted in v1.1.0 Step 3 (branch `fix/issue-31-pdf-replacement-font-size`,
+Codeberg issue #31). Closed as failed. The pre-Step-3 behaviour (hardcoded `fontsize=11`,
+`add_redact_annot` with text arg) was visually superior to all improvements attempted.
+
+**Root cause of the difficulty:** Placeholders like `[NUMERIC_ID_1]` are much longer than
+the values they replace (a 6-digit student number). PyMuPDF's `add_redact_annot(rect, text)`
+squishes text to fit the original bounding box, producing 4pt output. Blank-then-insert
+(`add_redact_annot` with no text + `insert_text` after `apply_redactions()`) avoids
+squishing but causes overflow into adjacent content when the placeholder is wider than the
+original. Width-scaling with exact font metrics (`fitz.Font("helv").text_length()`) eliminates
+overflow in theory but made readability worse on real documents.
+
+**Most promising path forward:**
+1. **Shorten placeholder labels** — `[ID_1]` instead of `[NUMERIC_ID_1]`, `[EMAIL_1]`
+   instead of `[EMAIL_ADDRESS_1]` etc. Reducing label length narrows the gap between
+   original and replacement width. This is a prerequisite for any further PDF work.
+   See "Shorten entity type labels" below.
+2. **Check pymupdf for a replace-text primitive** — future versions of pymupdf may add
+   a first-class text replacement feature that handles reflow internally. Check the
+   pymupdf changelog and GitHub releases periodically (every 3–6 months). The project
+   is actively developed.
+3. **Redact and annotate** — an alternative approach: redact (black out) the original
+   text, and insert a visible annotation or stamp marking it as anonymized, rather than
+   trying to insert readable replacement text in the same position.
+
+**Periodic check:** Visit https://github.com/pymupdf/PyMuPDF/releases and search for
+"replace", "text replacement", or "redact text" in the release notes. If a replace-text
+API appears, re-evaluate.
 
 ---
 

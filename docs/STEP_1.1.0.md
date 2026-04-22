@@ -83,21 +83,55 @@ See THEME_GUIDE.md for current status.
 
 ## Step 3 — Fix PDF Replacement Text Font Size
 
-**Codeberg issue to create first:**
-`fix: PDF replacement text uses wrong font size`
+**Codeberg issue:** #31
+**Status: ❌ Failed — dropped from v1.1.0. Reverted to pre-Step-3 state on main.**
 
-**Goal:** Replacement text in anonymized PDFs matches the font size of the original
-text it replaced, so output looks consistent.
+**Original goal:** Replacement text in anonymized PDFs matches the font size of the
+original text, so output looks consistent.
 
-### What to change
-- `app/services/document_processor.py` — in the PDF redaction path:
-  - Before calling `add_redact_annot()`, read the font size of the original span
-    from `page.get_text("dict")`
-  - Pass that size to `add_redact_annot()` via the `fontsize` parameter
+### What was attempted
 
-### ✅ Complete when
-- Anonymized PDFs show replacement text at the same size as surrounding content
-- No layout distortion on a representative sample of test PDFs
+Three approaches were tried on branch `fix/issue-31-pdf-replacement-font-size`:
+
+1. **Detected font size passed to `add_redact_annot()`** — PyMuPDF squishes the text
+   to fit the original bounding box when the placeholder is longer than the original.
+   Replaced "1234567" with "[NUMERIC_ID_1]" produced 4pt text.
+
+2. **Blank-then-insert** — `add_redact_annot(rect)` with no text whites out the
+   original; `insert_text()` after `apply_redactions()` renders unconstrained. Removed
+   the squishing but caused placeholders to overflow into adjacent content.
+
+3. **Blank-then-insert with width scaling** — `_compute_insertion()` helper used
+   `fitz.Font("helv").text_length()` for exact Helvetica metrics to compute the largest
+   font size that fits the placeholder within the original rect. Overflow was eliminated
+   in theory, but the output on real documents was still worse than the original
+   hardcoded approach: readability degraded and visual quality was unacceptable on the
+   fixture set.
+
+### Why it failed
+
+The fundamental tension: placeholders like `[NUMERIC_ID_1]` are much longer than the
+values they replace (e.g. a 6-digit student number). There is no way to render a 14-char
+string in the space of 6 digits at a readable size. The original hardcoded `fontsize=11`
+was imperfect but produced visually consistent output; all attempts to match or adapt the
+font size made it worse on real documents.
+
+### What was learnt
+
+- `add_redact_annot(rect, text, fontsize)` is not suitable when placeholder is longer
+  than original — PyMuPDF clips/squishes to fit the bbox.
+- Blank-then-insert (`add_redact_annot` + `insert_text`) avoids squishing but requires
+  exact width control; approximations are not reliable enough.
+- `fitz.Font("helv").text_length()` gives exact metrics for width calculation but does
+  not solve the underlying problem that short originals leave too little space.
+- Shortening placeholder labels (e.g. `[ID_1]` instead of `[NUMERIC_ID_1]`) would
+  reduce the length mismatch and is the most promising path — see ROADMAP.md.
+- The pre-Step-3 state (hardcoded `fontsize=11`, `add_redact_annot` with text) was
+  visually superior to all attempted improvements for real documents.
+
+### See also
+
+ROADMAP.md — "PDF in-place text replacement" section for future approach notes.
 
 ---
 
