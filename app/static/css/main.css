@@ -2,12 +2,25 @@
    d-tach — main stylesheet
    ============================================================ */
 
+:root,
+[data-theme="T4"] {
+    --nav-bg: #005738;
+    --accent: #007A4D;
+    --accent-hover: #C85A00;
+}
+
+[data-theme="T1"] {
+    --nav-bg: #2c3e50;
+    --accent: #4a6fa5;
+    --accent-hover: #3a5a8a;
+}
+
 :root {
     --color-bg: #f2f4f7;
     --color-surface: #ffffff;
     --color-border: #d4d9e1;
-    --color-primary: #2a5d8f;
-    --color-primary-hover: #1f4870;
+    --color-primary: var(--accent);
+    --color-primary-hover: var(--accent-hover);
     --color-text: #1e2330;
     --color-text-muted: #6b7485;
     --color-wip: #fff8e6;
@@ -45,7 +58,7 @@ body {
 /* ---- Header ---- */
 
 .app-header {
-    background: var(--color-primary);
+    background: var(--nav-bg);
     color: #fff;
     padding: 0 1.5rem;
     height: 52px;
@@ -58,7 +71,29 @@ body {
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 2rem;
+    gap: 1.25rem;
+}
+
+.logo-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: var(--radius);
+    transition: opacity 0.15s;
+}
+
+.logo-btn:hover {
+    opacity: 0.85;
+}
+
+.logo-img {
+    height: 34px;
+    width: auto;
+    display: block;
 }
 
 .app-name {

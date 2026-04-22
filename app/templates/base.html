@@ -1,14 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="T4">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>d-tach — {% block title %}{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script>(function(){var t=localStorage.getItem('d-tach-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 </head>
 <body>
     <header class="app-header">
         <div class="header-inner">
+            <button id="logo-btn" class="logo-btn" aria-label="Toggle theme">
+                <img src="{{ url_for('static', filename='d-logo.png') }}" alt="d-ranged" class="logo-img">
+            </button>
             <span class="app-name">d-tach</span>
             <nav class="mode-nav">
                 <a href="{{ url_for('text.text_mode') }}"
@@ -36,5 +41,6 @@
     </footer>
 
     {% block scripts %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </body>
 </html>
