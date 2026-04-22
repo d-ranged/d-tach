@@ -281,10 +281,13 @@ Short description of what changed (issue #N)
 ### Workflow Per Feature
 
 1. Create an issue on Codeberg
-2. Create a branch from `main`
-3. Commit regularly with issue references
-4. Open a merge request when complete and tested
-5. Merge to `main` only when working
+2. **Before creating a branch:** `git checkout main && git pull` — always pull the
+   latest main first, even if you believe it is up to date. Previous step merges
+   happen on Codeberg and the local repo will be behind until pulled.
+3. Create a branch from `main`
+4. Commit regularly with issue references
+5. Open a merge request when complete and tested
+6. Merge to `main` only when working
 
 Never commit directly to `main`.
 
