@@ -70,11 +70,11 @@ class TestSaveDocxWithReplacements:
         _, doc = processor.load_docx(source)
 
         processor.save_docx_with_replacements(
-            doc, dest, {"John Smith": "PERSON_1"}
+            doc, dest, {"John Smith": "[PERSON_1]"}
         )
 
         result_text, _ = processor.load_docx(dest)
-        assert "PERSON_1" in result_text
+        assert "[PERSON_1]" in result_text
         assert "John Smith" not in result_text
 
     def test_original_file_not_modified(
@@ -84,7 +84,7 @@ class TestSaveDocxWithReplacements:
         dest = tmp_path / "output.docx"
         make_docx(source, ["My name is John Smith."])
         _, doc = processor.load_docx(source)
-        processor.save_docx_with_replacements(doc, dest, {"John Smith": "PERSON_1"})
+        processor.save_docx_with_replacements(doc, dest, {"John Smith": "[PERSON_1]"})
 
         original_text, _ = processor.load_docx(source)
         assert "John Smith" in original_text
@@ -98,12 +98,12 @@ class TestSaveDocxWithReplacements:
         _, doc = processor.load_docx(source)
 
         processor.save_docx_with_replacements(
-            doc, dest, {"John Smith": "PERSON_1", "john@example.com": "EMAIL_1"}
+            doc, dest, {"John Smith": "[PERSON_1]", "john@example.com": "[EMAIL_ADDRESS_1]"}
         )
 
         result_text, _ = processor.load_docx(dest)
-        assert "PERSON_1" in result_text
-        assert "EMAIL_1" in result_text
+        assert "[PERSON_1]" in result_text
+        assert "[EMAIL_ADDRESS_1]" in result_text
 
     def test_output_saved_to_dest_path(
         self, processor: DocumentProcessor, tmp_path: Path
@@ -146,7 +146,7 @@ class TestSavePdfWithReplacements:
         dest = tmp_path / "output.pdf"
         make_pdf(source, ["My name is John Smith."])
         _, doc = processor.load_pdf(source)
-        processor.save_pdf_with_replacements(doc, dest, {"John Smith": "PERSON_1"})
+        processor.save_pdf_with_replacements(doc, dest, {"John Smith": "[PERSON_1]"})
         doc.close()
 
         result_doc = fitz.open(str(dest))
@@ -161,13 +161,13 @@ class TestSavePdfWithReplacements:
         dest = tmp_path / "output.pdf"
         make_pdf(source, ["My name is John Smith."])
         _, doc = processor.load_pdf(source)
-        processor.save_pdf_with_replacements(doc, dest, {"John Smith": "PERSON_1"})
+        processor.save_pdf_with_replacements(doc, dest, {"John Smith": "[PERSON_1]"})
         doc.close()
 
         result_doc = fitz.open(str(dest))
         result_text = result_doc[0].get_text()
         result_doc.close()
-        assert "PERSON_1" in result_text
+        assert "[PERSON_1]" in result_text
 
     def test_output_file_created(
         self, processor: DocumentProcessor, tmp_path: Path
@@ -188,6 +188,6 @@ class TestSavePdfWithReplacements:
         make_pdf(source, ["My name is John Smith."])
         original_mtime = source.stat().st_mtime
         _, doc = processor.load_pdf(source)
-        processor.save_pdf_with_replacements(doc, dest, {"John Smith": "PERSON_1"})
+        processor.save_pdf_with_replacements(doc, dest, {"John Smith": "[PERSON_1]"})
         doc.close()
         assert source.stat().st_mtime == original_mtime
