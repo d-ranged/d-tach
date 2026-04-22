@@ -3,6 +3,67 @@
 {% block title %}Text Mode{% endblock %}
 
 {% block content %}
+<section class="settings-bar">
+    <div class="setting-group">
+        <div class="lang-selector" id="lang-selector">
+            <button class="lang-btn {% if language == 'en' %}active{% endif %}" data-lang="en">EN</button>
+            <button class="lang-btn {% if language == 'nl' %}active{% endif %}" data-lang="nl">NL</button>
+        </div>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
+            <input type="checkbox" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Anonymize dates</span>
+        </label>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
+            <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Numeric ID</span>
+        </label>
+        <input
+            type="number"
+            id="digit-count"
+            class="digit-input"
+            value="{{ pattern_config.digit_count }}"
+            min="4"
+            max="12"
+            title="Exact digit count to detect"
+        >
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
+            <input type="checkbox" id="hashing-toggle" {% if hashing_enabled %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Enable hashing</span>
+        </label>
+        <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
+            <label for="secret-input" class="secret-label">Secret</label>
+            <input
+                type="password"
+                id="secret-input"
+                class="secret-input"
+                placeholder="Enter a secret phrase"
+                value="{{ hashing_secret }}"
+                autocomplete="off"
+            >
+        </div>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
+            <input type="checkbox" id="keyref-toggle">
+            <span class="toggle-track"></span>
+            <span class="setting-label">Key reference</span>
+        </label>
+    </div>
+</section>
+
 <section class="panels">
     <div class="panel panel-input">
         <h2 class="panel-heading">Input</h2>
@@ -21,77 +82,6 @@
             <span class="placeholder-text">Anonymized text will appear here.</span>
         </div>
         <button class="btn btn-copy" id="copy-btn" disabled>Copy to clipboard</button>
-    </div>
-</section>
-
-<section class="settings-bar">
-    <div class="setting-group">
-        <label class="field-label">Language</label>
-        <div class="lang-selector" id="lang-selector">
-            <button class="lang-btn {% if language == 'en' %}active{% endif %}" data-lang="en">EN</button>
-            <button class="lang-btn {% if language == 'nl' %}active{% endif %}" data-lang="nl">NL</button>
-        </div>
-        <p class="setting-hint">Select the language of your text.</p>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle-label">
-            <input type="checkbox" class="toggle" id="keyref-toggle">
-            <span>Key Reference</span>
-        </label>
-        <p class="setting-hint">Show a mapping of each placeholder back to the original value.</p>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle-label">
-            <input type="checkbox" class="toggle" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
-            <span>Anonymize dates</span>
-        </label>
-        <p class="setting-hint">Off by default. Enable to replace dates and time references.</p>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle-label">
-            <input type="checkbox" class="toggle" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
-            <span>Detect ID numbers</span>
-        </label>
-        <label class="field-label" for="digit-count">Digit count</label>
-        <input
-            type="number"
-            id="digit-count"
-            class="digit-input"
-            value="{{ pattern_config.digit_count }}"
-            min="4"
-            max="12"
-        >
-        <p class="setting-hint">Detect sequences of exactly N consecutive digits as numeric identifiers (student IDs, employee numbers, etc.).</p>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle-label">
-            <input
-                type="checkbox"
-                class="toggle"
-                id="hashing-toggle"
-                {% if hashing_enabled %}checked{% endif %}
-            >
-            <span>Enable Hashing</span>
-        </label>
-        <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
-            <label for="secret-input" class="secret-label">Secret</label>
-            <input
-                type="password"
-                id="secret-input"
-                class="secret-input"
-                placeholder="Enter a secret phrase"
-                value="{{ hashing_secret }}"
-                autocomplete="off"
-            >
-        </div>
-        <p class="setting-hint">
-            Produce consistent pseudonyms (e.g. Craig &#8594; Cr-A2T5) instead of
-            sequential placeholders.
-        </p>
     </div>
 </section>
 
