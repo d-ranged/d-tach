@@ -170,7 +170,7 @@ class Anonymizer:
             if original not in placeholder_map:
                 entity_type = result.entity_type
                 counters[entity_type] = counters.get(entity_type, 0) + 1
-                placeholder_map[original] = f"{entity_type}_{counters[entity_type]}"
+                placeholder_map[original] = f"[{entity_type}_{counters[entity_type]}]"
 
             detected.append(DetectedEntity(
                 entity_type=result.entity_type,

@@ -45,7 +45,7 @@ professional theme and back. Decisions are recorded in `d-ranged/d-sign/THEME_GU
 See THEME_GUIDE.md for current status.
 
 ### Assets
-- Logo PNG: `d-ranged/logo/D2.png` — copy into `app/static/` as `d-logo.png`
+- Logo PNG: `d-ranged/logo/D-logo.png` — copy into `app/static/` as `d-logo.png`
 - Favicon: `d-ranged/logo/favicon.png` — copy into `app/static/`
 - SA green: `#007A4D` (primary accent)
 - Dutch orange: `#C85A00` (hover and secondary)

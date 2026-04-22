@@ -142,9 +142,9 @@ class TestAnonymizer:
         email_placeholders = [
             e.placeholder for e in result.entities if e.entity_type == "EMAIL_ADDRESS"
         ]
-        assert "EMAIL_ADDRESS_1" in email_placeholders
+        assert "[EMAIL_ADDRESS_1]" in email_placeholders
         if len(email_placeholders) > 1:
-            assert "EMAIL_ADDRESS_2" in email_placeholders
+            assert "[EMAIL_ADDRESS_2]" in email_placeholders
 
     def test_result_type_is_correct(self, anonymizer: Anonymizer) -> None:
         result = anonymizer.anonymize("Hello world.", "en")

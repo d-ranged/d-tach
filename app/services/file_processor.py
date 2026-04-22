@@ -331,9 +331,7 @@ class FileProcessor:
                 )
                 continue
             if encoder and entity.entity_type == "PERSON":
-                replacements[entity.original_text] = encoder.encode_full_name(
-                    entity.original_text
-                )
+                replacements[entity.original_text] = f"[{encoder.encode_full_name(entity.original_text)}]"
             else:
                 replacements[entity.original_text] = entity.placeholder
         return replacements

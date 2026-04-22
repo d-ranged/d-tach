@@ -9,6 +9,14 @@ Version numbers follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.P
 
 ---
 
+## [1.1.0] — Unreleased
+
+### Changed
+
+- Placeholder format changed from bare identifiers (`PERSON_1`) to bracketed format (`[PERSON_1]`). This affects all output modes: text, DOCX, PDF, and key reference files. **Visible change** — any downstream tooling or workflows that match on placeholder strings must be updated.
+
+---
+
 ## [1.0.0] — 2026-04-13
 
 First public release.

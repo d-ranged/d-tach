@@ -163,7 +163,7 @@ class TestAnonymizerNumericId:
         )
 
         assert "1234567" not in result.anonymized_text
-        assert "NUMERIC_ID_1" in result.anonymized_text
+        assert "[NUMERIC_ID_1]" in result.anonymized_text
 
     def test_numeric_id_not_replaced_without_recognizer(self, anonymizer: Anonymizer) -> None:
         # Without the ad-hoc recognizer, 7-digit sequences are not flagged.
@@ -186,7 +186,7 @@ class TestAnonymizerNumericId:
             ad_hoc_recognizers=[recognizer],
         )
 
-        assert result.anonymized_text.count("NUMERIC_ID_1") == 2
+        assert result.anonymized_text.count("[NUMERIC_ID_1]") == 2
 
     def test_two_different_numbers_get_different_placeholders(self, anonymizer: Anonymizer) -> None:
         config = PatternConfig(digit_count=7)
