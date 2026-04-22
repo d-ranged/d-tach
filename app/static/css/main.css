@@ -2,26 +2,7 @@
    d-tach — main stylesheet
    ============================================================ */
 
-:root,
-[data-theme="T4"] {
-    --nav-bg: #005738;
-    --accent: #007A4D;
-    --accent-hover: #C85A00;
-    --accent-secondary: #C85A00;
-    --accent-light: #e0f2ea;
-    --toggle-active: #007A4D;
-    --toggle-track: #fde8d0;
-}
-
-[data-theme="T1"] {
-    --nav-bg: #2c3e50;
-    --accent: #4a6fa5;
-    --accent-hover: #3a5a8a;
-    --accent-secondary: #4a6fa5;
-    --accent-light: #dce8f5;
-    --toggle-active: #4a6fa5;
-    --toggle-track: #ced4da;
-}
+/* ---- Structural vars (theme-independent) ---- */
 
 :root {
     --color-bg: #f2f4f7;
@@ -39,10 +20,31 @@
     --radius: 6px;
     --shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
     --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-    --toggle-track: #ced4da;
-    --toggle-active: var(--accent);
-    --accent-secondary: var(--accent);
+}
+
+/* ---- Theme vars — must come AFTER :root so they override it ---- */
+
+[data-theme="T4"],
+:root {
+    --nav-bg: #005738;
+    --accent: #007A4D;
+    --accent-hover: #C85A00;
+    --accent-secondary: #C85A00;
+    --accent-light: #e0f2ea;
+    --toggle-active: #007A4D;
+    --toggle-track: #fde8d0;
+    --nav-link-active: #ff9040;
+}
+
+[data-theme="T1"] {
+    --nav-bg: #2c3e50;
+    --accent: #4a6fa5;
+    --accent-hover: #3a5a8a;
+    --accent-secondary: #4a6fa5;
     --accent-light: #dce8f5;
+    --toggle-active: #4a6fa5;
+    --toggle-track: #ced4da;
+    --nav-link-active: #4a6fa5;
 }
 
 /* ---- Reset & base ---- */
@@ -136,7 +138,7 @@ body {
 }
 
 .nav-link.active {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--nav-link-active);
     color: #fff;
     font-weight: 600;
 }
