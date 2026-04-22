@@ -91,9 +91,7 @@ def anonymize():
         encoder = HashEncoder(secret)
         for entity in result.entities:
             if entity.entity_type == "PERSON" and entity.placeholder not in hash_replacements:
-                hash_replacements[entity.placeholder] = encoder.encode_full_name(
-                    entity.original_text
-                )
+                hash_replacements[entity.placeholder] = f"[{encoder.encode_full_name(entity.original_text)}]"
         if hash_replacements:
             pattern = re.compile(
                 "|".join(
