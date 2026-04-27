@@ -21,6 +21,7 @@ _DEFAULTS: Final[dict] = {
     },
     "excel_generic_enabled": True,
     "excel_column_names": "",
+    "output_mode": "prefix",
 }
 
 
@@ -108,6 +109,17 @@ class UserSettings:
     def excel_column_names(self, value: list[str]) -> None:
         self._data["excel_column_names"] = ", ".join(value)
 
+    @property
+    def output_mode(self) -> str:
+        """Folder output mode: 'prefix' (default) or 'subfolder'."""
+        return self._data.get("output_mode", "prefix")
+
+    @output_mode.setter
+    def output_mode(self, value: str) -> None:
+        if value not in ("prefix", "subfolder"):
+            raise ValueError(f"output_mode must be 'prefix' or 'subfolder', got {value!r}")
+        self._data["output_mode"] = value
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -177,4 +189,6 @@ class UserSettings:
             merged["excel_generic_enabled"] = raw["excel_generic_enabled"]
         if isinstance(raw.get("excel_column_names"), str):
             merged["excel_column_names"] = raw["excel_column_names"]
+        if raw.get("output_mode") in ("prefix", "subfolder"):
+            merged["output_mode"] = raw["output_mode"]
         return merged

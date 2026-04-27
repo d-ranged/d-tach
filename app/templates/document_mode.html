@@ -136,6 +136,16 @@
             <button class="btn btn-primary" id="process-folder-btn">Process Folder</button>
             <button class="btn btn-secondary" id="cancel-btn" hidden>Cancel</button>
         </div>
+        <div class="output-mode-row">
+            <label class="output-mode-option">
+                <input type="radio" name="output-mode" value="prefix" {% if output_mode == 'prefix' %}checked{% endif %}>
+                Prefix files
+            </label>
+            <label class="output-mode-option">
+                <input type="radio" name="output-mode" value="subfolder" {% if output_mode == 'subfolder' %}checked{% endif %}>
+                Subfolder (<code>anonymized/</code>)
+            </label>
+        </div>
     </div>
 </section>
 

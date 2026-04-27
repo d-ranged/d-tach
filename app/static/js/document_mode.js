@@ -40,6 +40,11 @@ const panelFolder       = document.getElementById("panel-folder");
 let selectedLanguage = INITIAL_LANGUAGE;
 let activeEventSource = null;
 
+function getOutputMode() {
+    const checked = document.querySelector('input[name="output-mode"]:checked');
+    return checked ? checked.value : "prefix";
+}
+
 // ---------------------------------------------------------------------------
 // tkinter availability check (runs once on page load)
 // ---------------------------------------------------------------------------
@@ -163,6 +168,7 @@ async function runProcessFile() {
                 digit_count: parseInt(digitCountInput.value, 10) || 7,
                 excel_generic_enabled: excelNerToggle.checked,
                 excel_column_names: excelColumnsInput.value.trim(),
+                output_mode: getOutputMode(),
             }),
         });
         const data = await response.json();
@@ -237,6 +243,7 @@ function runProcessFolder() {
         digit_count: parseInt(digitCountInput.value, 10) || 7,
         excel_generic_enabled: excelNerToggle.checked,
         excel_column_names: excelColumnsInput.value.trim(),
+        output_mode: getOutputMode(),
     });
 
     activeEventSource = new EventSource(`/document/process-folder?${params}`);

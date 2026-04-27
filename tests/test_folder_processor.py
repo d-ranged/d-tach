@@ -188,12 +188,12 @@ class TestProcess:
 
         original_process = folder_processor._file_processor.process
 
-        def patched_process(path, s):
+        def patched_process(path, s, output_path_override=None):
             nonlocal call_count
             call_count += 1
             if path.name == "bad.docx":
                 raise RuntimeError("Simulated processing failure")
-            return original_process(path, s)
+            return original_process(path, s, output_path_override)
 
         monkeypatch.setattr(folder_processor._file_processor, "process", patched_process)
 
@@ -211,7 +211,7 @@ class TestProcess:
     ) -> None:
         make_docx(tmp_path / "bad.docx", ["text"])
 
-        def raise_error(path, s):
+        def raise_error(path, s, output_path_override=None):
             raise ValueError("Something went wrong")
 
         monkeypatch.setattr(folder_processor._file_processor, "process", raise_error)
@@ -367,3 +367,98 @@ class TestConsolidatedKeyref:
         content = summary.keyref_csv_path.read_text(encoding="utf-8")
         assert "John Smith" in content
         assert "alice@example.com" in content
+
+
+# ---------------------------------------------------------------------------
+# subfolder output mode (Step 7)
+# ---------------------------------------------------------------------------
+
+class TestSubfolderOutputMode:
+    def test_anonymized_dir_created(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder")
+        list(folder_processor.process(tmp_path, settings))
+        assert (tmp_path / "anonymized").is_dir()
+
+    def test_output_file_has_original_name(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder")
+        list(folder_processor.process(tmp_path, settings))
+        assert (tmp_path / "anonymized" / "report.docx").exists()
+        assert not any((tmp_path / "anonymized").glob("ANON_*"))
+
+    def test_clean_file_copied_to_anonymized(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "clean.docx", ["No personal data here at all."])
+        settings = ProcessingSettings(output_mode="subfolder")
+        list(folder_processor.process(tmp_path, settings))
+        assert (tmp_path / "anonymized" / "clean.docx").exists()
+
+    def test_original_folder_untouched(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder")
+        list(folder_processor.process(tmp_path, settings))
+        assert not any(tmp_path.glob("ANON_*"))
+        assert not any(tmp_path.glob("CHECKED_*"))
+
+    def test_subfolder_structure_mirrored(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        make_docx(sub / "nested.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder")
+        list(folder_processor.process(tmp_path, settings))
+        assert (tmp_path / "anonymized" / "sub" / "nested.docx").exists()
+
+    def test_anonymized_dir_skipped_in_collect_files(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        (tmp_path / "anonymized").mkdir()
+        make_docx(tmp_path / "anonymized" / "existing.docx", ["text"])
+        make_docx(tmp_path / "real.docx", ["text"])
+        files = folder_processor.collect_files(tmp_path)
+        names = [f.name for f in files]
+        assert "real.docx" in names
+        assert "existing.docx" not in names
+
+    def test_keyref_csv_inside_anonymized_in_subfolder_mode(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith."])
+        settings_kr = ProcessingSettings(output_mode="subfolder", key_reference_enabled=True)
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings_kr)]
+        summary = folder_processor.summarise(
+            results, folder=tmp_path, key_reference_enabled=True, output_mode="subfolder"
+        )
+        assert summary.keyref_csv_path is not None
+        assert summary.keyref_csv_path.parent == tmp_path / "anonymized"
+
+    def test_subfolder_output_path_helper(
+        self, folder_processor: FolderProcessor, tmp_path: Path
+    ) -> None:
+        chosen = tmp_path / "chosen"
+        chosen.mkdir()
+        sub = chosen / "sub"
+        sub.mkdir()
+        file = sub / "report.docx"
+        result = folder_processor._subfolder_output_path(file, chosen)
+        assert result == chosen / "anonymized" / "sub" / "report.docx"
+
+    def test_prefix_mode_unchanged(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="prefix")
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings)]
+        result = results[0]
+        assert result.status == "anonymized"
+        assert result.output_path is not None
+        assert result.output_path.name.startswith("ANON_")
