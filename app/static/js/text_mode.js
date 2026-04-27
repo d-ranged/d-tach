@@ -9,12 +9,14 @@ const secretInput          = document.getElementById("secret-input");
 const keyrefToggle         = document.getElementById("keyref-toggle");
 const keyrefSection        = document.getElementById("keyref-section");
 const keyrefBody           = document.getElementById("keyref-body");
+const exportKeyrefBtn      = document.getElementById("export-keyref-btn");
 const datesToggle          = document.getElementById("dates-toggle");
-const numericIdToggle  = document.getElementById("numeric-id-toggle");
+const numericIdToggle      = document.getElementById("numeric-id-toggle");
 const digitCountInput      = document.getElementById("digit-count");
 const langSelector         = document.getElementById("lang-selector");
 
 const DEBOUNCE_MS = 600;
+let lastKeyReference = [];
 let debounceTimer = null;
 let selectedLanguage = INITIAL_LANGUAGE;
 
@@ -92,10 +94,14 @@ function renderOutput(data) {
     copyBtn.disabled = false;
 
     if (keyrefToggle.checked && data.key_reference.length > 0) {
+        lastKeyReference = data.key_reference;
         renderKeyReference(data.key_reference);
         keyrefSection.hidden = false;
+        exportKeyrefBtn.disabled = false;
     } else {
+        lastKeyReference = [];
         keyrefSection.hidden = true;
+        exportKeyrefBtn.disabled = true;
     }
 }
 
@@ -120,11 +126,14 @@ function resetOutput() {
     outputEl.innerHTML = '<span class="placeholder-text">Anonymized text will appear here.</span>';
     copyBtn.disabled = true;
     keyrefSection.hidden = true;
+    exportKeyrefBtn.disabled = true;
+    lastKeyReference = [];
 }
 
 function setOutputLoading() {
     outputEl.innerHTML = '<span class="placeholder-text">Processing&hellip;</span>';
     copyBtn.disabled = true;
+    exportKeyrefBtn.disabled = true;
 }
 
 function showError(message) {
@@ -179,3 +188,36 @@ keyrefToggle.addEventListener("change", () => {
 });
 
 inputEl.addEventListener("input", scheduleAnonymize);
+
+// ---------------------------------------------------------------------------
+// Key reference export
+// ---------------------------------------------------------------------------
+
+exportKeyrefBtn.addEventListener("click", () => {
+    if (!lastKeyReference.length) return;
+
+    const lines = ["Placeholder,Original,Type"];
+    for (const entry of lastKeyReference) {
+        lines.push(
+            `${csvEscape(entry.placeholder)},${csvEscape(entry.original)},${csvEscape(entry.type)}`
+        );
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dtach_keyref.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+});
+
+function csvEscape(value) {
+    const str = String(value);
+    if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+}

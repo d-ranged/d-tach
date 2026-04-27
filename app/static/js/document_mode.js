@@ -293,6 +293,7 @@ function renderFolderSummary(data) {
     ];
     if (data.skipped) lines.push(`  \u26A0 Skipped: ${data.skipped}`);
     if (data.errors)  lines.push(`  \u2718 Errors: ${data.errors}`);
+    if (data.keyref_csv_path) lines.push(`Key reference: ${data.keyref_csv_path}`);
     setSummary(lines.join("\n"), data.errors > 0);
 }
 

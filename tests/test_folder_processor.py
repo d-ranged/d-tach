@@ -283,3 +283,87 @@ class TestSummarise:
     def test_returns_folder_summary_type(self, folder_processor: FolderProcessor) -> None:
         summary = folder_processor.summarise([])
         assert isinstance(summary, FolderSummary)
+
+
+# ---------------------------------------------------------------------------
+# consolidated keyref CSV (Step 5)
+# ---------------------------------------------------------------------------
+
+class TestConsolidatedKeyref:
+    def test_csv_created_when_key_reference_enabled(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith and I live here."])
+        settings_kr = ProcessingSettings(key_reference_enabled=True)
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings_kr)]
+        summary = folder_processor.summarise(results, folder=tmp_path, key_reference_enabled=True)
+        assert summary.keyref_csv_path is not None
+        assert summary.keyref_csv_path.exists()
+        assert summary.keyref_csv_path.name == f"KEYREF_{tmp_path.name}.csv"
+
+    def test_csv_contains_replacement_mapping(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith and I live here."])
+        settings_kr = ProcessingSettings(key_reference_enabled=True)
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings_kr)]
+        summary = folder_processor.summarise(results, folder=tmp_path, key_reference_enabled=True)
+        assert summary.keyref_csv_path is not None
+        content = summary.keyref_csv_path.read_text(encoding="utf-8")
+        assert "Placeholder" in content
+        assert "Original value" in content
+        assert "John Smith" in content
+
+    def test_csv_has_header_row(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        import csv as csv_mod
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith."])
+        settings_kr = ProcessingSettings(key_reference_enabled=True)
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings_kr)]
+        summary = folder_processor.summarise(results, folder=tmp_path, key_reference_enabled=True)
+        assert summary.keyref_csv_path is not None
+        with summary.keyref_csv_path.open(encoding="utf-8") as f:
+            reader = csv_mod.reader(f)
+            header = next(reader)
+        assert header == ["Placeholder", "Original value"]
+
+    def test_no_csv_when_key_reference_disabled(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith."])
+        results = [r for r, _, _ in folder_processor.process(tmp_path, ProcessingSettings())]
+        summary = folder_processor.summarise(results, folder=tmp_path, key_reference_enabled=False)
+        assert summary.keyref_csv_path is None
+
+    def test_no_csv_when_no_replacements(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "clean.docx", ["No personal data here at all."])
+        settings_kr = ProcessingSettings(key_reference_enabled=True)
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings_kr)]
+        summary = folder_processor.summarise(results, folder=tmp_path, key_reference_enabled=True)
+        assert summary.keyref_csv_path is None
+
+    def test_per_file_keyref_txt_suppressed_in_folder_mode(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "pii.docx", ["My name is John Smith."])
+        settings_kr = ProcessingSettings(key_reference_enabled=True)
+        list(folder_processor.process(tmp_path, settings_kr))
+        # Per-file KEYREF_ txt should not exist in folder mode
+        keyref_txts = list(tmp_path.glob("KEYREF_*.txt"))
+        assert keyref_txts == []
+
+    def test_replacements_aggregated_from_multiple_files(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "file1.docx", ["My name is John Smith."])
+        make_docx(tmp_path / "file2.docx", ["Contact alice@example.com for info."])
+        settings_kr = ProcessingSettings(key_reference_enabled=True)
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings_kr)]
+        summary = folder_processor.summarise(results, folder=tmp_path, key_reference_enabled=True)
+        assert summary.keyref_csv_path is not None
+        content = summary.keyref_csv_path.read_text(encoding="utf-8")
+        assert "John Smith" in content
+        assert "alice@example.com" in content
