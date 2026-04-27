@@ -513,6 +513,19 @@ body {
     color: #fff;
 }
 
+/* ---- Key reference heading row ---- */
+
+.keyref-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.btn-sm {
+    padding: 0.3rem 0.75rem;
+    font-size: 0.8rem;
+}
+
 /* ---- Key reference section ---- */
 
 .keyref-section {

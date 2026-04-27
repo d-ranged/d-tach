@@ -140,6 +140,25 @@ class TestProcessDocx:
         result = file_processor.process(source, ProcessingSettings())
         assert result.entities_found > 0
 
+    def test_replacements_populated_for_anonymized_file(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.docx"
+        make_docx(source, ["My name is John Smith."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "anonymized"
+        assert "John Smith" in result.replacements
+        assert result.replacements["John Smith"].startswith("[")
+
+    def test_replacements_empty_for_clean_file(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "clean.docx"
+        make_docx(source, ["The results showed a fifteen percent improvement."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "clean"
+        assert result.replacements == {}
+
 
 class TestProcessPdf:
     def test_pdf_with_pii_produces_anon_prefix(

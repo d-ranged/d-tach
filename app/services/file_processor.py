@@ -68,6 +68,8 @@ class FileResult:
     entities_found: int = 0
     error_message: Optional[str] = None
     warnings: list[str] = field(default_factory=list)
+    replacements: dict[str, str] = field(default_factory=dict)
+    # {original_text: placeholder} — used by FolderProcessor to build the consolidated keyref CSV
 
 
 class FileProcessor:
@@ -174,6 +176,7 @@ class FileProcessor:
             output_path=output_path,
             keyref_path=keyref_path,
             entities_found=len({e.original_text for e in result.entities}),
+            replacements=replacements,
         )
 
     def _process_pdf(self, path: Path, settings: ProcessingSettings) -> FileResult:
@@ -237,6 +240,7 @@ class FileProcessor:
             output_path=output_path,
             keyref_path=keyref_path,
             entities_found=len({e.original_text for e in result.entities}),
+            replacements=replacements,
         )
 
     def _process_xlsx(self, path: Path, settings: ProcessingSettings) -> FileResult:
@@ -331,6 +335,7 @@ class FileProcessor:
             keyref_path=keyref_path,
             entities_found=len({e.original_text for e in ner_entities}) + len(exact_replacements),
             warnings=file_warnings,
+            replacements={**substring_replacements, **exact_replacements},
         )
 
     def _process_markdown(self, path: Path, settings: ProcessingSettings) -> FileResult:
@@ -391,6 +396,7 @@ class FileProcessor:
             output_path=output_path,
             keyref_path=keyref_path,
             entities_found=len({e.original_text for e in result.entities}),
+            replacements=replacements,
         )
 
     def _build_ad_hoc_recognizers(

@@ -162,7 +162,11 @@ def process_folder():
                 "warnings": result.warnings,
             })
 
-        summary = folder_processor.summarise(all_results)
+        summary = folder_processor.summarise(
+            all_results,
+            folder=folder,
+            key_reference_enabled=key_reference_enabled,
+        )
         yield _sse({
             "type": "summary",
             "total": summary.total,
@@ -170,6 +174,7 @@ def process_folder():
             "clean": summary.clean,
             "skipped": summary.skipped,
             "errors": summary.errors,
+            "keyref_csv_path": str(summary.keyref_csv_path) if summary.keyref_csv_path else None,
         })
 
         # Persist settings after successful run
