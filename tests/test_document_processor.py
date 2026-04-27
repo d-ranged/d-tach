@@ -330,3 +330,127 @@ class TestSaveXlsxWithReplacements:
         _, wb = processor.load_xlsx(source)
         processor.save_xlsx_with_replacements(wb, dest, {"John Smith": "[PERSON_1]"})
         assert source.stat().st_mtime == original_mtime
+
+    def test_exact_replacement_replaces_numeric_cell(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["A2"] = 1234567
+        wb.save(str(source))
+        _, loaded_wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(
+            loaded_wb, dest, {}, exact_replacements={"1234567": "[STNUM_1]"}
+        )
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["A2"].value == "[STNUM_1]"
+
+    def test_exact_replacement_does_not_affect_non_matching_cells(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["A2"] = 1234567
+        ws["B2"] = 9999999
+        wb.save(str(source))
+        _, loaded_wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(
+            loaded_wb, dest, {}, exact_replacements={"1234567": "[STNUM_1]"}
+        )
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["B2"].value == 9999999
+
+
+class TestExtractColumnReplacements:
+    def test_returns_placeholder_for_column_values(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "data.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["A2"] = 1234567
+        ws["A3"] = 7654321
+        wb.save(str(xlsx_path))
+        _, loaded_wb = processor.load_xlsx(xlsx_path)
+        replacements, missing = processor.extract_column_replacements(loaded_wb, ["stnum"])
+        assert "1234567" in replacements
+        assert replacements["1234567"].startswith("[STNUM_")
+        assert missing == []
+
+    def test_same_value_gets_same_placeholder(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "data.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["A2"] = 1001
+        ws["A3"] = 1001
+        wb.save(str(xlsx_path))
+        _, loaded_wb = processor.load_xlsx(xlsx_path)
+        replacements, _ = processor.extract_column_replacements(loaded_wb, ["stnum"])
+        assert len(replacements) == 1
+
+    def test_missing_column_reported(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "data.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "name"
+        ws["A2"] = "Alice"
+        wb.save(str(xlsx_path))
+        _, loaded_wb = processor.load_xlsx(xlsx_path)
+        _, missing = processor.extract_column_replacements(loaded_wb, ["stnum"])
+        assert "stnum" in missing
+
+    def test_column_name_matched_case_insensitively(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "data.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "StNum"
+        ws["A2"] = 1234567
+        wb.save(str(xlsx_path))
+        _, loaded_wb = processor.load_xlsx(xlsx_path)
+        replacements, missing = processor.extract_column_replacements(loaded_wb, ["stnum"])
+        assert "1234567" in replacements
+        assert missing == []
+
+    def test_formula_cells_in_column_skipped(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "data.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["A2"] = 1234567
+        ws["A3"] = "=SUM(B2:B5)"
+        wb.save(str(xlsx_path))
+        _, loaded_wb = processor.load_xlsx(xlsx_path)
+        replacements, _ = processor.extract_column_replacements(loaded_wb, ["stnum"])
+        assert "=SUM(B2:B5)" not in replacements
+
+    def test_multiple_columns_independent_counters(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "data.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["B1"] = "email"
+        ws["A2"] = 1234567
+        ws["B2"] = "a@b.com"
+        wb.save(str(xlsx_path))
+        _, loaded_wb = processor.load_xlsx(xlsx_path)
+        replacements, _ = processor.extract_column_replacements(loaded_wb, ["stnum", "email"])
+        assert replacements["1234567"].startswith("[STNUM_")
+        assert replacements["a@b.com"].startswith("[EMAIL_")

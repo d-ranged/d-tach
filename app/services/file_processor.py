@@ -53,6 +53,8 @@ class ProcessingSettings:
     anonymize_dates: bool = False
     numeric_id_enabled: bool = False
     digit_count: int = 7
+    excel_generic_enabled: bool = True
+    excel_column_names: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -65,6 +67,7 @@ class FileResult:
     keyref_path: Optional[Path] = None
     entities_found: int = 0
     error_message: Optional[str] = None
+    warnings: list[str] = field(default_factory=list)
 
 
 class FileProcessor:
@@ -237,15 +240,53 @@ class FileProcessor:
         )
 
     def _process_xlsx(self, path: Path, settings: ProcessingSettings) -> FileResult:
-        """Core Excel processing logic.
+        """Core Excel processing logic supporting two independent anonymization modes.
 
-        String cells are anonymized in-place; formula and non-string cells are
-        not touched. Cell formatting is preserved because openpyxl only writes
-        back the cell value, not the style.
+        Generic NER: detects PII in string cell text (names, emails, phones).
+        Column-based: replaces all values in named columns regardless of cell type,
+        catching numeric identifiers invisible to NER (e.g. integer student numbers).
+
+        If both modes are disabled the file is skipped entirely. Either mode can
+        be active alone or both can run together — column-based runs first so NER
+        does not produce conflicting placeholders for already-replaced cells.
         """
-        text, wb = self._doc_processor.load_xlsx(path)
+        if not settings.excel_generic_enabled and not settings.excel_column_names:
+            return FileResult(
+                status="skipped",
+                source_path=path,
+                error_message="Excel anonymization disabled (both modes off).",
+            )
 
-        if not text.strip():
+        text, wb = self._doc_processor.load_xlsx(path)
+        file_warnings: list[str] = []
+
+        # --- Column-based pass ---
+        exact_replacements: dict[str, str] = {}
+        if settings.excel_column_names:
+            exact_replacements, missing = self._doc_processor.extract_column_replacements(
+                wb, settings.excel_column_names
+            )
+            for col in missing:
+                file_warnings.append(f"Column '{col}' not found in row 1 headers.")
+
+        # --- NER pass ---
+        substring_replacements: dict[str, str] = {}
+        ner_entities: list = []
+        if settings.excel_generic_enabled and text.strip():
+            language = settings.language
+            entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled)
+            ad_hoc = self._build_ad_hoc_recognizers(settings, language)
+            ner_result = self._anonymizer.anonymize(
+                text, language, entities=entities, ad_hoc_recognizers=ad_hoc
+            )
+            if ner_result.entities:
+                encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
+                substring_replacements = self._build_replacements(ner_result.entities, encoder)
+                ner_entities = ner_result.entities
+
+        # --- Nothing to replace → clean ---
+        if not exact_replacements and not substring_replacements:
+            language = settings.language if settings.excel_generic_enabled else settings.language
             output_name = f"CHECKED_{path.name}"
             if settings.check_file_names:
                 output_name = self._anonymize_filename(
@@ -253,46 +294,43 @@ class FileProcessor:
                 )
             output_path = path.parent / output_name
             self._doc_processor.save_xlsx_copy(wb, output_path)
-            return FileResult(status="clean", source_path=path, output_path=output_path)
+            return FileResult(
+                status="clean",
+                source_path=path,
+                output_path=output_path,
+                warnings=file_warnings,
+            )
 
-        language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled)
-        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
-        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
-
-        if not result.entities:
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
-                )
-            output_path = path.parent / output_name
-            self._doc_processor.save_xlsx_copy(wb, output_path)
-            return FileResult(status="clean", source_path=path, output_path=output_path)
-
-        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
-        replacements = self._build_replacements(result.entities, encoder)
-
+        # --- Build output filename ---
+        combined_for_names = {**substring_replacements, **exact_replacements}
         output_name = f"ANON_{path.name}"
         if settings.check_file_names:
             output_name = self._anonymize_filename(
-                f"ANON_{path.stem}", path.suffix, replacements, settings, language
+                f"ANON_{path.stem}", path.suffix, combined_for_names, settings, settings.language
             )
 
+        # --- Save (exact pass first, then NER substring pass) ---
         output_path = path.parent / output_name
-        self._doc_processor.save_xlsx_with_replacements(wb, output_path, replacements)
+        self._doc_processor.save_xlsx_with_replacements(
+            wb, output_path, substring_replacements,
+            exact_replacements if exact_replacements else None,
+        )
 
         keyref_path: Optional[Path] = None
         if settings.key_reference_enabled:
             keyref_path = path.parent / f"KEYREF_{path.stem}.txt"
-            self._write_keyref(keyref_path, path, replacements, result.entities)
+            self._write_keyref(
+                keyref_path, path, substring_replacements, ner_entities,
+                exact_replacements if exact_replacements else None,
+            )
 
         return FileResult(
             status="anonymized",
             source_path=path,
             output_path=output_path,
             keyref_path=keyref_path,
-            entities_found=len({e.original_text for e in result.entities}),
+            entities_found=len({e.original_text for e in ner_entities}) + len(exact_replacements),
+            warnings=file_warnings,
         )
 
     def _process_markdown(self, path: Path, settings: ProcessingSettings) -> FileResult:
@@ -452,6 +490,7 @@ class FileProcessor:
         source_path: Path,
         replacements: dict[str, str],
         entities: list[DetectedEntity],
+        exact_replacements: Optional[dict[str, str]] = None,
     ) -> None:
         """Write a human-readable key reference file mapping placeholders to originals."""
         sep = "─" * 60
@@ -473,6 +512,14 @@ class FileProcessor:
             lines.append(
                 f"{placeholder:<30} {entity.original_text:<25} {entity.entity_type}"
             )
+
+        if exact_replacements:
+            for original, placeholder in exact_replacements.items():
+                if placeholder in seen:
+                    continue
+                seen.add(placeholder)
+                label = placeholder.strip("[]").rsplit("_", 1)[0]
+                lines.append(f"{placeholder:<30} {original:<25} {label}")
 
         lines.append(sep)
         keyref_path.write_text("\n".join(lines), encoding="utf-8")

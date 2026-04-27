@@ -76,6 +76,31 @@
     </div>
 </section>
 
+<details class="advanced-settings" {% if not excel_generic_enabled or excel_column_names %}open{% endif %}>
+    <summary class="advanced-settings-toggle">Advanced settings</summary>
+    <div class="advanced-settings-body">
+        <div class="advanced-section-heading">Excel (.xlsx)</div>
+        <div class="advanced-setting-row">
+            <label class="toggle">
+                <input type="checkbox" id="excel-ner-toggle" {% if excel_generic_enabled %}checked{% endif %}>
+                <span class="toggle-track"></span>
+                <span class="setting-label">Generic anonymization (NER)</span>
+            </label>
+        </div>
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="excel-columns">Column names to anonymize</label>
+            <input
+                type="text"
+                id="excel-columns"
+                class="excel-columns-input"
+                placeholder="stnum, email, phone"
+                value="{{ excel_column_names }}"
+            >
+        </div>
+        <p class="advanced-hint">Comma-separated. Replaces all values in those columns regardless of type (catches numeric IDs). Requires column headers in row 1. Does not affect DOCX, PDF, or Markdown. If both modes are off, Excel files are skipped.</p>
+    </div>
+</details>
+
 <section class="doc-section">
     <h2 class="section-heading">Input</h2>
 

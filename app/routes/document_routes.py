@@ -22,6 +22,8 @@ def document_mode():
         hashing_secret=settings.hashing_secret,
         anonymize_dates=settings.anonymize_dates,
         pattern_config=settings.pattern_config,
+        excel_generic_enabled=settings.excel_generic_enabled,
+        excel_column_names=", ".join(settings.excel_column_names),
     )
 
 
@@ -64,6 +66,7 @@ def process_file():
         "keyref_path": str(result.keyref_path) if result.keyref_path else None,
         "entities_found": result.entities_found,
         "error_message": result.error_message,
+        "warnings": result.warnings,
     })
 
 
@@ -99,6 +102,9 @@ def process_folder():
     except (ValueError, TypeError):
         digit_count = 7
     language = args.get("language", "en")
+    excel_generic_enabled = args.get("excel_generic_enabled", "true").lower() == "true"
+    excel_column_names_raw = args.get("excel_column_names", "").strip()
+    excel_column_names = [c.strip() for c in excel_column_names_raw.split(",") if c.strip()]
 
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
@@ -135,6 +141,8 @@ def process_folder():
             anonymize_dates=anonymize_dates,
             numeric_id_enabled=numeric_id_enabled,
             digit_count=digit_count,
+            excel_generic_enabled=excel_generic_enabled,
+            excel_column_names=excel_column_names,
         )
 
         all_results = []
@@ -151,6 +159,7 @@ def process_folder():
                 "output_path": str(result.output_path) if result.output_path else None,
                 "entities_found": result.entities_found,
                 "error_message": result.error_message,
+                "warnings": result.warnings,
             })
 
         summary = folder_processor.summarise(all_results)
@@ -174,6 +183,8 @@ def process_folder():
             digit_count=digit_count,
             numeric_id_enabled=numeric_id_enabled,
         )
+        user_settings.excel_generic_enabled = excel_generic_enabled
+        user_settings.excel_column_names = excel_column_names
         user_settings.save()
 
     return Response(stream(), mimetype="text/event-stream",
@@ -201,6 +212,9 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
     except (ValueError, TypeError):
         digit_count = 7
 
+    excel_column_names_raw = data.get("excel_column_names", "").strip()
+    excel_column_names = [c.strip() for c in excel_column_names_raw.split(",") if c.strip()]
+
     return ProcessingSettings(
         hashing_enabled=hashing_enabled,
         secret=secret,
@@ -210,6 +224,8 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
         anonymize_dates=bool(data.get("anonymize_dates", False)),
         numeric_id_enabled=bool(data.get("numeric_id_enabled", False)),
         digit_count=digit_count,
+        excel_generic_enabled=bool(data.get("excel_generic_enabled", True)),
+        excel_column_names=excel_column_names,
     ), ""
 
 
@@ -234,6 +250,9 @@ def _persist_settings(data: dict) -> None:
         digit_count=digit_count,
         numeric_id_enabled=numeric_id_enabled,
     )
+    user_settings.excel_generic_enabled = bool(data.get("excel_generic_enabled", True))
+    excel_col_raw = data.get("excel_column_names", "").strip()
+    user_settings.excel_column_names = [c.strip() for c in excel_col_raw.split(",") if c.strip()]
     user_settings.save()
 
 

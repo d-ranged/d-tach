@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 
 import fitz  # pymupdf
@@ -167,16 +168,85 @@ class DocumentProcessor:
         return text, wb
 
     def save_xlsx_with_replacements(
-        self, wb: Workbook, dest_path: Path, replacements: dict[str, str]
+        self,
+        wb: Workbook,
+        dest_path: Path,
+        replacements: dict[str, str],
+        exact_replacements: dict[str, str] | None = None,
     ) -> None:
-        """Apply replacements to all string cells in wb and save to dest_path.
+        """Apply replacements to cells in wb and save to dest_path.
 
-        Replacements are applied longest-first to avoid replacing a substring
-        before a longer match. Formula cells and non-string cells are not touched.
-        Cell formatting is preserved because only cell.value is modified.
+        Two passes are applied in sequence:
+        1. Exact replacements (column-based): whole-cell replacement on any cell
+           type where str(cell.value) exactly matches a key. Runs first so that
+           already-replaced cells are not touched again by the NER pass.
+        2. Substring replacements (NER-based): applied to string cells only via
+           str.replace(), longest key first.
+
+        Formula cells and None cells are skipped in both passes. Cell formatting
+        is preserved because only cell.value is modified.
         """
+        if exact_replacements:
+            self._apply_xlsx_exact_replacements(wb, exact_replacements)
         self._apply_xlsx_replacements(wb, replacements)
         wb.save(str(dest_path))
+
+    def extract_column_replacements(
+        self, wb: Workbook, column_names: list[str]
+    ) -> tuple[dict[str, str], list[str]]:
+        """Build a replacement map for the specified column names.
+
+        Reads row 1 of each sheet as headers (case-insensitive match). For each
+        matching column, collects all unique non-formula values below the header
+        row and assigns sequential placeholders using the uppercased column name
+        as the entity type label (e.g. stnum → [STNUM_1], [STNUM_2]).
+
+        The same value always maps to the same placeholder across all sheets.
+        Counters are shared per label across sheets so they never reset.
+
+        Returns:
+            exact_replacements: {str(original_value): placeholder}
+            missing: column names not found in any sheet's row 1
+        """
+        requested = {
+            name.strip().lower(): name.strip()
+            for name in column_names
+            if name.strip()
+        }
+        found: set[str] = set()
+        exact_replacements: dict[str, str] = {}
+        counters: dict[str, int] = {}
+
+        for sheet in wb.worksheets:
+            header_map: dict[str, int] = {}
+            for cell in sheet[1]:
+                if isinstance(cell.value, str) and cell.value.strip():
+                    header_map[cell.value.strip().lower()] = cell.column
+
+            for norm_name, orig_name in requested.items():
+                if norm_name not in header_map:
+                    continue
+                found.add(norm_name)
+                col_idx = header_map[norm_name]
+                label = re.sub(r"[^A-Z0-9]", "_", orig_name.upper())
+                if label not in counters:
+                    counters[label] = 1
+
+                for row in sheet.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
+                    cell = row[0]
+                    if cell.value is None:
+                        continue
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        continue
+                    value_str = str(cell.value).strip()
+                    if not value_str:
+                        continue
+                    if value_str not in exact_replacements:
+                        exact_replacements[value_str] = f"[{label}_{counters[label]}]"
+                        counters[label] += 1
+
+        missing = [orig_name for norm_name, orig_name in requested.items() if norm_name not in found]
+        return exact_replacements, missing
 
     def save_xlsx_copy(self, wb: Workbook, dest_path: Path) -> None:
         """Save an unmodified copy of the workbook to dest_path."""
@@ -222,6 +292,27 @@ class DocumentProcessor:
                     for original, placeholder in sorted_replacements:
                         new_value = new_value.replace(original, placeholder)
                     cell.value = new_value
+
+    @staticmethod
+    def _apply_xlsx_exact_replacements(
+        wb: Workbook, exact_replacements: dict[str, str]
+    ) -> None:
+        """Replace cells whose entire value exactly matches a key in exact_replacements.
+
+        Applies to all cell types (string, numeric, etc.) across all sheets.
+        Formula cells and None cells are skipped. The whole cell value is replaced,
+        not a substring.
+        """
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if cell.value is None:
+                        continue
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        continue
+                    value_str = str(cell.value).strip()
+                    if value_str in exact_replacements:
+                        cell.value = exact_replacements[value_str]
 
     # ------------------------------------------------------------------
     # Markdown methods
