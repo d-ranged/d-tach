@@ -5,6 +5,7 @@ from pathlib import Path
 import fitz
 import pytest
 from docx import Document
+from openpyxl import Workbook, load_workbook
 
 from app.services.anonymizer import Anonymizer
 from app.services.file_processor import FileProcessor, ProcessingSettings
@@ -29,6 +30,15 @@ def make_pdf(path: Path, lines: list[str]) -> None:
         y += 20
     doc.save(str(path))
     doc.close()
+
+
+def make_xlsx(path: Path, cells: dict[str, object]) -> None:
+    """Create an xlsx file with the given cell address → value mapping."""
+    wb = Workbook()
+    ws = wb.active
+    for address, value in cells.items():
+        ws[address] = value
+    wb.save(str(path))
 
 
 @pytest.fixture(scope="session")
@@ -181,3 +191,77 @@ class TestProcessPdf:
         result = file_processor.process(source, ProcessingSettings(key_reference_enabled=True))
         assert result.keyref_path is not None
         assert result.keyref_path.exists()
+
+
+class TestProcessXlsx:
+    def test_xlsx_with_pii_produces_anon_prefix(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.xlsx"
+        make_xlsx(source, {"A1": "My name is John Smith and I work here."})
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "anonymized"
+        assert result.output_path is not None
+        assert result.output_path.name.startswith("ANON_")
+
+    def test_xlsx_with_pii_replaces_name_in_output_cell(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.xlsx"
+        make_xlsx(source, {"A1": "My name is John Smith and I work here."})
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.output_path is not None
+        out_wb = load_workbook(str(result.output_path))
+        cell_value = out_wb.active["A1"].value
+        assert "John Smith" not in cell_value
+
+    def test_xlsx_without_pii_produces_checked_prefix(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "clean.xlsx"
+        make_xlsx(source, {"A1": "The results showed a fifteen percent improvement."})
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "clean"
+        assert result.output_path is not None
+        assert result.output_path.name.startswith("CHECKED_")
+
+    def test_formula_cell_untouched_after_processing(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.xlsx"
+        make_xlsx(source, {"A1": "My name is John Smith.", "B1": "=SUM(C1:C5)"})
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.output_path is not None
+        out_wb = load_workbook(str(result.output_path))
+        assert out_wb.active["B1"].value == "=SUM(C1:C5)"
+
+    def test_xlsx_original_not_modified(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.xlsx"
+        make_xlsx(source, {"A1": "My name is John Smith."})
+        original_mtime = source.stat().st_mtime
+        file_processor.process(source, ProcessingSettings())
+        assert source.stat().st_mtime == original_mtime
+
+    def test_xlsx_keyref_created_when_enabled(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.xlsx"
+        make_xlsx(source, {"A1": "My name is John Smith."})
+        result = file_processor.process(source, ProcessingSettings(key_reference_enabled=True))
+        assert result.keyref_path is not None
+        assert result.keyref_path.exists()
+        content = result.keyref_path.read_text(encoding="utf-8")
+        assert "John Smith" in content
+
+    def test_xlsx_folder_batch_includes_xlsx_files(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        from app.services.folder_processor import FolderProcessor, SUPPORTED_EXTENSIONS
+        assert ".xlsx" in SUPPORTED_EXTENSIONS
+        xlsx_file = tmp_path / "data.xlsx"
+        make_xlsx(xlsx_file, {"A1": "Some text."})
+        fp = FolderProcessor(file_processor)
+        collected = fp.collect_files(tmp_path)
+        assert xlsx_file in collected
