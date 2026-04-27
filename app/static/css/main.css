@@ -722,6 +722,28 @@ body {
     font-style: italic;
 }
 
+/* ---- Output mode radio row ---- */
+
+.output-mode-row {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+}
+
+.output-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    color: var(--color-text);
+}
+
+.output-mode-option input[type="radio"] {
+    accent-color: var(--accent);
+}
+
 /* ---- Advanced settings (collapsible) ---- */
 
 .advanced-settings {

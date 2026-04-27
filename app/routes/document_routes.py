@@ -24,6 +24,7 @@ def document_mode():
         pattern_config=settings.pattern_config,
         excel_generic_enabled=settings.excel_generic_enabled,
         excel_column_names=", ".join(settings.excel_column_names),
+        output_mode=settings.output_mode,
     )
 
 
@@ -105,6 +106,9 @@ def process_folder():
     excel_generic_enabled = args.get("excel_generic_enabled", "true").lower() == "true"
     excel_column_names_raw = args.get("excel_column_names", "").strip()
     excel_column_names = [c.strip() for c in excel_column_names_raw.split(",") if c.strip()]
+    output_mode = args.get("output_mode", "prefix")
+    if output_mode not in ("prefix", "subfolder"):
+        output_mode = "prefix"
 
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
@@ -143,6 +147,7 @@ def process_folder():
             digit_count=digit_count,
             excel_generic_enabled=excel_generic_enabled,
             excel_column_names=excel_column_names,
+            output_mode=output_mode,
         )
 
         all_results = []
@@ -166,6 +171,7 @@ def process_folder():
             all_results,
             folder=folder,
             key_reference_enabled=key_reference_enabled,
+            output_mode=output_mode,
         )
         yield _sse({
             "type": "summary",
@@ -190,6 +196,7 @@ def process_folder():
         )
         user_settings.excel_generic_enabled = excel_generic_enabled
         user_settings.excel_column_names = excel_column_names
+        user_settings.output_mode = output_mode
         user_settings.save()
 
     return Response(stream(), mimetype="text/event-stream",

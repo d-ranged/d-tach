@@ -44,13 +44,28 @@ class FolderProcessor:
 
         Deepest-first ensures subfolders are fully processed before their
         parent, which matters when folder renaming is added later.
+
+        The anonymized/ subfolder (created in subfolder output mode) is always
+        excluded so re-running on the same folder does not re-process output.
         """
+        anonymized_root = folder / "anonymized"
         files = [
             p for p in folder.rglob("*")
-            if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
+            if p.is_file()
+            and p.suffix.lower() in SUPPORTED_EXTENSIONS
+            and anonymized_root not in p.parents
         ]
         # Sort by depth (number of parts) descending, then alphabetically
         return sorted(files, key=lambda p: (-len(p.parts), str(p)))
+
+    @staticmethod
+    def _subfolder_output_path(path: Path, chosen_folder: Path) -> Path:
+        """Compute the mirror output path inside chosen_folder/anonymized/.
+
+        Example: chosen/sub/file.docx → chosen/anonymized/sub/file.docx
+        """
+        relative = path.relative_to(chosen_folder)
+        return chosen_folder / "anonymized" / relative
 
     def process(
         self, folder: Path, settings: ProcessingSettings
@@ -78,8 +93,13 @@ class FolderProcessor:
         )
 
         for index, path in enumerate(files, start=1):
+            output_path_override = None
+            if settings.output_mode == "subfolder":
+                output_path_override = self._subfolder_output_path(path, folder)
+                output_path_override.parent.mkdir(parents=True, exist_ok=True)
+
             try:
-                result = self._file_processor.process(path, file_settings)
+                result = self._file_processor.process(path, file_settings, output_path_override)
             except Exception as exc:
                 logger.error("Unexpected error processing %s: %s", path, exc)
                 result = FileResult(
@@ -94,12 +114,13 @@ class FolderProcessor:
         results: list[FileResult],
         folder: Optional[Path] = None,
         key_reference_enabled: bool = False,
+        output_mode: str = "prefix",
     ) -> FolderSummary:
         """Build a FolderSummary from a completed list of FileResults.
 
         When key_reference_enabled is True and folder is provided, writes a
-        consolidated KEYREF_<folder>.csv at the folder root aggregating all
-        replacements from every anonymized file in the run.
+        consolidated KEYREF_<folder>.csv. In subfolder mode the CSV is placed
+        inside folder/anonymized/; in prefix mode it goes at the folder root.
         """
         summary = FolderSummary(total=len(results), results=results)
         for r in results:
@@ -113,12 +134,19 @@ class FolderProcessor:
                 summary.errors += 1
 
         if key_reference_enabled and folder:
-            summary.keyref_csv_path = self._write_consolidated_keyref(results, folder)
+            if output_mode == "subfolder":
+                csv_dir = folder / "anonymized"
+                csv_dir.mkdir(exist_ok=True)
+            else:
+                csv_dir = folder
+            summary.keyref_csv_path = self._write_consolidated_keyref(
+                results, csv_dir, folder.name
+            )
 
         return summary
 
     def _write_consolidated_keyref(
-        self, results: list[FileResult], folder: Path
+        self, results: list[FileResult], csv_dir: Path, folder_name: str
     ) -> Optional[Path]:
         """Write a two-column CSV mapping all placeholders to original values.
 
@@ -140,7 +168,7 @@ class FolderProcessor:
             return None
 
         rows.sort()
-        csv_path = folder / f"KEYREF_{folder.name}.csv"
+        csv_path = csv_dir / f"KEYREF_{folder_name}.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["Placeholder", "Original value"])

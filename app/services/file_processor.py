@@ -55,6 +55,7 @@ class ProcessingSettings:
     digit_count: int = 7
     excel_generic_enabled: bool = True
     excel_column_names: list[str] = field(default_factory=list)
+    output_mode: str = "prefix"  # "prefix" | "subfolder"
 
 
 @dataclass
@@ -75,10 +76,14 @@ class FileResult:
 class FileProcessor:
     """Processes a single supported file: detects PII, writes anonymized output.
 
-    Output files are written to the same directory as the source:
-    - PII detected  → ANON_{original_name}
+    In prefix mode (default):
+    - PII detected  → ANON_{original_name}  (same directory as source)
     - No PII found  → CHECKED_{original_name}
     - Key reference → KEYREF_{original_stem}.txt  (when enabled)
+
+    In subfolder mode (output_path_override provided by FolderProcessor):
+    - Output goes to the pre-computed mirror path inside anonymized/
+    - Original filename is preserved — no ANON_/CHECKED_ prefix
     """
 
     def __init__(
@@ -89,8 +94,17 @@ class FileProcessor:
         self._language_detector = language_detector
         self._doc_processor = DocumentProcessor()
 
-    def process(self, path: Path, settings: ProcessingSettings) -> FileResult:
+    def process(
+        self,
+        path: Path,
+        settings: ProcessingSettings,
+        output_path_override: Optional[Path] = None,
+    ) -> FileResult:
         """Process a single file and return a FileResult describing the outcome.
+
+        output_path_override — when set (subfolder mode), the file is written to
+        this exact path instead of a prefixed name alongside the source. The
+        caller is responsible for creating the parent directory.
 
         A corrupt or unreadable file is caught and returned as an error result
         so callers can skip it without stopping batch processing.
@@ -105,12 +119,12 @@ class FileProcessor:
         ext = path.suffix.lower()
         try:
             if ext == ".docx":
-                return self._process_docx(path, settings)
+                return self._process_docx(path, settings, output_path_override)
             if ext == ".md":
-                return self._process_markdown(path, settings)
+                return self._process_markdown(path, settings, output_path_override)
             if ext == ".xlsx":
-                return self._process_xlsx(path, settings)
-            return self._process_pdf(path, settings)
+                return self._process_xlsx(path, settings, output_path_override)
+            return self._process_pdf(path, settings, output_path_override)
         except Exception as exc:
             logger.error("Failed to process %s: %s", path, exc)
             return FileResult(
@@ -120,20 +134,49 @@ class FileProcessor:
             )
 
     # ------------------------------------------------------------------
+    # Output path resolution
+    # ------------------------------------------------------------------
+
+    def _output_path(
+        self,
+        source_path: Path,
+        prefix: str,
+        replacements: dict[str, str],
+        settings: ProcessingSettings,
+        language: str,
+        override: Optional[Path],
+    ) -> Path:
+        """Return the output path for a processed file.
+
+        In subfolder mode (override provided): return override as-is — the
+        caller (FolderProcessor) computed the mirror path.
+        In prefix mode: apply ANON_/CHECKED_ prefix, optionally running
+        filename anonymization when check_file_names is enabled.
+        """
+        if override is not None:
+            return override
+        if settings.check_file_names:
+            output_name = self._anonymize_filename(
+                f"{prefix}{source_path.stem}", source_path.suffix,
+                replacements, settings, language,
+            )
+        else:
+            output_name = f"{prefix}{source_path.name}"
+        return source_path.parent / output_name
+
+    # ------------------------------------------------------------------
     # Internal processing
     # ------------------------------------------------------------------
 
-    def _process_docx(self, path: Path, settings: ProcessingSettings) -> FileResult:
+    def _process_docx(
+        self, path: Path, settings: ProcessingSettings,
+        output_path_override: Optional[Path] = None,
+    ) -> FileResult:
         """Core DOCX processing logic."""
         text, doc = self._doc_processor.load_docx(path)
 
         if not text.strip():
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
-                )
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
@@ -143,12 +186,7 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
-                )
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, language, output_path_override)
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
@@ -156,13 +194,7 @@ class FileProcessor:
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = self._build_replacements(result.entities, encoder)
 
-        output_name = f"ANON_{path.name}"
-        if settings.check_file_names:
-            output_name = self._anonymize_filename(
-                f"ANON_{path.stem}", path.suffix, replacements, settings, language
-            )
-
-        output_path = path.parent / output_name
+        output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
         self._doc_processor.save_docx_with_replacements(doc, output_path, replacements)
 
         keyref_path: Optional[Path] = None
@@ -179,20 +211,18 @@ class FileProcessor:
             replacements=replacements,
         )
 
-    def _process_pdf(self, path: Path, settings: ProcessingSettings) -> FileResult:
+    def _process_pdf(
+        self, path: Path, settings: ProcessingSettings,
+        output_path_override: Optional[Path] = None,
+    ) -> FileResult:
         """Core PDF processing logic using pymupdf in-place redaction."""
         import fitz  # local import — only needed for PDF path
 
         text, doc = self._doc_processor.load_pdf(path)
 
         if not text.strip():
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
-                )
             doc.close()
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
@@ -204,13 +234,8 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
-                )
             doc.close()
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, language, output_path_override)
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
@@ -219,13 +244,7 @@ class FileProcessor:
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = self._build_replacements(result.entities, encoder)
 
-        output_name = f"ANON_{path.name}"
-        if settings.check_file_names:
-            output_name = self._anonymize_filename(
-                f"ANON_{path.stem}", path.suffix, replacements, settings, language
-            )
-
-        output_path = path.parent / output_name
+        output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
         self._doc_processor.save_pdf_with_replacements(doc, output_path, replacements)
         doc.close()
 
@@ -243,7 +262,10 @@ class FileProcessor:
             replacements=replacements,
         )
 
-    def _process_xlsx(self, path: Path, settings: ProcessingSettings) -> FileResult:
+    def _process_xlsx(
+        self, path: Path, settings: ProcessingSettings,
+        output_path_override: Optional[Path] = None,
+    ) -> FileResult:
         """Core Excel processing logic supporting two independent anonymization modes.
 
         Generic NER: detects PII in string cell text (names, emails, phones).
@@ -290,13 +312,7 @@ class FileProcessor:
 
         # --- Nothing to replace → clean ---
         if not exact_replacements and not substring_replacements:
-            language = settings.language if settings.excel_generic_enabled else settings.language
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
-                )
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
             self._doc_processor.save_xlsx_copy(wb, output_path)
             return FileResult(
                 status="clean",
@@ -305,16 +321,11 @@ class FileProcessor:
                 warnings=file_warnings,
             )
 
-        # --- Build output filename ---
+        # --- Build output path ---
         combined_for_names = {**substring_replacements, **exact_replacements}
-        output_name = f"ANON_{path.name}"
-        if settings.check_file_names:
-            output_name = self._anonymize_filename(
-                f"ANON_{path.stem}", path.suffix, combined_for_names, settings, settings.language
-            )
+        output_path = self._output_path(path, "ANON_", combined_for_names, settings, settings.language, output_path_override)
 
         # --- Save (exact pass first, then NER substring pass) ---
-        output_path = path.parent / output_name
         self._doc_processor.save_xlsx_with_replacements(
             wb, output_path, substring_replacements,
             exact_replacements if exact_replacements else None,
@@ -338,7 +349,10 @@ class FileProcessor:
             replacements={**substring_replacements, **exact_replacements},
         )
 
-    def _process_markdown(self, path: Path, settings: ProcessingSettings) -> FileResult:
+    def _process_markdown(
+        self, path: Path, settings: ProcessingSettings,
+        output_path_override: Optional[Path] = None,
+    ) -> FileResult:
         """Core Markdown processing logic.
 
         Markdown files are treated as plain text: the full content is fed to
@@ -349,12 +363,7 @@ class FileProcessor:
         text = self._doc_processor.load_md(path)
 
         if not text.strip():
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, settings.language
-                )
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
             self._doc_processor.save_md_copy(text, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
@@ -364,25 +373,14 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
         if not result.entities:
-            output_name = f"CHECKED_{path.name}"
-            if settings.check_file_names:
-                output_name = self._anonymize_filename(
-                    f"CHECKED_{path.stem}", path.suffix, {}, settings, language
-                )
-            output_path = path.parent / output_name
+            output_path = self._output_path(path, "CHECKED_", {}, settings, language, output_path_override)
             self._doc_processor.save_md_copy(text, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = self._build_replacements(result.entities, encoder)
 
-        output_name = f"ANON_{path.name}"
-        if settings.check_file_names:
-            output_name = self._anonymize_filename(
-                f"ANON_{path.stem}", path.suffix, replacements, settings, language
-            )
-
-        output_path = path.parent / output_name
+        output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
         self._doc_processor.save_md_with_replacements(text, output_path, replacements)
 
         keyref_path: Optional[Path] = None
