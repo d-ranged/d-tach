@@ -26,6 +26,12 @@ if [ ! -f ".venv/bin/python" ]; then
     python3 -m venv .venv
     echo "Installing dependencies (this may take a few minutes)..."
     .venv/bin/pip install -r requirements.txt
+    if ! .venv/bin/python -c "import tkinter" 2>/dev/null; then
+        echo ""
+        echo "Note: tkinter not found — Browse buttons will be disabled."
+        echo "To enable, run: brew install python-tk@3.x  (replace 3.x with your Python version)"
+        echo ""
+    fi
     echo "Downloading English language model..."
     .venv/bin/python -m spacy download en_core_web_md
     echo "Downloading Dutch language model..."
