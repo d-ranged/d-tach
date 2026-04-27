@@ -20,6 +20,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 5 | Key Reference Export Improvements | Pending |
 | 6 | Launcher and UX Polish | Pending |
 | 7 | Anonymized Subfolder Output Mode | Pending |
+| 8 | Acceptance Testing — all features | Pending |
 
 ---
 
@@ -192,15 +193,24 @@ replace it all, regardless of type or content."
 
 ### Design decisions
 
-**Two replacement strategies, combinable:**
+**Two independent modes — either, both, or neither:**
 
-| Mode | Mechanism | What it targets |
-|---|---|---|
-| Generic NER (existing) | Presidio on string cell text | Names, emails, phones in text cells |
-| Column-based (new) | Whole-cell exact match by header | Any cell type in named columns |
+| Mode | Default | Mechanism | What it targets |
+|---|---|---|---|
+| Generic NER | On | Presidio on string cell text | Names, emails, phones in text cells |
+| Column-based | Off | Whole-cell exact match by header | Any cell type in named columns |
 
-Both can be active simultaneously. Column-based runs first; NER then runs on
-the remaining cells. This prevents conflicting placeholders for the same value.
+Each mode can be toggled on or off independently:
+- **Both on:** column-based runs first, NER fills in the rest. No conflicting
+  placeholders — column cells are replaced before NER runs over them.
+- **NER only:** existing 4a behaviour. Numeric cells invisible; string cells
+  scanned for names/emails/phones.
+- **Column only:** only named columns are anonymized. NER does not run.
+  Useful when you want precise control and no false positives.
+- **Both off:** the `.xlsx` file is **skipped entirely** — no output file is
+  created, the file appears as "skipped" in the completion summary. The user
+  has explicitly opted out of Excel processing. Other file types (DOCX, PDF,
+  Markdown) are unaffected.
 
 **Placeholder format for column-based:**
 Column name uppercased as entity type label.
@@ -240,15 +250,17 @@ carries a permanent hint: "Column matching requires headers in row 1."
   specified columns only, formula cells skipped).
 
 **`FileProcessor._process_xlsx`** — updated flow:
-1. If `excel_column_names` non-empty: call `extract_column_replacements`,
+1. **If both modes off** (`not excel_generic_enabled` and `not excel_column_names`):
+   return `FileResult(status="skipped")` immediately. No file written.
+2. If `excel_column_names` non-empty: call `extract_column_replacements`,
    collect `exact_replacements` and `missing` warnings.
-2. If `excel_generic_enabled`: extract string cell text, run NER, collect
+3. If `excel_generic_enabled`: extract string cell text, run NER, collect
    `substring_replacements` (same as 4a).
-3. If both are empty / produce nothing: return clean result.
-4. Save with `save_xlsx_with_replacements(wb, dest, substring_replacements,
+4. If both modes are on but neither produced any replacements: return clean result.
+5. Save with `save_xlsx_with_replacements(wb, dest, substring_replacements,
    exact_replacements)`.
-5. Build combined map for key reference (merge both dicts).
-6. Attach any `missing` warnings to `FileResult.warnings`.
+6. Build combined map for key reference (merge both dicts).
+7. Attach any `missing` warnings to `FileResult.warnings`.
 
 **`UserSettings`**
 - Persist `excel_generic_enabled` (bool) and `excel_column_names`
@@ -276,9 +288,12 @@ carries a permanent hint: "Column matching requires headers in row 1."
 - A `.xlsx` file where student numbers are integers in a `stnum` column
   produces `ANON_` output with `[STNUM_N]` placeholders in that column.
 - Other columns not in the specified list are unaffected.
-- Generic NER can be toggled off independently.
+- Generic NER can be toggled off independently while column-based remains active.
+- Column-based can be toggled off independently while NER remains active.
 - Both modes active simultaneously: numeric column replaced AND names in
-  text cells replaced.
+  text cells replaced by NER.
+- **Both modes off: `.xlsx` files appear as "skipped" in the summary; no
+  output file created; DOCX/PDF/Markdown in the same folder are unaffected.**
 - Warning shown in completion summary if a specified column name is not
   found in row 1 headers.
 - Advanced settings panel collapses correctly and settings persist on reload.
@@ -443,9 +458,172 @@ folder/
 
 ---
 
+## Step 8 — Acceptance Testing
+
+**Codeberg issue to create first:**
+`test: v1.1.0 acceptance testing — all features`
+
+**Goal:** A structured manual test run covering every feature added or changed
+in v1.1.0. Performed after all build steps (1–7 and 4b) are merged to main.
+Any failures discovered here are fixed on a branch named
+`fix/issue-N-step8-{short-description}` and merged before release.
+
+Running the automated test suite (`pytest`) is a prerequisite but not
+sufficient — these tests confirm behaviour the automated suite cannot reach:
+visual output quality, UI interaction, cross-feature combinations, and real
+documents with realistic content.
+
+---
+
+### Pre-test setup
+
+- Fresh clone or `git pull main` — confirm you are on the latest main
+- `pip install -r requirements.txt` — confirm all dependencies present
+- Launch: `launch.bat` (Windows) — confirm browser opens automatically and
+  app loads at `http://localhost:5000`
+- Run `pytest` — all tests must pass before starting manual testing
+- Prepare a test folder containing:
+  - One DOCX with a name and email address
+  - One PDF with a name and phone number
+  - One Markdown file with a name
+  - One `.xlsx` with a text cell containing a name, a numeric student
+    number column (`stnum`), and a formula cell
+  - One DOCX with no PII (for CHECKED_ verification)
+  - A subfolder with one more DOCX
+
+---
+
+### 8a — Placeholder format (Step 1)
+
+Run Text Mode with a name and email in the input.
+
+| Check | Expected |
+|---|---|
+| Name placeholder | `[PERSON_1]` — bracketed, not bare `PERSON_1` |
+| Email placeholder | `[EMAIL_ADDRESS_1]` — bracketed |
+| Key reference table (when enabled) | Shows bracketed placeholders |
+| DOCX output | Bracketed placeholders in the output file |
+| PDF output | Bracketed placeholders in the output file |
+
+---
+
+### 8b — Branding and theme (Step 2)
+
+| Check | Expected |
+|---|---|
+| Logo visible in nav | d-ranged logo appears top-left |
+| Default theme | Dark green nav (T4 Dual Identity) |
+| Click logo once | Theme switches to muted blue (T1 Neutral Professional) |
+| Click logo again | Theme returns to T4 |
+| Reload page | Last selected theme is restored (localStorage) |
+| Both themes | No layout breaks, no illegible text in either theme |
+
+---
+
+### 8c — Excel NER anonymization (Step 4a)
+
+Using the test `.xlsx` with a name in a string cell:
+
+| Check | Expected |
+|---|---|
+| Generic NER on, no column names | `ANON_` output; name replaced in string cell |
+| Formula cell in output | Formula string unchanged (e.g. `=SUM(C1:C5)`) |
+| Numeric cells in output | Numbers unchanged |
+| Cell formatting | Bold/colour formatting preserved |
+| DOCX in same folder | Processed normally — Excel settings do not affect it |
+
+---
+
+### 8d — Excel column-based anonymization (Step 4b)
+
+Using the test `.xlsx` with a `stnum` integer column:
+
+| Check | Expected |
+|---|---|
+| NER off, column `stnum` | `ANON_` output; integer values in stnum column replaced with `[STNUM_1]` etc. |
+| Other columns | Untouched |
+| NER on, column `stnum` | Both: stnum column replaced AND name in text cell replaced by NER |
+| NER off, no column names (both off) | File appears as "skipped" in summary; no output file created |
+| Column name not found in row 1 | Warning shown in completion summary |
+| Key reference enabled | Contains stnum → original value mapping |
+| Advanced settings panel | Collapses/expands correctly; settings restored on reload |
+
+---
+
+### 8e — Key reference export (Step 5)
+
+| Check | Expected |
+|---|---|
+| Folder mode, key reference on | Single consolidated `KEYREF_<folder>.csv` at folder root |
+| CSV opens cleanly in Excel | Two columns: Placeholder, Original value |
+| Text Mode export button | Clicking saves a file; in-UI table still visible |
+| Single-file key reference | Unchanged from pre-5 behaviour |
+
+---
+
+### 8f — Launcher and UX (Step 6)
+
+| Check | Expected |
+|---|---|
+| `launch.bat` on Windows | Browser opens automatically after Flask starts |
+| Flask not yet ready race | Browser waits for Flask to be ready (no 404 on open) |
+| README macOS instructions | `bash launch.sh` shown as primary command |
+
+*(macOS tkinter fallback can only be tested on macOS — note result or skip.)*
+
+---
+
+### 8g — Anonymized subfolder output mode (Step 7)
+
+Process the test folder with subfolder mode selected:
+
+| Check | Expected |
+|---|---|
+| `anonymized/` created at folder root | Yes |
+| Structure mirrors original | Subfolder present inside `anonymized/` |
+| Anonymized files | Original filename, no `ANON_` prefix |
+| Clean files | Present in `anonymized/` as unmodified copies |
+| Key reference (when on) | `KEYREF_folder.csv` at root of `anonymized/` |
+| Original folder | Completely untouched — no ANON_/CHECKED_ files |
+| UI toggle | Mode persists after reload |
+| Prefix mode still works | Switching back produces ANON_/CHECKED_ in place |
+
+---
+
+### 8h — Cross-feature combinations
+
+These confirm features work together, not just in isolation:
+
+| Combination | Expected |
+|---|---|
+| Hashing on + DOCX | Name encoded as `[Cr-A2T5 HY23]` or similar; consistent across files |
+| Hashing on + Excel column-based | Column values replaced with hash-encoded names if they are PERSON entities, or typed placeholders for non-name columns |
+| Key reference + folder mode + subfolder output | KEYREF CSV inside `anonymized/`, covers all files |
+| Mixed folder (DOCX + PDF + XLSX) — both Excel modes off | DOCX and PDF processed; XLSX skipped |
+| Mixed folder (DOCX + PDF + XLSX) — column mode only | DOCX and PDF use NER; XLSX uses column replacement only |
+
+---
+
+### 8i — Regression: existing tests
+
+```
+pytest
+```
+All tests pass. Record count. Any failure blocks release.
+
+---
+
+### ✅ Complete when
+- All table rows above show expected behaviour
+- `pytest` passes with no failures
+- Any issues found during 8a–8h are fixed on a dedicated branch and merged
+  before proceeding to the Release step
+
+---
+
 ## Release — v1.1.0
 
-Once all seven steps are complete and tested:
+Once all steps including Step 8 acceptance testing are complete:
 
 1. Bump `__version__` in `app/__init__.py`
 2. Update version badge in `README.md`
