@@ -19,6 +19,8 @@ _DEFAULTS: Final[dict] = {
         "check_file_names": False,
         "numeric_id_enabled": False,
     },
+    "excel_generic_enabled": True,
+    "excel_column_names": "",
 }
 
 
@@ -26,7 +28,7 @@ class UserSettings:
     """Persists user preferences to a local JSON file and restores them on launch.
 
     Stores: hashing toggle state, hashing secret, selected language,
-    anonymize dates toggle, and PatternConfig settings.
+    anonymize dates toggle, PatternConfig settings, and Excel-specific settings.
     The settings file is excluded from version control (see .gitignore).
     """
 
@@ -87,6 +89,25 @@ class UserSettings:
     def pattern_config(self, config: PatternConfig) -> None:
         self._data["pattern_config"] = config.to_dict()
 
+    @property
+    def excel_generic_enabled(self) -> bool:
+        """Whether NER-based generic anonymization runs on Excel string cells."""
+        return self._data.get("excel_generic_enabled", True)
+
+    @excel_generic_enabled.setter
+    def excel_generic_enabled(self, value: bool) -> None:
+        self._data["excel_generic_enabled"] = bool(value)
+
+    @property
+    def excel_column_names(self) -> list[str]:
+        """Column names to anonymize by exact column match (parsed from stored string)."""
+        raw = self._data.get("excel_column_names", "")
+        return [c.strip() for c in raw.split(",") if c.strip()]
+
+    @excel_column_names.setter
+    def excel_column_names(self, value: list[str]) -> None:
+        self._data["excel_column_names"] = ", ".join(value)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -127,6 +148,8 @@ class UserSettings:
         d["pattern_config"] = dict(_DEFAULTS["pattern_config"])
         return d
 
+
+
     @staticmethod
     def _merge_with_defaults(raw: dict) -> dict:
         """Return raw data with any missing keys filled from defaults."""
@@ -150,4 +173,8 @@ class UserSettings:
                 merged["pattern_config"]["numeric_id_enabled"] = pc["numeric_id_enabled"]
             elif isinstance(pc.get("student_number_enabled"), bool):
                 merged["pattern_config"]["numeric_id_enabled"] = pc["student_number_enabled"]
+        if isinstance(raw.get("excel_generic_enabled"), bool):
+            merged["excel_generic_enabled"] = raw["excel_generic_enabled"]
+        if isinstance(raw.get("excel_column_names"), str):
+            merged["excel_column_names"] = raw["excel_column_names"]
         return merged

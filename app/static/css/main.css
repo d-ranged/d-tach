@@ -703,3 +703,95 @@ body {
 .log-error {
     color: #c0392b;
 }
+
+.log-warning {
+    color: #a06000;
+    font-style: italic;
+}
+
+/* ---- Advanced settings (collapsible) ---- */
+
+.advanced-settings {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+}
+
+.advanced-settings-toggle {
+    padding: 0.55rem 1rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    list-style: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.advanced-settings-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.advanced-settings-toggle::before {
+    content: "\25B6";
+    font-size: 0.6rem;
+    transition: transform 0.15s;
+    display: inline-block;
+}
+
+details[open] .advanced-settings-toggle::before {
+    transform: rotate(90deg);
+}
+
+.advanced-settings-body {
+    padding: 0.75rem 1rem 0.85rem;
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.advanced-section-heading {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.advanced-setting-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.advanced-label {
+    font-size: 0.82rem;
+    color: var(--color-text);
+    white-space: nowrap;
+    min-width: 180px;
+}
+
+.excel-columns-input {
+    font-family: var(--font);
+    font-size: 0.82rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg);
+    color: var(--color-text);
+    width: 280px;
+}
+
+.advanced-hint {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    line-height: 1.5;
+}

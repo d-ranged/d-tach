@@ -265,3 +265,119 @@ class TestProcessXlsx:
         fp = FolderProcessor(file_processor)
         collected = fp.collect_files(tmp_path)
         assert xlsx_file in collected
+
+
+def make_xlsx_with_headers(path: Path, headers: list[str], rows: list[list]) -> None:
+    """Create an xlsx file with a header row and data rows."""
+    wb = Workbook()
+    ws = wb.active
+    for col_idx, header in enumerate(headers, start=1):
+        ws.cell(row=1, column=col_idx, value=header)
+    for row_idx, row_data in enumerate(rows, start=2):
+        for col_idx, value in enumerate(row_data, start=1):
+            ws.cell(row=row_idx, column=col_idx, value=value)
+    wb.save(str(path))
+
+
+class TestProcessXlsxColumnBased:
+    def test_integer_column_value_replaced(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "students.xlsx"
+        make_xlsx_with_headers(source, ["stnum", "name"], [[1234567, "Alice"]])
+        settings = ProcessingSettings(
+            excel_generic_enabled=False,
+            excel_column_names=["stnum"],
+        )
+        result = file_processor.process(source, settings)
+        assert result.status == "anonymized"
+        out_wb = load_workbook(str(result.output_path))
+        assert out_wb.active["A2"].value == "[STNUM_1]"
+
+    def test_non_specified_column_untouched(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "students.xlsx"
+        make_xlsx_with_headers(source, ["stnum", "grade"], [[1234567, 8]])
+        settings = ProcessingSettings(
+            excel_generic_enabled=False,
+            excel_column_names=["stnum"],
+        )
+        result = file_processor.process(source, settings)
+        out_wb = load_workbook(str(result.output_path))
+        assert out_wb.active["B2"].value == 8
+
+    def test_both_modes_off_returns_skipped(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "data.xlsx"
+        make_xlsx(source, {"A1": "My name is John Smith."})
+        settings = ProcessingSettings(
+            excel_generic_enabled=False,
+            excel_column_names=[],
+        )
+        result = file_processor.process(source, settings)
+        assert result.status == "skipped"
+        assert result.output_path is None
+
+    def test_missing_column_produces_warning(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "data.xlsx"
+        make_xlsx_with_headers(source, ["name"], [["Alice"]])
+        settings = ProcessingSettings(
+            excel_generic_enabled=False,
+            excel_column_names=["stnum"],
+        )
+        result = file_processor.process(source, settings)
+        assert any("stnum" in w for w in result.warnings)
+
+    def test_ner_and_column_modes_combined(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "students.xlsx"
+        make_xlsx_with_headers(
+            source, ["stnum", "notes"],
+            [[1234567, "My name is John Smith and I work here."]]
+        )
+        settings = ProcessingSettings(
+            excel_generic_enabled=True,
+            excel_column_names=["stnum"],
+        )
+        result = file_processor.process(source, settings)
+        assert result.status == "anonymized"
+        out_wb = load_workbook(str(result.output_path))
+        assert out_wb.active["A2"].value == "[STNUM_1]"
+        assert "John Smith" not in (out_wb.active["B2"].value or "")
+
+    def test_column_mode_keyref_contains_column_entries(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "students.xlsx"
+        make_xlsx_with_headers(source, ["stnum"], [[1234567]])
+        settings = ProcessingSettings(
+            excel_generic_enabled=False,
+            excel_column_names=["stnum"],
+            key_reference_enabled=True,
+        )
+        result = file_processor.process(source, settings)
+        assert result.keyref_path is not None
+        content = result.keyref_path.read_text(encoding="utf-8")
+        assert "1234567" in content
+        assert "[STNUM_1]" in content
+
+    def test_column_only_skips_ner_on_text_cells(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "students.xlsx"
+        make_xlsx_with_headers(
+            source, ["stnum", "notes"],
+            [[1234567, "My name is John Smith."]]
+        )
+        settings = ProcessingSettings(
+            excel_generic_enabled=False,
+            excel_column_names=["stnum"],
+        )
+        result = file_processor.process(source, settings)
+        out_wb = load_workbook(str(result.output_path))
+        assert "John Smith" in (out_wb.active["B2"].value or "")

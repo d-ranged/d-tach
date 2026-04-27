@@ -7,9 +7,11 @@ const secretInput            = document.getElementById("secret-input");
 const keyrefToggle           = document.getElementById("keyref-toggle");
 const namesToggle            = document.getElementById("names-toggle");
 const datesToggle            = document.getElementById("dates-toggle");
-const numericIdToggle    = document.getElementById("numeric-id-toggle");
+const numericIdToggle        = document.getElementById("numeric-id-toggle");
 const digitCountInput        = document.getElementById("digit-count");
 const langSelector           = document.getElementById("lang-selector");
+const excelNerToggle         = document.getElementById("excel-ner-toggle");
+const excelColumnsInput      = document.getElementById("excel-columns");
 const progressArea      = document.getElementById("progress-area");
 const progressBarWrap   = document.getElementById("progress-bar-wrap");
 const progressBar       = document.getElementById("progress-bar");
@@ -132,6 +134,8 @@ async function runProcessFile() {
                 anonymize_dates: datesToggle.checked,
                 numeric_id_enabled: numericIdToggle.checked,
                 digit_count: parseInt(digitCountInput.value, 10) || 7,
+                excel_generic_enabled: excelNerToggle.checked,
+                excel_column_names: excelColumnsInput.value.trim(),
             }),
         });
         const data = await response.json();
@@ -161,6 +165,9 @@ function renderFileSummary(data) {
         lines.push(`\u26A0 Skipped: ${data.error_message}`);
     } else {
         lines.push(`\u2718 Error: ${data.error_message}`);
+    }
+    if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach(w => lines.push(`  \u26a0 ${w}`));
     }
     setSummary(lines.join("\n"), data.status === "error" || data.status === "skipped");
 }
@@ -201,6 +208,8 @@ function runProcessFolder() {
         anonymize_dates: datesToggle.checked,
         numeric_id_enabled: numericIdToggle.checked,
         digit_count: parseInt(digitCountInput.value, 10) || 7,
+        excel_generic_enabled: excelNerToggle.checked,
+        excel_column_names: excelColumnsInput.value.trim(),
     });
 
     activeEventSource = new EventSource(`/document/process-folder?${params}`);
@@ -261,6 +270,14 @@ function appendLogEntry(data) {
         : data.error_message ? ` \u2014 ${data.error_message}` : "";
     line.textContent = `${icon} ${data.file_name}${detail}`;
     progressLog.appendChild(line);
+    if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach(w => {
+            const wLine = document.createElement("div");
+            wLine.className = "log-entry log-warning";
+            wLine.textContent = `  ⚠ ${w}`;
+            progressLog.appendChild(wLine);
+        });
+    }
     progressLog.scrollTop = progressLog.scrollHeight;
 }
 
