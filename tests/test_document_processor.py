@@ -5,6 +5,8 @@ from pathlib import Path
 import fitz
 import pytest
 from docx import Document
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
 
 from app.services.document_processor import DocumentProcessor
 
@@ -190,4 +192,141 @@ class TestSavePdfWithReplacements:
         _, doc = processor.load_pdf(source)
         processor.save_pdf_with_replacements(doc, dest, {"John Smith": "[PERSON_1]"})
         doc.close()
+        assert source.stat().st_mtime == original_mtime
+
+
+# ---------------------------------------------------------------------------
+# Excel tests
+# ---------------------------------------------------------------------------
+
+
+def make_xlsx(path: Path, cells: dict[str, object]) -> None:
+    """Create an xlsx file with the given cell address → value mapping."""
+    wb = Workbook()
+    ws = wb.active
+    for address, value in cells.items():
+        ws[address] = value
+    wb.save(str(path))
+
+
+class TestLoadXlsx:
+    def test_extracts_string_cell_text(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "test.xlsx"
+        make_xlsx(xlsx_path, {"A1": "John Smith", "B1": "jane@example.com"})
+        text, wb = processor.load_xlsx(xlsx_path)
+        assert "John Smith" in text
+        assert "jane@example.com" in text
+
+    def test_formula_cells_excluded_from_text(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "test.xlsx"
+        make_xlsx(xlsx_path, {"A1": "Some text", "B1": "=SUM(C1:C5)"})
+        text, _ = processor.load_xlsx(xlsx_path)
+        assert "=SUM" not in text
+
+    def test_numeric_cells_excluded_from_text(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "test.xlsx"
+        make_xlsx(xlsx_path, {"A1": "Name", "B1": 12345})
+        text, _ = processor.load_xlsx(xlsx_path)
+        assert "12345" not in text
+
+    def test_empty_cells_excluded_from_text(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "test.xlsx"
+        make_xlsx(xlsx_path, {"A1": "Content", "B1": None})
+        text, _ = processor.load_xlsx(xlsx_path)
+        assert text.strip() == "Content"
+
+    def test_returns_workbook_object(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "test.xlsx"
+        make_xlsx(xlsx_path, {"A1": "text"})
+        _, wb = processor.load_xlsx(xlsx_path)
+        assert hasattr(wb, "worksheets") and hasattr(wb, "save")
+
+
+class TestSaveXlsxWithReplacements:
+    def test_replacement_applied_to_string_cell(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        make_xlsx(source, {"A1": "John Smith"})
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {"John Smith": "[PERSON_1]"})
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["A1"].value == "[PERSON_1]"
+
+    def test_formula_cell_not_modified(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        make_xlsx(source, {"A1": "John Smith", "B1": "=SUM(C1:C5)"})
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {"John Smith": "[PERSON_1]"})
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["B1"].value == "=SUM(C1:C5)"
+
+    def test_numeric_cell_not_modified(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        make_xlsx(source, {"A1": "John Smith", "B1": 9876543})
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {"John Smith": "[PERSON_1]"})
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["B1"].value == 9876543
+
+    def test_cell_without_pii_unchanged(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        make_xlsx(source, {"A1": "John Smith", "B1": "No PII here"})
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {"John Smith": "[PERSON_1]"})
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["B1"].value == "No PII here"
+
+    def test_cell_font_preserved_after_replacement(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "John Smith"
+        ws["A1"].font = Font(bold=True)
+        wb.save(str(source))
+
+        _, loaded_wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(loaded_wb, dest, {"John Smith": "[PERSON_1]"})
+
+        result_wb = load_workbook(str(dest))
+        assert result_wb.active["A1"].font.bold
+
+    def test_output_saved_to_dest_path(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "ANON_source.xlsx"
+        make_xlsx(source, {"A1": "text"})
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {})
+        assert dest.exists()
+
+    def test_original_file_not_modified(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "source.xlsx"
+        dest = tmp_path / "output.xlsx"
+        make_xlsx(source, {"A1": "John Smith"})
+        original_mtime = source.stat().st_mtime
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {"John Smith": "[PERSON_1]"})
         assert source.stat().st_mtime == original_mtime

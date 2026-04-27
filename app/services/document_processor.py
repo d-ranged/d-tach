@@ -3,17 +3,19 @@ from pathlib import Path
 
 import fitz  # pymupdf
 from docx import Document
+from openpyxl import Workbook, load_workbook
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentProcessor:
-    """Handles DOCX and PDF file reading and anonymized writing.
+    """Handles DOCX, PDF, and Excel file reading and anonymized writing.
 
     DOCX: text extraction and run-level replacement via python-docx.
     PDF: text extraction and in-place redaction via pymupdf.
+    Excel: text extraction and cell-level replacement via openpyxl.
 
-    The original file is never written to by either method.
+    The original file is never written to by any method.
     """
 
     # ------------------------------------------------------------------
@@ -147,6 +149,79 @@ class DocumentProcessor:
             for original, placeholder in replacements.items():
                 text = text.replace(original, placeholder)
             run.text = text
+
+    # ------------------------------------------------------------------
+    # Excel methods
+    # ------------------------------------------------------------------
+
+    def load_xlsx(self, path: Path) -> tuple[str, Workbook]:
+        """Load an Excel workbook and return its text content and the Workbook object.
+
+        Only string cell values are included in the text. Formula cells and
+        non-string cells (numbers, dates, None) are excluded. Cells within
+        each row are concatenated to give the NER model enough context —
+        the same approach used for DOCX table rows.
+        """
+        wb = load_workbook(str(path))
+        text = self._extract_xlsx_text(wb)
+        return text, wb
+
+    def save_xlsx_with_replacements(
+        self, wb: Workbook, dest_path: Path, replacements: dict[str, str]
+    ) -> None:
+        """Apply replacements to all string cells in wb and save to dest_path.
+
+        Replacements are applied longest-first to avoid replacing a substring
+        before a longer match. Formula cells and non-string cells are not touched.
+        Cell formatting is preserved because only cell.value is modified.
+        """
+        self._apply_xlsx_replacements(wb, replacements)
+        wb.save(str(dest_path))
+
+    def save_xlsx_copy(self, wb: Workbook, dest_path: Path) -> None:
+        """Save an unmodified copy of the workbook to dest_path."""
+        wb.save(str(dest_path))
+
+    # ------------------------------------------------------------------
+    # Excel internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_xlsx_text(wb: Workbook) -> str:
+        """Return all string cell text from all sheets, joined by newlines.
+
+        Formula cells are excluded. Cells within each row are concatenated
+        so the NER model receives enough context to identify names.
+        """
+        parts: list[str] = []
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                row_text = " ".join(
+                    str(cell.value)
+                    for cell in row
+                    if isinstance(cell.value, str)
+                    and not cell.value.startswith("=")
+                    and cell.value.strip()
+                )
+                if row_text:
+                    parts.append(row_text)
+        return "\n".join(parts)
+
+    @staticmethod
+    def _apply_xlsx_replacements(wb: Workbook, replacements: dict[str, str]) -> None:
+        """Replace all occurrences of original text in string cells across all sheets."""
+        sorted_replacements = sorted(
+            replacements.items(), key=lambda x: len(x[0]), reverse=True
+        )
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if not isinstance(cell.value, str) or cell.value.startswith("="):
+                        continue
+                    new_value = cell.value
+                    for original, placeholder in sorted_replacements:
+                        new_value = new_value.replace(original, placeholder)
+                    cell.value = new_value
 
     # ------------------------------------------------------------------
     # Markdown methods
