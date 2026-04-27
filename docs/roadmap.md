@@ -1,15 +1,15 @@
-# ROADMAP.md — d-tach Future Development
+# roadmap.md — d-tach Future Development
 
 Issues and ideas for versions after v1.0.0. Items here do not need to be done
 in sequence — pick up by priority or contributor interest.
 
 When an item is selected for a release, move it into a versioned step file
-(e.g. `STEP_1.2.0.md`) and create the corresponding Codeberg issues before
+(e.g. `step_1.2.0.md`) and create the corresponding Codeberg issues before
 starting work.
 
 **When completing any issue that ships a change to users:**
 - Decide whether it is a PATCH (bug fix), MINOR (new feature), or MAJOR (overhaul).
-- Follow the release process in `ORIGINAL_STEPS.md` Step 12.
+- Follow the release process in `original_steps.md` Step 12.
 - Add an entry to `CHANGELOG.md` before tagging.
 - Update the version badge in `README.md`.
 
@@ -17,14 +17,15 @@ starting work.
 
 ## Planned for v1.1.0
 
-See `docs/STEP_1.1.0.md` for the full step-by-step build plan for this release.
+See `docs/step_1.1.0.md` for the full step-by-step build plan for this release.
 
-- **feature: d-ranged branding and two-theme toggle** — See `STEP_1.1.0.md` Step 2.
-- **change: standardise placeholder format to [PLACEHOLDER]** — See `STEP_1.1.0.md` Step 1.
-- ~~**fix: PDF replacement text font size and readability**~~ — **Dropped.** Step 3 failed; reverted. See `STEP_1.1.0.md` Step 3 and ROADMAP section below.
-- **feature: Excel file (.xlsx) anonymization** — See `STEP_1.1.0.md` Step 4.
-- **feature: Key reference export improvements** — See `STEP_1.1.0.md` Step 5.
-- **fix: Launcher UX and macOS tkinter fallback** — See `STEP_1.1.0.md` Step 6.
+- **change: standardise placeholder format to [PLACEHOLDER]** — See `step_1.1.0.md` Step 1.
+- **feature: d-ranged branding and two-theme toggle** — See `step_1.1.0.md` Step 2.
+- ~~**fix: PDF replacement text font size and readability**~~ — **Dropped.** Step 3 failed; reverted. See `step_1.1.0.md` Step 3 and ROADMAP section below.
+- **feature: Excel file (.xlsx) anonymization** — See `step_1.1.0.md` Step 4.
+- **feature: Key reference export improvements** — See `step_1.1.0.md` Step 5.
+- **fix: Launcher UX and macOS tkinter fallback** — See `step_1.1.0.md` Step 6.
+- **feature: anonymized subfolder output mode** — See `step_1.1.0.md` Step 7.
 
 ---
 
@@ -120,9 +121,23 @@ API appears, re-evaluate.
 
 ## Medium priority
 
+- **De-anonymization (reverse lookup)**
+  Given a KEYREF CSV export and an anonymized file, replace all placeholders back
+  with the original values, producing a de-anonymized document.
+
+  - Supported file types: DOCX and plain text. **Not PDF** — redaction is structurally
+    destructive and cannot be reversed.
+  - User flow: upload the KEYREF CSV → upload the anonymized file → download the
+    de-anonymized output.
+  - Placeholder format must match the KEYREF (works correctly after Step 1 standardises
+    the `[PLACEHOLDER]` format).
+  - Implementation approach: simple find-and-replace on all `[PLACEHOLDER_N]` tokens
+    using the CSV mapping; no NLP required.
+  - Earliest version: v1.2.0 or later. Do not start until v1.1.0 is shipped.
+
 - **Visual highlighting of detected entities in Text Mode**
   Highlight detected PII in the output panel so the user can visually verify what
-  was replaced. `Mark.js` is the documented candidate library (see `PROJECT_GUIDE.md`).
+  was replaced. `Mark.js` is the documented candidate library (see `project_guide.md`).
 
 - **Drag and drop individual file in Document Mode**
   Allow a single file to be dropped onto the Document Mode panel as an alternative
@@ -139,7 +154,7 @@ API appears, re-evaluate.
   long enough for Flask and the spaCy models to finish loading. Replace the fixed
   delay with a poll loop (`curl` on Windows bat, `curl` on shell) that waits until
   port 5000 responds before opening the browser. Already planned for Step 6a in
-  `STEP_1.1.0.md`; log here in case it slips to a later version.
+  `step_1.1.0.md`; log here in case it slips to a later version.
 
 ---
 

@@ -1,14 +1,28 @@
-# STEP_1.1.0.md — d-tach v1.1.0 Build Plan
+# step_1.1.0.md — d-tach v1.1.0 Build Plan
 
 This document breaks the v1.1.0 planned work into ordered, testable steps.
 Each step should map to one or more Codeberg issues created before starting.
 
-Consult `ORIGINAL_STEPS.md` for the full background and rationale on each item.
-Consult `PROJECT_GUIDE.md` for architectural decisions and documented alternatives.
+Consult `original_steps.md` for the full background and rationale on each item.
+Consult `project_guide.md` for architectural decisions and documented alternatives.
 
 ---
 
-## Step 1 — Standardise Placeholder Format to [PLACEHOLDER]
+## Status at a Glance
+
+| Step | Description | Status |
+|---|---|---|
+| 1 | Standardise Placeholder Format to [PLACEHOLDER] | ✅ Done — PR #28 merged |
+| 2 | Branding and Theme System | ✅ Done — PR #30 merged |
+| 3 | Fix PDF Replacement Text Font Size | ❌ Dropped — failed, reverted |
+| 4 | Excel File Anonymization | **← Next** |
+| 5 | Key Reference Export Improvements | Pending |
+| 6 | Launcher and UX Polish | Pending |
+| 7 | Anonymized Subfolder Output Mode | Pending |
+
+---
+
+## Step 1 ✅ — Standardise Placeholder Format to [PLACEHOLDER]
 
 **Codeberg issue to create first:**
 `change: standardise placeholder format to [PLACEHOLDER] across all output`
@@ -31,7 +45,7 @@ mode and output type — do it first so tests only need updating once.
 
 ---
 
-## Step 2 — Branding and Theme System
+## Step 2 ✅ — Branding and Theme System
 
 **Codeberg issue to create first:**
 `feature: add d-ranged branding and two-theme toggle`
@@ -81,7 +95,7 @@ See THEME_GUIDE.md for current status.
 
 ---
 
-## Step 3 — Fix PDF Replacement Text Font Size
+## Step 3 ❌ — Fix PDF Replacement Text Font Size
 
 **Codeberg issue:** #31
 **Status: ❌ Failed — dropped from v1.1.0. Reverted to pre-Step-3 state on main.**
@@ -125,17 +139,17 @@ font size made it worse on real documents.
 - `fitz.Font("helv").text_length()` gives exact metrics for width calculation but does
   not solve the underlying problem that short originals leave too little space.
 - Shortening placeholder labels (e.g. `[ID_1]` instead of `[NUMERIC_ID_1]`) would
-  reduce the length mismatch and is the most promising path — see ROADMAP.md.
+  reduce the length mismatch and is the most promising path — see roadmap.md.
 - The pre-Step-3 state (hardcoded `fontsize=11`, `add_redact_annot` with text) was
   visually superior to all attempted improvements for real documents.
 
 ### See also
 
-ROADMAP.md — "PDF in-place text replacement" section for future approach notes.
+roadmap.md — "PDF in-place text replacement" section for future approach notes.
 
 ---
 
-## Step 4 — Excel File Anonymization
+## Step 4 — Excel File Anonymization ← Next
 
 **Codeberg issue to create first:**
 `feature: Excel file (.xlsx) anonymization`
@@ -229,9 +243,98 @@ each other but small enough to ship together.
 
 ---
 
+## Step 7 — Anonymized Subfolder Output Mode
+
+**Codeberg issue to create first:**
+`feature: anonymized subfolder output mode for folder processing`
+
+**Goal:** When processing a folder, instead of placing `ANON_` and `CHECKED_` prefixed
+files alongside originals in the same directory, create a dedicated `anonymized/`
+subfolder at the root of the chosen folder. The subfolder mirrors the original directory
+structure exactly. All processed output goes there, keeping the original folder clean
+and avoiding any intermingling.
+
+**Before (prefix mode — unchanged default):**
+```
+folder/
+  report.docx
+  ANON_report.docx
+  subfolder/
+    notes.docx
+    ANON_notes.docx
+```
+
+**After (subfolder mode — new):**
+```
+folder/
+  report.docx
+  subfolder/
+    notes.docx
+  anonymized/
+    report.docx          ← anonymized version, no prefix
+    subfolder/
+      notes.docx         ← anonymized version, no prefix
+    KEYREF_folder.csv    ← key reference at root of anonymized/
+```
+
+### Rules
+
+- All files are included in `anonymized/` regardless of whether PII was detected —
+  the folder represents the complete processed output, ready to hand over.
+- Files with no PII detected: copied as-is (content unchanged, no `CHECKED_` prefix —
+  the folder separation makes the distinction clear).
+- Files with PII detected: anonymized version saved with the original filename.
+- Key reference file (when enabled): `KEYREF_<foldername>.csv` at root of `anonymized/`.
+- If name-checking is enabled: anonymized filenames are used inside `anonymized/`;
+  original folder and filenames are untouched.
+- Folder names inside `anonymized/`: if name-checking detects PII in a folder name,
+  use the anonymized folder name in the `anonymized/` mirror; original folder untouched.
+- `anonymized/` itself is never processed recursively — skip it if it exists.
+
+### What to build
+
+**`UserSettings`**
+- Add `output_mode` field: `'prefix'` (default, existing behaviour) or `'subfolder'`
+- Persist and restore alongside existing settings
+
+**`FolderProcessor`**
+- Add `_subfolder_output_path(original_file: Path, chosen_folder: Path) -> Path` helper:
+  computes the mirror path inside `anonymized/`
+  e.g. `chosen/sub/file.docx` → `chosen/anonymized/sub/file.docx`
+- When `output_mode == 'subfolder'`: write output to the mirror path instead of
+  prefixing in place; create intermediate directories as needed
+- When `output_mode == 'prefix'`: no change to existing logic
+
+**`FileProcessor`**
+- When `output_mode == 'subfolder'`: output filename = original filename (no `ANON_`
+  or `CHECKED_` prefix); the path alone distinguishes it
+- When `output_mode == 'prefix'`: existing prefix logic unchanged
+
+**Frontend — Document Mode**
+- Add output mode toggle (radio buttons or select) alongside the existing folder path input:
+  `⊙ Prefix files (default)   ○ Subfolder (anonymized/)`
+- Toggle feeds into the POST body; backend reads and passes to `FolderProcessor`
+
+**Key reference (folder mode)**
+- When subfolder mode: save `KEYREF_<foldername>.csv` inside `anonymized/`
+  (not alongside originals)
+
+### ✅ Complete when
+
+- Processing a folder in subfolder mode produces `anonymized/` with a full mirrored
+  structure
+- Files inside have no `ANON_`/`CHECKED_` prefix
+- Files without PII are present in `anonymized/` as clean copies
+- `KEYREF_` (when enabled) is at root of `anonymized/`
+- Original folder is completely untouched
+- UI toggle persists via `UserSettings` and is restored on next launch
+- Prefix mode still works and all existing tests pass
+
+---
+
 ## Release — v1.1.0
 
-Once all six steps are complete and tested:
+Once all seven steps are complete and tested:
 
 1. Bump `__version__` in `app/__init__.py`
 2. Update version badge in `README.md`

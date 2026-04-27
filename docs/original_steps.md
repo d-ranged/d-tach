@@ -3,7 +3,7 @@
 This guide defines the build order for d-tach. Each step is a testable
 milestone. Complete and verify each step before moving to the next.
 
-If you hit a blocker on a tool or approach, consult `docs/PROJECT_GUIDE.md`
+If you hit a blocker on a tool or approach, consult `docs/project_guide.md`
 for documented alternatives before changing direction.
 
 ---
@@ -33,7 +33,7 @@ structure and all planning documents committed. No application code yet.
    - `CLAUDE.md`
    - `.gitignore`
    - `.claude/settings.json`
-   - `docs/PROJECT_GUIDE.md`
+   - `docs/project_guide.md`
    - `docs/STEP_GUIDE.md` (this file)
 
 4. Create the folder structure:
@@ -409,7 +409,7 @@ via pymupdf.
 ### ⚠️ Decision point
 If pymupdf redaction does not preserve layout acceptably, the fallback is
 to output an anonymized DOCX or plain text file alongside the original PDF
-with a clear note in the UI. Record the decision taken in `docs/PROJECT_GUIDE.md`
+with a clear note in the UI. Record the decision taken in `docs/project_guide.md`
 under Open Questions.
 
 ### ✅ Step 8 is complete when

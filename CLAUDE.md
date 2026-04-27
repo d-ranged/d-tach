@@ -32,17 +32,17 @@ Workflow per step:
 4. When step is complete, Claude confirms what to do: user creates the PR via Codeberg GUI with description `Closes #N`
 5. User tests, confirms working, merges via GUI, then deletes the feature branch
 
-**Exception — documentation-only changes:** Updates to `docs/ORIGINAL_STEPS.md`,
-`docs/PROJECT_GUIDE.md`, or `CLAUDE.md` that contain no code changes may be
+**Exception — documentation-only changes:** Updates to `docs/original_steps.md`,
+`docs/project_guide.md`, or `CLAUDE.md` that contain no code changes may be
 committed directly to `main` without a feature branch.
 
 ## Project Documentation
 
 Before coding any feature, consult these files in order:
 
-- `docs/PROJECT_GUIDE.md` — full goals, MoSCoW requirements, PII categories,
+- `docs/project_guide.md` — full goals, MoSCoW requirements, PII categories,
   tool decisions
-- `docs/ORIGINAL_STEPS.md` — incremental build plan; always know which step you
+- `docs/original_steps.md` — incremental build plan; always know which step you
   are on before writing code
 - `CLAUDE.md` — this file; coding conventions and permissions
 
@@ -246,8 +246,10 @@ d-tach/
 │   ├── test_file_processor.py
 │   └── test_key_reference_store.py
 ├── docs/
-│   ├── PROJECT_GUIDE.md
-│   └── ORIGINAL_STEPS.md
+│   ├── project_guide.md
+│   ├── original_steps.md
+│   ├── step_1.1.0.md
+│   └── roadmap.md
 ├── .claude/
 │   └── settings.json
 ├── .gitignore
