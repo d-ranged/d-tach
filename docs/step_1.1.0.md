@@ -15,7 +15,8 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 1 | Standardise Placeholder Format to [PLACEHOLDER] | ✅ Done — PR #28 merged |
 | 2 | Branding and Theme System | ✅ Done — PR #30 merged |
 | 3 | Fix PDF Replacement Text Font Size | ❌ Dropped — failed, reverted |
-| 4 | Excel File Anonymization | **← Next** |
+| 4a | Excel File Anonymization (NER pass) | ✅ Done — issue #32 merged |
+| 4b | Excel Column-Based Anonymization + Advanced Settings | **← Next** |
 | 5 | Key Reference Export Improvements | Pending |
 | 6 | Launcher and UX Polish | Pending |
 | 7 | Anonymized Subfolder Output Mode | Pending |
@@ -149,29 +150,139 @@ roadmap.md — "PDF in-place text replacement" section for future approach notes
 
 ---
 
-## Step 4 — Excel File Anonymization ← Next
+## Step 4a ✅ — Excel File Anonymization (NER pass)
 
-**Codeberg issue to create first:**
-`feature: Excel file (.xlsx) anonymization`
+**Codeberg issue:** #32 — merged
 
 **Goal:** `.xlsx` files processed the same way as DOCX — PII detected in cell
 string values, replaced with placeholders, output saved with `ANON_` or
 `CHECKED_` prefix. Formulas and formatting preserved.
 
-### What to build
+### What was built
 - `openpyxl>=3.1` added to `requirements.txt`
-- `DocumentProcessor` — add `load_xlsx`, `save_xlsx_with_replacements`,
-  `save_xlsx_copy` methods (same pattern as DOCX and PDF)
-- `FileProcessor` — add `.xlsx` to the list of supported extensions
-- `FolderProcessor` — add `.xlsx` to recursive file discovery
-- Tests covering: cell with name anonymized, cell with no PII unchanged,
-  formula cell untouched, formatting preserved
+- `DocumentProcessor` — `load_xlsx`, `save_xlsx_with_replacements`, `save_xlsx_copy`
+- `FileProcessor` — `_process_xlsx`, `.xlsx` in `SUPPORTED_EXTENSIONS`
+- `FolderProcessor` — `.xlsx` in `SUPPORTED_EXTENSIONS`
+- 19 tests covering NER replacement, formula/numeric cells untouched, formatting
+  preserved, ANON_/CHECKED_ prefix, keyref, folder batch discovery
+
+### Limitation identified after merge
+The NER pass only processes string cells. Numeric cell values (e.g. student
+numbers stored as integers) are invisible to it. Column-based anonymization
+is required to cover these — see Step 4b below.
+
+---
+
+## Step 4b — Excel Column-Based Anonymization ← Next
+
+**Codeberg issue to create first:**
+`feature: Excel column-based anonymization and advanced settings panel`
+
+**Goal:** Allow users to specify column names whose entire contents should be
+anonymized, regardless of cell type (string or numeric). A collapsible
+"Advanced settings" panel in Document Mode exposes these Excel-specific
+controls without cluttering the main UI.
+
+### Why this is needed
+
+The NER pass in Step 4a operates on string cell text. Numeric identifiers
+(e.g. a student number column of integers) are completely invisible to it.
+Column-based anonymization solves this: "every value in this column is PII —
+replace it all, regardless of type or content."
+
+### Design decisions
+
+**Two replacement strategies, combinable:**
+
+| Mode | Mechanism | What it targets |
+|---|---|---|
+| Generic NER (existing) | Presidio on string cell text | Names, emails, phones in text cells |
+| Column-based (new) | Whole-cell exact match by header | Any cell type in named columns |
+
+Both can be active simultaneously. Column-based runs first; NER then runs on
+the remaining cells. This prevents conflicting placeholders for the same value.
+
+**Placeholder format for column-based:**
+Column name uppercased as entity type label.
+- `stnum` column → `[STNUM_1]`, `[STNUM_2]` …
+- `email` column → `[EMAIL_1]`, `[EMAIL_2]` …
+- Same value in the same column → same placeholder (consistent mapping).
+- Counter resets per column.
+
+**Header row assumption:**
+Column detection reads row 1 as headers (case-insensitive match). If a
+specified column name is not found in any sheet's row 1, that column is
+skipped and a warning is added to the `FileResult`. No crash. The UI
+carries a permanent hint: "Column matching requires headers in row 1."
+
+**No pandas required.** openpyxl column iteration is sufficient.
+
+### What to build
+
+**`FileResult`**
+- Add `warnings: list[str]` field (optional, default empty list) for
+  non-fatal issues such as "column 'stnum' not found in headers".
+
+**`ProcessingSettings`**
+- Add `excel_generic_enabled: bool = True` — controls whether NER runs
+  on string cells in `.xlsx` files.
+- Add `excel_column_names: list[str] = field(default_factory=list)` —
+  column headers to anonymize by exact column match.
+
+**`DocumentProcessor`**
+- Add `extract_column_replacements(wb, column_names) -> tuple[dict[str, str], list[str]]`:
+  reads row 1 of each sheet as headers; for each matching column collects
+  all unique non-formula values; assigns placeholders `[COLNAME_N]`;
+  returns `(exact_replacements, missing_column_names)`.
+- Update `save_xlsx_with_replacements` signature to accept an optional
+  `exact_replacements: dict[str, str] | None = None` parameter. A second
+  internal pass applies these as whole-cell replacements (any cell type,
+  specified columns only, formula cells skipped).
+
+**`FileProcessor._process_xlsx`** — updated flow:
+1. If `excel_column_names` non-empty: call `extract_column_replacements`,
+   collect `exact_replacements` and `missing` warnings.
+2. If `excel_generic_enabled`: extract string cell text, run NER, collect
+   `substring_replacements` (same as 4a).
+3. If both are empty / produce nothing: return clean result.
+4. Save with `save_xlsx_with_replacements(wb, dest, substring_replacements,
+   exact_replacements)`.
+5. Build combined map for key reference (merge both dicts).
+6. Attach any `missing` warnings to `FileResult.warnings`.
+
+**`UserSettings`**
+- Persist `excel_generic_enabled` (bool) and `excel_column_names`
+  (comma-joined string, split on load).
+
+**Frontend — Document Mode**
+- Add a `<details>`/`<summary>` collapsible "Advanced settings" section
+  below the main settings bar. No JavaScript needed.
+- Inside: an "Excel" subsection containing:
+  - Checkbox: "Generic anonymization (NER)" — checked by default.
+  - Text input: "Column names to anonymize" — placeholder text
+    `stnum, email, phone`.
+  - Help note: "Comma-separated. Only works when row 1 contains column
+    headers. Does not affect other file types."
+- Both controls POST with the form and are restored from `UserSettings`
+  on next launch.
+- If any `FileResult.warnings` are present, surface them in the
+  completion summary alongside the file counts.
+
+**`document_routes.py`**
+- Read `excel_generic_enabled` and `excel_column_names` from the POST body.
+- Pass to `ProcessingSettings`.
 
 ### ✅ Complete when
-- A `.xlsx` file with a name in a cell produces `ANON_` output with placeholder
-- Formula cells are not touched
-- Cell formatting is preserved
-- Folder batch processing includes `.xlsx` files
+- A `.xlsx` file where student numbers are integers in a `stnum` column
+  produces `ANON_` output with `[STNUM_N]` placeholders in that column.
+- Other columns not in the specified list are unaffected.
+- Generic NER can be toggled off independently.
+- Both modes active simultaneously: numeric column replaced AND names in
+  text cells replaced.
+- Warning shown in completion summary if a specified column name is not
+  found in row 1 headers.
+- Advanced settings panel collapses correctly and settings persist on reload.
+- All existing 122 tests still pass.
 
 ---
 
