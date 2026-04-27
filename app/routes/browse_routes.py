@@ -10,6 +10,14 @@ bp = Blueprint("browse", __name__)
 
 _TCL_FIXED = False
 
+# Check at import time so browse_status() can respond without attempting a dialog.
+try:
+    import tkinter as _tk_probe  # noqa: F401
+    _TKINTER_AVAILABLE = True
+    del _tk_probe
+except ImportError:
+    _TKINTER_AVAILABLE = False
+
 
 def _ensure_tcl_available() -> None:
     """Set TCL_LIBRARY for pyenv-win installations where Tcl path isn't auto-detected.
@@ -68,13 +76,28 @@ def _open_folder_dialog() -> str:
     return path or ""
 
 
+@bp.route("/browse/status")
+def browse_status():
+    """Return whether native file/folder dialogs are available.
+
+    Returns JSON: {"available": true} or {"available": false}.
+    The frontend uses this on page load to show or hide the Browse buttons.
+    """
+    return jsonify({"available": _TKINTER_AVAILABLE})
+
+
 @bp.route("/browse/file")
 def browse_file():
     """Open a native file picker dialog and return the selected file path.
 
     Returns JSON: {"path": "<selected path>"} or {"path": ""} if cancelled.
-    Returns {"error": "..."} if tkinter is unavailable.
+    Returns {"error": "...", "tkinter_unavailable": true} if tkinter is not installed.
     """
+    if not _TKINTER_AVAILABLE:
+        return jsonify({
+            "error": "Browse buttons require tkinter, which is not installed on this system.",
+            "tkinter_unavailable": True,
+        })
     try:
         path = _open_file_dialog()
         return jsonify({"path": path})
@@ -88,8 +111,13 @@ def browse_folder():
     """Open a native folder picker dialog and return the selected folder path.
 
     Returns JSON: {"path": "<selected path>"} or {"path": ""} if cancelled.
-    Returns {"error": "..."} if tkinter is unavailable.
+    Returns {"error": "...", "tkinter_unavailable": true} if tkinter is not installed.
     """
+    if not _TKINTER_AVAILABLE:
+        return jsonify({
+            "error": "Browse buttons require tkinter, which is not installed on this system.",
+            "tkinter_unavailable": True,
+        })
     try:
         path = _open_folder_dialog()
         return jsonify({"path": path})

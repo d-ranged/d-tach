@@ -21,11 +21,13 @@ const summaryArea       = document.getElementById("summary-area");
 // ---- File tab ----
 const filePathInput     = document.getElementById("file-path");
 const browseFileBtn     = document.getElementById("browse-file-btn");
+const browseFileNote    = document.getElementById("browse-file-note");
 const processFileBtn    = document.getElementById("process-file-btn");
 
 // ---- Folder tab ----
 const folderPathInput   = document.getElementById("folder-path");
 const browseFolderBtn   = document.getElementById("browse-folder-btn");
+const browseFolderNote  = document.getElementById("browse-folder-note");
 const processFolderBtn  = document.getElementById("process-folder-btn");
 const cancelBtn         = document.getElementById("cancel-btn");
 
@@ -37,6 +39,27 @@ const panelFolder       = document.getElementById("panel-folder");
 
 let selectedLanguage = INITIAL_LANGUAGE;
 let activeEventSource = null;
+
+// ---------------------------------------------------------------------------
+// tkinter availability check (runs once on page load)
+// ---------------------------------------------------------------------------
+
+(async function checkBrowseAvailable() {
+    try {
+        const resp = await fetch("/browse/status");
+        const data = await resp.json();
+        if (!data.available) disableBrowseButtons();
+    } catch {
+        // Status check failed — leave buttons visible; will fail gracefully on click
+    }
+})();
+
+function disableBrowseButtons() {
+    browseFileBtn.hidden = true;
+    browseFileNote.hidden = false;
+    browseFolderBtn.hidden = true;
+    browseFolderNote.hidden = false;
+}
 
 // ---------------------------------------------------------------------------
 // Tab switching
@@ -60,7 +83,9 @@ browseFileBtn.addEventListener("click", async () => {
     try {
         const response = await fetch("/browse/file");
         const data = await response.json();
-        if (data.error) {
+        if (data.tkinter_unavailable) {
+            disableBrowseButtons();
+        } else if (data.error) {
             setProgress("Could not open file browser: " + data.error, true);
         } else if (data.path) {
             filePathInput.value = data.path;
@@ -77,7 +102,9 @@ browseFolderBtn.addEventListener("click", async () => {
     try {
         const response = await fetch("/browse/folder");
         const data = await response.json();
-        if (data.error) {
+        if (data.tkinter_unavailable) {
+            disableBrowseButtons();
+        } else if (data.error) {
             setProgress("Could not open folder browser: " + data.error, true);
         } else if (data.path) {
             folderPathInput.value = data.path;

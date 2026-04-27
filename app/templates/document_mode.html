@@ -118,6 +118,7 @@
                 placeholder="Paste or browse to a DOCX or PDF file"
             >
             <button class="btn btn-secondary" id="browse-file-btn">Browse&hellip;</button>
+            <span class="browse-unavailable-note muted" id="browse-file-note" hidden>Browse unavailable — tkinter not installed</span>
             <button class="btn btn-primary" id="process-file-btn">Process File</button>
         </div>
     </div>
@@ -131,6 +132,7 @@
                 placeholder="Paste or browse to a folder"
             >
             <button class="btn btn-secondary" id="browse-folder-btn">Browse&hellip;</button>
+            <span class="browse-unavailable-note muted" id="browse-folder-note" hidden>Browse unavailable — tkinter not installed</span>
             <button class="btn btn-primary" id="process-folder-btn">Process Folder</button>
             <button class="btn btn-secondary" id="cancel-btn" hidden>Cancel</button>
         </div>

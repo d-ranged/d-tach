@@ -56,15 +56,18 @@ A browser window will open at `http://localhost:5000`. Keep the terminal window 
 ### Installation and first run (macOS / Linux)
 
 1. Click **[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
-2. Open Terminal, navigate to the extracted folder, and make the launcher executable (one time only):
+2. Open Terminal, navigate to the extracted folder, and run:
    ```bash
-   chmod +x launch.sh
-   ./launch.sh
+   bash launch.sh
    ```
 
-On first run, the launcher checks your Python version, then installs all dependencies automatically. Subsequent runs start immediately.
+On first run, the launcher checks your Python version, installs all dependencies automatically, and opens the app in your browser. Subsequent runs start immediately.
 
-> **Python not installed or too old?** The launcher will display a clear error message. Install Python 3.11+ and run `./launch.sh` again.
+> **Python not installed or too old?** The launcher will display a clear error message. Install Python 3.11+ and run `bash launch.sh` again.
+
+> **Optional:** Run `chmod +x launch.sh` once if you prefer to launch with `./launch.sh` or by double-clicking the file in future.
+
+> **macOS — Browse buttons not working?** If the Browse buttons are disabled, tkinter is not installed. Run `brew install python-tk@3.x` (replace `3.x` with your Python version, e.g. `python-tk@3.11`) and restart the launcher.
 
 ### Using the application
 
