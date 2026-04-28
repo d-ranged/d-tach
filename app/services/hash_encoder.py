@@ -1,11 +1,28 @@
 import hmac
 import hashlib
 import string
-from typing import Final
+from typing import Final, Optional
 
 _ALPHANUM: Final[str] = string.digits + string.ascii_uppercase  # 36 characters: 0-9A-Z
 _HASH_LENGTH: Final[int] = 4
 _PREFIX_LENGTH: Final[int] = 2
+
+# Shorter labels used in hashed placeholders for non-name entity types.
+# Keeps placeholder length reasonable in output documents.
+_ENTITY_LABELS: Final[dict[str, str]] = {
+    "EMAIL_ADDRESS": "EMAIL",
+    "PHONE_NUMBER":  "PHONE",
+    "LOCATION":      "LOC",
+    "URL":           "URL",
+    "IBAN_CODE":     "IBAN",
+    "NL_BSN":        "BSN",
+    "NUMERIC_ID":    "ID",
+}
+
+# Entity types never hashed even when hashing is on.
+# DATE_TIME: dates are not person identifiers; hashing them is meaningless.
+# NRP: nationality/religion/politics — not a unique person identifier.
+UNHASHABLE_ENTITIES: Final[frozenset[str]] = frozenset({"DATE_TIME", "NRP"})
 
 
 def _to_alphanum(digest_int: int, length: int) -> str:
@@ -18,15 +35,18 @@ def _to_alphanum(digest_int: int, length: int) -> str:
 
 
 class HashEncoder:
-    """Produces consistent pseudonymous hashes for names using a user-supplied secret.
+    """Produces consistent pseudonymous hashes using a user-supplied secret.
 
-    First names are encoded as ``{first2}-{hash4}`` (e.g. ``Craig`` → ``Cr-A2T5``).
-    Last names are encoded as ``{hash4}`` (e.g. ``Bradley`` → ``HY23``).
+    Name encoding (PERSON entities):
+      First names → ``{first2}-{hash4}``  e.g. ``Craig`` → ``Cr-A2T5``
+      Last names  → ``{hash4}``           e.g. ``Bradley`` → ``HY23``
 
-    The same name and secret always produce the same output across sessions.
-    First and last names are hashed independently so a first name appearing
-    alone in a file or folder name resolves to the same value as when it
-    appears as part of a full name.
+    Non-name entity encoding (emails, phones, IDs, etc.):
+      ``[LABEL_XXXX]`` where LABEL is a short form of the entity type and
+      XXXX is a 4-char HMAC hash of ``entity_type:value``.
+      e.g. ``sarah@example.com`` → ``[EMAIL_A2B3]``
+
+    The same value and secret always produce the same output across sessions.
     """
 
     def __init__(self, secret: str) -> None:
@@ -66,6 +86,36 @@ class HashEncoder:
         first = self.encode_first_name(parts[0])
         last = self.encode_last_name(" ".join(parts[1:]))
         return f"{first} {last}"
+
+    def encode_value(self, entity_type: str, value: str) -> str:
+        """Return a 4-char hash for a non-name PII value.
+
+        The entity_type is included in the HMAC input so the same string value
+        in two different entity types produces different outputs. This prevents
+        e.g. a student number and an email that happen to share a numeric string
+        from collapsing to the same placeholder.
+        """
+        return self._hash(f"{entity_type}:{value}")
+
+    def encode_entity(self, entity_type: str, value: str) -> Optional[str]:
+        """Return the full hashed placeholder for a non-name PII entity.
+
+        Returns ``None`` for entity types that should not be hashed (see
+        UNHASHABLE_ENTITIES). The caller should fall back to the sequential
+        placeholder in that case.
+
+        For PERSON entities use encode_full_name instead.
+
+        Examples::
+
+            encode_entity("EMAIL_ADDRESS", "foo@bar.com") → "[EMAIL_A2B3]"
+            encode_entity("NL_BSN", "123456782")          → "[BSN_C4D1]"
+            encode_entity("DATE_TIME", "2025-09-01")      → None
+        """
+        if entity_type in UNHASHABLE_ENTITIES:
+            return None
+        label = _ENTITY_LABELS.get(entity_type, entity_type)
+        return f"[{label}_{self.encode_value(entity_type, value)}]"
 
     def _hash(self, value: str) -> str:
         """Return a deterministic four-character uppercase alphanumeric string.

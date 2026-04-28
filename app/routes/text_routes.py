@@ -3,7 +3,7 @@ import re
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app.services.anonymizer import ENTITIES, NUMERIC_ID_ENTITY, build_numeric_id_recognizer
-from app.services.hash_encoder import HashEncoder
+from app.services.hash_encoder import HashEncoder, UNHASHABLE_ENTITIES
 from app.services.pattern_config import PatternConfig
 
 bp = Blueprint("text", __name__)
@@ -90,8 +90,14 @@ def anonymize():
     if hashing_enabled:
         encoder = HashEncoder(secret)
         for entity in result.entities:
-            if entity.entity_type == "PERSON" and entity.placeholder not in hash_replacements:
+            if entity.placeholder in hash_replacements:
+                continue
+            if entity.entity_type == "PERSON":
                 hash_replacements[entity.placeholder] = f"[{encoder.encode_full_name(entity.original_text)}]"
+            elif entity.entity_type not in UNHASHABLE_ENTITIES:
+                hashed = encoder.encode_entity(entity.entity_type, entity.original_text)
+                if hashed:
+                    hash_replacements[entity.placeholder] = hashed
         if hash_replacements:
             pattern = re.compile(
                 "|".join(
