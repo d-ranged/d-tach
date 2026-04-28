@@ -22,11 +22,12 @@ ENTITIES: Final[list[str]] = [
     "EMAIL_ADDRESS",
     "PHONE_NUMBER",
     "LOCATION",
-    "URL",
     "DATE_TIME",
     "IBAN_CODE",
     "NL_BSN",
 ]
+
+URL_ENTITY: Final[str] = "URL"
 
 NUMERIC_ID_ENTITY: Final[str] = "NUMERIC_ID"
 

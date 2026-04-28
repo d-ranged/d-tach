@@ -10,6 +10,7 @@ const datesToggle            = document.getElementById("dates-toggle");
 const numericIdToggle        = document.getElementById("numeric-id-toggle");
 const digitCountInput        = document.getElementById("digit-count");
 const langSelector           = document.getElementById("lang-selector");
+const urlsToggle             = document.getElementById("urls-toggle");
 const excelNerToggle         = document.getElementById("excel-ner-toggle");
 const excelColumnsInput      = document.getElementById("excel-columns");
 const progressArea      = document.getElementById("progress-area");
@@ -164,6 +165,7 @@ async function runProcessFile() {
                 key_reference_enabled: keyrefToggle.checked,
                 check_file_names: namesToggle.checked,
                 anonymize_dates: datesToggle.checked,
+                anonymize_urls: urlsToggle.checked,
                 numeric_id_enabled: numericIdToggle.checked,
                 digit_count: parseInt(digitCountInput.value, 10) || 7,
                 excel_generic_enabled: excelNerToggle.checked,
@@ -200,7 +202,7 @@ function renderFileSummary(data) {
         lines.push(`\u2718 Error: ${data.error_message}`);
     }
     if (data.warnings && data.warnings.length > 0) {
-        data.warnings.forEach(w => lines.push(`  \u26a0 ${w}`));
+        data.warnings.forEach(w => lines.push(`  \u2139 ${w}`));
     }
     setSummary(lines.join("\n"), data.status === "error" || data.status === "skipped");
 }
@@ -239,6 +241,7 @@ function runProcessFolder() {
         key_reference_enabled: keyrefToggle.checked,
         check_file_names: namesToggle.checked,
         anonymize_dates: datesToggle.checked,
+        anonymize_urls: urlsToggle.checked,
         numeric_id_enabled: numericIdToggle.checked,
         digit_count: parseInt(digitCountInput.value, 10) || 7,
         excel_generic_enabled: excelNerToggle.checked,
@@ -307,8 +310,8 @@ function appendLogEntry(data) {
     if (data.warnings && data.warnings.length > 0) {
         data.warnings.forEach(w => {
             const wLine = document.createElement("div");
-            wLine.className = "log-entry log-warning";
-            wLine.textContent = `  ⚠ ${w}`;
+            wLine.className = "log-entry log-info";
+            wLine.textContent = `  ℹ ${w}`;
             progressLog.appendChild(wLine);
         });
     }

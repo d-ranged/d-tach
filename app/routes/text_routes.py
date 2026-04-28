@@ -2,7 +2,7 @@ import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from app.services.anonymizer import ENTITIES, NUMERIC_ID_ENTITY, build_numeric_id_recognizer
+from app.services.anonymizer import ENTITIES, NUMERIC_ID_ENTITY, URL_ENTITY, build_numeric_id_recognizer
 from app.services.hash_encoder import HashEncoder, UNHASHABLE_ENTITIES
 from app.services.pattern_config import PatternConfig
 
@@ -11,11 +11,22 @@ bp = Blueprint("text", __name__)
 _SUPPORTED_LANGUAGES = ("en", "nl")
 
 
-def _build_entity_list(anonymize_dates: bool, numeric_id_enabled: bool = False) -> list[str]:
-    """Return entity list with DATE_TIME and NUMERIC_ID included only when opted in."""
+def _build_entity_list(
+    anonymize_dates: bool,
+    numeric_id_enabled: bool = False,
+    anonymize_urls: bool = False,
+) -> list[str]:
+    """Return entity list with opt-in entities included only when requested.
+
+    DATE_TIME: excluded by default — ubiquitous in academic documents.
+    URL: excluded by default — overlaps with EMAIL_ADDRESS, causing garbled output.
+    NUMERIC_ID: included only when numeric ID detection is enabled.
+    """
     result = list(ENTITIES) if anonymize_dates else [e for e in ENTITIES if e != "DATE_TIME"]
     if numeric_id_enabled:
         result.append(NUMERIC_ID_ENTITY)
+    if anonymize_urls:
+        result.append(URL_ENTITY)
     return result
 
 
@@ -58,6 +69,7 @@ def anonymize():
     secret: str = data.get("secret", "")
     key_reference_enabled: bool = bool(data.get("key_reference_enabled", False))
     anonymize_dates: bool = bool(data.get("anonymize_dates", False))
+    anonymize_urls: bool = bool(data.get("anonymize_urls", False))
     numeric_id_enabled: bool = bool(data.get("numeric_id_enabled", False))
     try:
         digit_count = int(data.get("digit_count", 7))
@@ -73,7 +85,7 @@ def anonymize():
     if hashing_enabled and not secret.strip():
         return jsonify({"error": "Enter a secret phrase to use hashing."}), 400
 
-    entities_to_detect = _build_entity_list(anonymize_dates, numeric_id_enabled)
+    entities_to_detect = _build_entity_list(anonymize_dates, numeric_id_enabled, anonymize_urls)
 
     ad_hoc = []
     if numeric_id_enabled:
@@ -121,6 +133,7 @@ def anonymize():
     settings.language = language
     settings.hashing_enabled = hashing_enabled
     settings.anonymize_dates = anonymize_dates
+    settings.anonymize_urls = anonymize_urls
     if hashing_enabled and secret.strip():
         settings.hashing_secret = secret
     settings.pattern_config = PatternConfig(
@@ -155,5 +168,6 @@ def _render_text_mode():
         hashing_enabled=settings.hashing_enabled,
         hashing_secret=settings.hashing_secret,
         anonymize_dates=settings.anonymize_dates,
+        anonymize_urls=settings.anonymize_urls,
         pattern_config=settings.pattern_config,
     )

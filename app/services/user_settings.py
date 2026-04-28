@@ -14,6 +14,7 @@ _DEFAULTS: Final[dict] = {
     "hashing_secret": "",
     "language": "en",
     "anonymize_dates": False,
+    "anonymize_urls": False,
     "pattern_config": {
         "digit_count": 7,
         "check_file_names": False,
@@ -80,6 +81,15 @@ class UserSettings:
     @anonymize_dates.setter
     def anonymize_dates(self, value: bool) -> None:
         self._data["anonymize_dates"] = bool(value)
+
+    @property
+    def anonymize_urls(self) -> bool:
+        """Whether URL entities should be anonymized (off by default — overlaps with emails)."""
+        return self._data.get("anonymize_urls", False)
+
+    @anonymize_urls.setter
+    def anonymize_urls(self, value: bool) -> None:
+        self._data["anonymize_urls"] = bool(value)
 
     @property
     def pattern_config(self) -> PatternConfig:
@@ -174,6 +184,8 @@ class UserSettings:
             merged["language"] = raw["language"]
         if isinstance(raw.get("anonymize_dates"), bool):
             merged["anonymize_dates"] = raw["anonymize_dates"]
+        if isinstance(raw.get("anonymize_urls"), bool):
+            merged["anonymize_urls"] = raw["anonymize_urls"]
         if isinstance(raw.get("pattern_config"), dict):
             pc = raw["pattern_config"]
             if isinstance(pc.get("digit_count"), int):

@@ -722,6 +722,11 @@ body {
     font-style: italic;
 }
 
+.log-info {
+    color: #888;
+    font-style: italic;
+}
+
 /* ---- Output mode radio row ---- */
 
 .output-mode-row {

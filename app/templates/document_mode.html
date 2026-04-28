@@ -76,9 +76,18 @@
     </div>
 </section>
 
-<details class="advanced-settings" {% if not excel_generic_enabled or excel_column_names %}open{% endif %}>
+<details class="advanced-settings" {% if not excel_generic_enabled or excel_column_names or anonymize_urls %}open{% endif %}>
     <summary class="advanced-settings-toggle">Advanced settings</summary>
     <div class="advanced-settings-body">
+        <div class="advanced-section-heading">Detection</div>
+        <div class="advanced-setting-row">
+            <label class="toggle">
+                <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
+                <span class="toggle-track"></span>
+                <span class="setting-label">Detect URLs</span>
+            </label>
+        </div>
+        <p class="advanced-hint">Off by default. When on, web addresses are anonymized. May cause false matches on email addresses when enabled simultaneously.</p>
         <div class="advanced-section-heading">Excel (.xlsx)</div>
         <div class="advanced-setting-row">
             <label class="toggle">
@@ -115,7 +124,7 @@
                 type="text"
                 class="folder-path-display"
                 id="file-path"
-                placeholder="Paste or browse to a DOCX or PDF file"
+                placeholder="Paste or browse to a DOCX, PDF, MD, or XLSX file"
             >
             <button class="btn btn-secondary" id="browse-file-btn">Browse&hellip;</button>
             <span class="browse-unavailable-note muted" id="browse-file-note" hidden>Browse unavailable — tkinter not installed</span>

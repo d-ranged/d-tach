@@ -21,6 +21,14 @@
 
     <div class="setting-group">
         <label class="toggle">
+            <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Detect URLs</span>
+        </label>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
             <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
             <span class="toggle-track"></span>
             <span class="setting-label">Numeric ID</span>

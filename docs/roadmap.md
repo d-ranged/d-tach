@@ -158,6 +158,31 @@ API appears, re-evaluate.
 
 ---
 
+## Deferred from v1.1.0 Step 9 acceptance testing
+
+These items were observed during the Step 9 test run but are not blocking release.
+They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
+
+- **No overwrite warning on repeated folder run**
+  When folder processing is run twice against the same folder, existing output files
+  (ANON_*, CHECKED_*, or the `anonymized/` subfolder) are silently overwritten.
+  The originals are never at risk, so this is low severity. A future improvement
+  could detect existing output and prompt or warn before proceeding.
+
+- **Settings bar wrapping in Document Mode**
+  When many toggles are active simultaneously (key reference, check names, hashing,
+  dates, Numeric ID) the top settings bar can wrap on standard screen widths,
+  reducing readability. The URL toggle has been placed in Advanced Settings to reduce
+  this, but further consolidation may be worthwhile — e.g. grouping detection options
+  (dates, numeric ID) into a single collapsible area.
+
+- **macOS acceptance test**
+  The Step 9 macOS test (launch.sh, tkinter fallback, browser auto-open) was skipped
+  because no Mac was available. A colleague has been asked to run through the test.
+  Result to be added to the Step 9 test record before marking v1.1.0 as fully accepted.
+
+---
+
 ## Lower priority
 
 - **Multi-language architecture — language selectable at install, addable post-install**
