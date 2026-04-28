@@ -20,8 +20,8 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 5 | Key Reference Export Improvements | ✅ Done — issue #36 merged |
 | 6 | Launcher and UX Polish | ✅ Done — issue #38 merged |
 | 7 | Anonymized Subfolder Output Mode | ✅ Done — issue #40 merged |
-| 8 | Consistent Hashing for All Entity Types | **← Next** |
-| 9 | Acceptance Testing — all features | Pending |
+| 8 | Consistent Hashing for All Entity Types | ✅ Done — issue #42 merged |
+| 9 | Acceptance Testing — all features | 🔄 In progress — issue #44 |
 
 ---
 
@@ -459,7 +459,7 @@ folder/
 
 ---
 
-## Step 8 — Consistent Hashing for All Entity Types ← Next
+## Step 8 ✅ — Consistent Hashing for All Entity Types
 
 **Codeberg issue to create first:**
 `feature: consistent hashing for all entity types (not PERSON-only)`
@@ -568,10 +568,9 @@ counter. `542348` in a `stnum` column → `[STNUM_C4D1]` (deterministic).
 
 ---
 
-## Step 9 — Acceptance Testing
+## Step 9 🔄 — Acceptance Testing
 
-**Codeberg issue to create first:**
-`test: v1.1.0 acceptance testing — all features`
+**Codeberg issue:** #44 — in progress
 
 **Goal:** A structured manual test run covering every feature added or changed
 in v1.1.0. Performed after all build steps (1–8) are merged to main.
@@ -603,116 +602,125 @@ documents with realistic content.
 
 ---
 
-### 9a — Placeholder format (Step 1)
+### 9a — Placeholder format (Step 1) ✅
 
 Run Text Mode with a name and email in the input.
+Used `tests/fixtures/sample_with_pii.md` content pasted into Text Mode.
 
-| Check | Expected |
-|---|---|
-| Name placeholder | `[PERSON_1]` — bracketed, not bare `PERSON_1` |
-| Email placeholder | `[EMAIL_ADDRESS_1]` — bracketed |
-| Key reference table (when enabled) | Shows bracketed placeholders |
-| DOCX output | Bracketed placeholders in the output file |
-| PDF output | Bracketed placeholders in the output file |
+| Check | Expected | Result |
+|---|---|---|
+| Name placeholder | `[PERSON_1]` — bracketed, not bare `PERSON_1` | ✅ Pass |
+| Email placeholder | `[EMAIL_ADDRESS_1]` — bracketed | ✅ Pass |
+| Key reference table (when enabled) | Shows bracketed placeholders | ✅ Pass |
+| Date toggle (off by default, on when enabled) | DATE_TIME excluded/included correctly | ✅ Pass |
+| Numeric ID toggle + euro exclusion | Only plain digit sequences matched; €12345 ignored | ✅ Pass |
+| DOCX output | Bracketed placeholders in the output file | ✅ Pass (quick scan) |
+| PDF output | Bracketed placeholders in the output file | ✅ Pass (quick scan) |
 
----
-
-### 9b — Branding and theme (Step 2)
-
-| Check | Expected |
-|---|---|
-| Logo visible in nav | d-ranged logo appears top-left |
-| Default theme | Dark green nav (T4 Dual Identity) |
-| Click logo once | Theme switches to muted blue (T1 Neutral Professional) |
-| Click logo again | Theme returns to T4 |
-| Reload page | Last selected theme is restored (localStorage) |
-| Both themes | No layout breaks, no illegible text in either theme |
+**Issue found:** URL entity is on by default and causes email addresses to be
+detected twice (once as EMAIL_ADDRESS, once as URL). This produces garbled
+output — surrounding text is consumed by the URL span, leaving truncated
+placeholder sequences. See [Bug #1](#bug-1-url-detection-on-by-default) below.
 
 ---
 
-### 9c — Excel NER anonymization (Step 4a)
+### 9b — Branding and theme (Step 2) ✅
 
-Using the test `.xlsx` with a name in a string cell:
-
-| Check | Expected |
-|---|---|
-| Generic NER on, no column names | `ANON_` output; name replaced in string cell |
-| Formula cell in output | Formula string unchanged (e.g. `=SUM(C1:C5)`) |
-| Numeric cells in output | Numbers unchanged |
-| Cell formatting | Bold/colour formatting preserved |
-| DOCX in same folder | Processed normally — Excel settings do not affect it |
-
----
-
-### 9d — Excel column-based anonymization (Step 4b)
-
-Using the test `.xlsx` with a `stnum` integer column:
-
-| Check | Expected |
-|---|---|
-| NER off, column `stnum` | `ANON_` output; integer values in stnum column replaced with `[STNUM_1]` etc. |
-| Other columns | Untouched |
-| NER on, column `stnum` | Both: stnum column replaced AND name in text cell replaced by NER |
-| NER off, no column names (both off) | File appears as "skipped" in summary; no output file created |
-| Column name not found in row 1 | Warning shown in completion summary |
-| Key reference enabled | Contains stnum → original value mapping |
-| Advanced settings panel | Collapses/expands correctly; settings restored on reload |
+| Check | Expected | Result |
+|---|---|---|
+| Logo visible in nav | d-ranged logo appears top-left | ✅ Pass |
+| Default theme | Dark green nav (T4 Dual Identity) | ✅ Pass |
+| Click logo once | Theme switches to muted blue (T1 Neutral Professional) | ✅ Pass |
+| Click logo again | Theme returns to T4 | ✅ Pass |
+| Reload page | Last selected theme is restored (localStorage) | ✅ Pass |
+| Both themes | No layout breaks, no illegible text in either theme | ✅ Pass |
 
 ---
 
-### 9e — Key reference export (Step 5)
+### 9c — Excel NER anonymization (Step 4a) ✅
 
-| Check | Expected |
-|---|---|
-| Folder mode, key reference on | Single consolidated `KEYREF_<folder>.csv` at folder root |
-| CSV opens cleanly in Excel | Two columns: Placeholder, Original value |
-| Text Mode export button | Clicking saves a file; in-UI table still visible |
-| Single-file key reference | Unchanged from pre-5 behaviour |
+Using the fixtures folder processed as a batch (all files, NER only):
 
----
-
-### 9f — Launcher and UX (Step 6)
-
-| Check | Expected |
-|---|---|
-| `launch.bat` on Windows | Browser opens automatically after Flask starts |
-| Flask not yet ready race | Browser waits for Flask to be ready (no 404 on open) |
-| README macOS instructions | `bash launch.sh` shown as primary command |
-
-*(macOS tkinter fallback can only be tested on macOS — note result or skip.)*
+| Check | Expected | Result |
+|---|---|---|
+| Generic NER on, no column names | `ANON_` output; name replaced in string cell | ✅ Pass |
+| Formula cell in output | Formula string unchanged | ✅ Pass |
+| Numeric cells in output | Numbers unchanged | ✅ Pass |
+| Cell formatting | Bold/colour formatting preserved | ✅ Pass |
+| DOCX in same folder | Processed normally — Excel settings do not affect it | ✅ Pass |
 
 ---
 
-### 9g — Anonymized subfolder output mode (Step 7)
+### 9d — Excel column-based anonymization (Step 4b) ✅
 
-Process the test folder with subfolder mode selected:
+Column names tested via fixtures folder (stnum column specified).
 
-| Check | Expected |
-|---|---|
-| `anonymized/` created at folder root | Yes |
-| Structure mirrors original | Subfolder present inside `anonymized/` |
-| Anonymized files | Original filename, no `ANON_` prefix |
-| Clean files | Present in `anonymized/` as unmodified copies |
-| Key reference (when on) | `KEYREF_folder.csv` at root of `anonymized/` |
-| Original folder | Completely untouched — no ANON_/CHECKED_ files |
-| UI toggle | Mode persists after reload |
-| Prefix mode still works | Switching back produces ANON_/CHECKED_ in place |
+| Check | Expected | Result |
+|---|---|---|
+| NER off, column `stnum` | Integer values in stnum column replaced | ✅ Pass |
+| Other columns | Untouched | ✅ Pass |
+| NER on, column `stnum` | Both modes active simultaneously | ✅ Pass |
+| NER off, no column names (both off) | File skipped in summary | Not explicitly tested |
+| Column name not found in row 1 | Warning shown in completion summary | ⚠️ Shown, but styled as error — see [Bug #3](#bug-3-column-not-found-shown-with-error-styling) |
+| Key reference enabled | Contains stnum → original value mapping | ✅ Pass |
+| Advanced settings panel | Collapses/expands correctly; settings restored on reload | ✅ Pass |
+| `.xlsx` selectable in single-file mode | File appears in browser file picker | ❌ Fail — see [Bug #2](#bug-2-xlsx-not-selectable-in-single-file-mode) |
 
 ---
 
-### 9h — Cross-feature combinations
+### 9e — Key reference export (Step 5) ✅
 
-These confirm features work together, not just in isolation:
+| Check | Expected | Result |
+|---|---|---|
+| Folder mode, key reference on | Single consolidated `KEYREF_<folder>.csv` at folder root | ✅ Pass |
+| CSV opens cleanly in Excel | Two columns: Placeholder, Original value | ✅ Pass |
+| Text Mode export button | Clicking saves a file; in-UI table still visible | ✅ Pass |
+| Single-file key reference | Unchanged from pre-5 behaviour | Not explicitly tested |
 
-| Combination | Expected |
-|---|---|
-| Hashing on + DOCX | Name encoded as `[Cr-A2T5 HY23]` or similar; consistent across files |
-| Hashing on + DOCX email | Email encoded as `[EMAIL_A2B3]` — deterministic, not `[EMAIL_ADDRESS_1]` |
-| Hashing on + Excel column-based stnum | `[STNUM_C4D1]` — same number, same placeholder every run |
-| Hashing off → all sequential | `[PERSON_1]`, `[EMAIL_ADDRESS_1]`, `[STNUM_1]` etc. — unchanged |
-| Key reference + folder mode + subfolder output | KEYREF CSV inside `anonymized/`, covers all files |
-| Mixed folder (DOCX + PDF + XLSX) — both Excel modes off | DOCX and PDF processed; XLSX skipped |
-| Mixed folder (DOCX + PDF + XLSX) — column mode only | DOCX and PDF use NER; XLSX uses column replacement only |
+---
+
+### 9f — Launcher and UX (Step 6) ⏭️ Partial
+
+| Check | Expected | Result |
+|---|---|---|
+| `launch.bat` on Windows | Browser opens automatically after Flask starts | ✅ Pass |
+| Flask not yet ready race | No 404 on open | Not tested |
+| README macOS instructions | `bash launch.sh` shown as primary command | Not tested |
+| macOS tkinter fallback | Graceful message and browse buttons disabled | ⏭️ Skipped — no Mac available; colleague will test |
+
+macOS testing is non-blocking for this step — it will not delay the release.
+
+---
+
+### 9g — Anonymized subfolder output mode (Step 7) ✅
+
+Tested via fixtures folder with subfolder output mode selected:
+
+| Check | Expected | Result |
+|---|---|---|
+| `anonymized/` created at folder root | Yes | ✅ Pass |
+| Structure mirrors original | Subfolder present inside `anonymized/` | ✅ Pass |
+| Anonymized files | Original filename, no `ANON_` prefix | ✅ Pass |
+| Clean files | Present in `anonymized/` as unmodified copies | ✅ Pass |
+| Key reference (when on) | `KEYREF_folder.csv` at root of `anonymized/` | ✅ Pass |
+| Original folder | Completely untouched — no ANON_/CHECKED_ files | ✅ Pass |
+| UI toggle | Mode persists after reload | Not explicitly verified |
+| Prefix mode still works | Switching back produces ANON_/CHECKED_ in place | ✅ Pass |
+
+---
+
+### 9h — Cross-feature combinations ✅ (with issues)
+
+| Combination | Expected | Result |
+|---|---|---|
+| Hashing on + DOCX | Name encoded correctly; consistent across files | ✅ Pass |
+| Hashing on + DOCX email | `[EMAIL_XXXX]` deterministic hash | ✅ Pass (but affected by Bug #1 — URL overlap) |
+| Hashing on + Excel column-based stnum | `[STNUM_XXXX]` — same number, same placeholder every run | ✅ Pass |
+| Hashing off → all sequential | `[PERSON_1]`, `[EMAIL_ADDRESS_1]` etc. unchanged | ✅ Pass |
+| Hashing no-secret message | Blocked with clear message when secret field empty | ✅ Pass |
+| Key reference + folder mode + subfolder output | KEYREF CSV inside `anonymized/`, covers all files | ✅ Pass |
+| Mixed folder (DOCX + PDF + XLSX) — both Excel modes off | XLSX skipped | Not explicitly tested |
+| Mixed folder column mode only | XLSX uses column replacement, DOCX/PDF use NER | Not explicitly tested |
 
 ---
 
@@ -723,13 +731,98 @@ pytest
 ```
 All tests pass. Record count. Any failure blocks release.
 
+*(To be confirmed before release — run on main after all Step 9 fixes are merged.)*
+
+---
+
+### Step 9 Findings
+
+Three bugs identified during the test run. Each needs a dedicated fix branch
+before Step 9 can be marked complete and v1.1.0 released.
+
+---
+
+#### Bug #1 — URL detection on by default
+
+**Observed:** Email addresses in text mode and document mode produce garbled
+output. Surrounding text is partially consumed by the URL entity span, leaving
+truncated placeholder strings (e.g. `[EMAIL_ADDRESS_1]ne: [PHONE_NUMBER_1]IC_ID_2]`
+instead of the expected `[EMAIL_ADDRESS_1] — [PHONE_NUMBER_1]`).
+
+**Root cause:** `URL` is in the default `ENTITIES` list in `anonymizer.py`.
+Presidio's URL recognizer also matches email addresses (they look like URLs
+to a domain-based heuristic). When both URL and EMAIL_ADDRESS are active for
+the same span, the overlapping entity detection produces unexpected results —
+some surrounding text is consumed as part of the URL span, and double
+replacements occur in edge cases where the two detectors disagree on span boundaries.
+
+**Fix:** Make URL detection opt-in rather than opt-out.
+- Remove `URL` from the default `ENTITIES` list in `anonymizer.py`
+- Add an `anonymize_urls: bool` parameter to `_build_entity_list()` in
+  `text_routes.py` and equivalent handling in `document_routes.py`/`FileProcessor`
+- Add a "Detect URLs" toggle to the UI — default off; logically placed in the
+  Advanced Settings panel in Document Mode and alongside Date/Numeric ID in Text Mode
+- Persist via `UserSettings`
+
+**Severity:** High — affects all text and document output when email addresses
+are present.
+
+---
+
+#### Bug #2 — .xlsx not selectable in single-file mode
+
+**Observed:** The file picker in single-file Document Mode does not show `.xlsx`
+files. The file input's `accept` attribute does not include the Excel MIME type
+or extension.
+
+**Fix:** Add `.xlsx` and the OOXML MIME type to the `accept` attribute on the
+file input in `document_mode.html`.
+
+```html
+accept=".docx,.pdf,.md,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+```
+
+**Severity:** Medium — single-file Excel processing is completely inaccessible
+via the UI (folder mode works because it discovers files by extension).
+
+---
+
+#### Bug #3 — Column-not-found shown with error styling
+
+**Observed:** When a specified column name is not found in any sheet's row 1
+headers, the progress/completion summary flags it with error-level colour and
+icon. This is a soft warning (expected and recoverable — the column name was
+simply absent), not a processing failure.
+
+**Fix:** Differentiate warning-level events from hard errors in the progress
+display. Column-not-found should render with an amber warning indicator, not
+a red error indicator. Requires a CSS class distinction and a corresponding
+change to how the summary row is rendered in `document_mode.js` or the
+relevant template section.
+
+**Severity:** Low — functionality is correct; styling is misleading.
+
+---
+
+#### Deferred observations (not blocking release)
+
+- **No overwrite warning on repeated folder run:** Re-running a folder quietly
+  overwrites existing output files. Acceptable for now; low risk given that
+  originals are never touched. Add to roadmap for a future release.
+- **Option wrapping in Document Mode top bar:** When many options are active
+  (key reference, check names, subfolder mode, etc.) the top settings bar
+  wraps awkwardly on standard screen widths. Consider moving less common
+  options into the Advanced Settings panel. Not blocking.
+- **macOS test:** Deferred to a colleague. Non-blocking for v1.1.0 release.
+
 ---
 
 ### ✅ Complete when
-- All table rows above show expected behaviour
-- `pytest` passes with no failures
-- Any issues found during 9a–9h are fixed on a dedicated branch and merged
-  before proceeding to the Release step
+- Bug #1 (URL default on) fixed and merged
+- Bug #2 (.xlsx file picker) fixed and merged
+- Bug #3 (column-not-found styling) fixed and merged
+- `pytest` passes with no failures on main after fixes
+- Any deferred items logged in `roadmap.md`
 
 ---
 
