@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.services.anonymizer import Anonymizer, AnonymizationResult, DutchBsnRecognizer
+from app.services.anonymizer import Anonymizer, AnonymizationResult, DutchBsnRecognizer, ENTITIES, URL_ENTITY
 from app.services.language_detector import LanguageDetector
 
 
@@ -151,3 +151,28 @@ class TestAnonymizer:
         assert isinstance(result, AnonymizationResult)
         assert isinstance(result.anonymized_text, str)
         assert isinstance(result.entities, list)
+
+
+class TestUrlEntityDefault:
+    def test_url_not_in_default_entities(self) -> None:
+        assert URL_ENTITY not in ENTITIES
+
+    def test_url_entity_constant_is_url(self) -> None:
+        assert URL_ENTITY == "URL"
+
+    def test_email_not_garbled_without_url_detection(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        """Email-only detection must not consume surrounding text when URL is off."""
+        text = "Email: alice@example.com Phone: +44 7911 123456"
+        result = anonymizer.anonymize(text, "en", entities=list(ENTITIES))
+        assert "[EMAIL_ADDRESS_1]" in result.anonymized_text
+        assert "Phone:" in result.anonymized_text
+
+    def test_url_detected_when_explicitly_included(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        entities_with_url = list(ENTITIES) + [URL_ENTITY]
+        result = anonymizer.anonymize("Visit www.example.com today.", "en", entities=entities_with_url)
+        url_entities = [e for e in result.entities if e.entity_type == "URL"]
+        assert len(url_entities) > 0

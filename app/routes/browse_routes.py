@@ -51,8 +51,9 @@ def _open_file_dialog() -> str:
     path = filedialog.askopenfilename(
         title="Select a file",
         filetypes=[
-            ("Supported documents", "*.docx *.pdf *.md"),
+            ("Supported documents", "*.docx *.pdf *.md *.xlsx"),
             ("Word documents", "*.docx"),
+            ("Excel files", "*.xlsx"),
             ("PDF files", "*.pdf"),
             ("Markdown files", "*.md"),
             ("All files", "*.*"),
