@@ -5,7 +5,7 @@ import string
 
 import pytest
 
-from app.services.hash_encoder import HashEncoder
+from app.services.hash_encoder import HashEncoder, UNHASHABLE_ENTITIES
 
 ALPHANUM_PATTERN = re.compile(r"^[0-9A-Z]{4}$")
 SECRET = "test-secret"
@@ -104,3 +104,87 @@ class TestFirstNameAloneMatchesFullName:
         standalone = encoder.encode_last_name("Bradley")
         as_part_of_full = encoder.encode_last_name("Bradley")
         assert standalone == as_part_of_full
+
+
+class TestEncodeValue:
+    def test_returns_four_uppercase_alphanum(self, encoder: HashEncoder) -> None:
+        result = encoder.encode_value("EMAIL_ADDRESS", "foo@bar.com")
+        assert ALPHANUM_PATTERN.match(result)
+
+    def test_consistent_across_calls(self, encoder: HashEncoder) -> None:
+        a = encoder.encode_value("EMAIL_ADDRESS", "foo@bar.com")
+        b = encoder.encode_value("EMAIL_ADDRESS", "foo@bar.com")
+        assert a == b
+
+    def test_different_values_differ(self, encoder: HashEncoder) -> None:
+        a = encoder.encode_value("EMAIL_ADDRESS", "alice@example.com")
+        b = encoder.encode_value("EMAIL_ADDRESS", "bob@example.com")
+        assert a != b
+
+    def test_different_secrets_differ(self) -> None:
+        enc1 = HashEncoder(SECRET)
+        enc2 = HashEncoder(ALT_SECRET)
+        assert enc1.encode_value("EMAIL_ADDRESS", "foo@bar.com") != \
+               enc2.encode_value("EMAIL_ADDRESS", "foo@bar.com")
+
+    def test_entity_type_included_in_hash(self, encoder: HashEncoder) -> None:
+        email_hash = encoder.encode_value("EMAIL_ADDRESS", "542348")
+        stnum_hash = encoder.encode_value("STNUM", "542348")
+        assert email_hash != stnum_hash
+
+
+class TestEncodeEntity:
+    def test_returns_bracketed_placeholder(self, encoder: HashEncoder) -> None:
+        result = encoder.encode_entity("EMAIL_ADDRESS", "foo@bar.com")
+        assert result is not None
+        assert result.startswith("[EMAIL_")
+        assert result.endswith("]")
+
+    def test_email_uses_short_label(self, encoder: HashEncoder) -> None:
+        result = encoder.encode_entity("EMAIL_ADDRESS", "foo@bar.com")
+        assert result is not None
+        assert "[EMAIL_" in result
+        assert "EMAIL_ADDRESS" not in result
+
+    def test_phone_uses_short_label(self, encoder: HashEncoder) -> None:
+        result = encoder.encode_entity("PHONE_NUMBER", "+31612345678")
+        assert result is not None
+        assert "[PHONE_" in result
+
+    def test_bsn_uses_short_label(self, encoder: HashEncoder) -> None:
+        result = encoder.encode_entity("NL_BSN", "123456782")
+        assert result is not None
+        assert "[BSN_" in result
+
+    def test_numeric_id_uses_short_label(self, encoder: HashEncoder) -> None:
+        result = encoder.encode_entity("NUMERIC_ID", "542348")
+        assert result is not None
+        assert "[ID_" in result
+
+    def test_date_time_returns_none(self, encoder: HashEncoder) -> None:
+        assert encoder.encode_entity("DATE_TIME", "September 2025") is None
+
+    def test_nrp_returns_none(self, encoder: HashEncoder) -> None:
+        assert encoder.encode_entity("NRP", "Dutch") is None
+
+    def test_consistent_for_same_value(self, encoder: HashEncoder) -> None:
+        a = encoder.encode_entity("EMAIL_ADDRESS", "foo@bar.com")
+        b = encoder.encode_entity("EMAIL_ADDRESS", "foo@bar.com")
+        assert a == b
+
+    def test_different_secrets_differ(self) -> None:
+        enc1 = HashEncoder(SECRET)
+        enc2 = HashEncoder(ALT_SECRET)
+        assert enc1.encode_entity("EMAIL_ADDRESS", "foo@bar.com") != \
+               enc2.encode_entity("EMAIL_ADDRESS", "foo@bar.com")
+
+
+class TestUnhashableEntities:
+    def test_date_time_in_unhashable(self) -> None:
+        assert "DATE_TIME" in UNHASHABLE_ENTITIES
+
+    def test_nrp_in_unhashable(self) -> None:
+        assert "NRP" in UNHASHABLE_ENTITIES
+
+    def test_email_not_in_unhashable(self) -> None:
+        assert "EMAIL_ADDRESS" not in UNHASHABLE_ENTITIES

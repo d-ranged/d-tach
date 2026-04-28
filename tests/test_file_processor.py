@@ -400,3 +400,110 @@ class TestProcessXlsxColumnBased:
         result = file_processor.process(source, settings)
         out_wb = load_workbook(str(result.output_path))
         assert "John Smith" in (out_wb.active["B2"].value or "")
+
+
+class TestConsistentHashing:
+    def test_email_hashed_when_hashing_enabled(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.docx"
+        make_docx(source, ["Contact alice@example.com for details."])
+        settings = ProcessingSettings(hashing_enabled=True, secret="test-secret")
+        result = file_processor.process(source, settings)
+        assert result.status == "anonymized"
+        from docx import Document as DocxDoc
+        out_doc = DocxDoc(str(result.output_path))
+        text = "\n".join(p.text for p in out_doc.paragraphs)
+        assert "EMAIL_ADDRESS" not in text
+        assert "[EMAIL_" in text
+
+    def test_email_hash_consistent_across_files(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        from docx import Document as DocxDoc
+        email = "alice@example.com"
+        settings = ProcessingSettings(hashing_enabled=True, secret="test-secret")
+        results = []
+        for i in range(2):
+            p = tmp_path / f"doc{i}.docx"
+            make_docx(p, [f"Contact {email} for details."])
+            results.append(file_processor.process(p, settings))
+        placeholders = []
+        for r in results:
+            doc = DocxDoc(str(r.output_path))
+            text = "\n".join(p.text for p in doc.paragraphs)
+            import re
+            found = re.findall(r"\[EMAIL_[A-Z0-9]+\]", text)
+            placeholders.extend(found)
+        assert len(placeholders) == 2
+        assert placeholders[0] == placeholders[1]
+
+    def test_date_time_not_hashed_even_with_encoder(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.docx"
+        make_docx(source, ["The meeting is on September 2025 at the office."])
+        settings = ProcessingSettings(
+            hashing_enabled=True, secret="test-secret", anonymize_dates=True
+        )
+        result = file_processor.process(source, settings)
+        if result.status == "anonymized" and result.output_path:
+            from docx import Document as DocxDoc
+            doc = DocxDoc(str(result.output_path))
+            text = "\n".join(p.text for p in doc.paragraphs)
+            assert "[DATE_TIME_" in text or "September" not in text
+
+    def test_xlsx_column_hashed_when_hashing_enabled(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        from openpyxl import Workbook as WB
+        source = tmp_path / "students.xlsx"
+        wb = WB()
+        ws = wb.active
+        ws["A1"] = "stnum"
+        ws["A2"] = 542348
+        wb.save(str(source))
+        settings = ProcessingSettings(
+            hashing_enabled=True, secret="test-secret",
+            excel_generic_enabled=False, excel_column_names=["stnum"],
+        )
+        result = file_processor.process(source, settings)
+        assert result.status == "anonymized"
+        out_wb = load_workbook(str(result.output_path))
+        cell_val = out_wb.active["A2"].value
+        assert cell_val is not None
+        assert "[STNUM_" in cell_val
+        assert "_1]" not in cell_val
+
+    def test_xlsx_column_hash_consistent_for_same_value(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        from openpyxl import Workbook as WB
+        settings = ProcessingSettings(
+            hashing_enabled=True, secret="test-secret",
+            excel_generic_enabled=False, excel_column_names=["stnum"],
+        )
+        placeholders = []
+        for i in range(2):
+            source = tmp_path / f"students{i}.xlsx"
+            wb = WB()
+            ws = wb.active
+            ws["A1"] = "stnum"
+            ws["A2"] = 542348
+            wb.save(str(source))
+            result = file_processor.process(source, settings)
+            out_wb = load_workbook(str(result.output_path))
+            placeholders.append(out_wb.active["A2"].value)
+        assert placeholders[0] == placeholders[1]
+
+    def test_hashing_off_produces_sequential_placeholder(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "report.docx"
+        make_docx(source, ["Contact alice@example.com for details."])
+        result = file_processor.process(source, ProcessingSettings())
+        if result.status == "anonymized" and result.output_path:
+            from docx import Document as DocxDoc
+            out_doc = DocxDoc(str(result.output_path))
+            text = "\n".join(p.text for p in out_doc.paragraphs)
+            assert "[EMAIL_ADDRESS_1]" in text

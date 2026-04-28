@@ -454,3 +454,66 @@ class TestExtractColumnReplacements:
         replacements, _ = processor.extract_column_replacements(loaded_wb, ["stnum", "email"])
         assert replacements["1234567"].startswith("[STNUM_")
         assert replacements["a@b.com"].startswith("[EMAIL_")
+
+
+class TestExtractColumnReplacementsWithHashing:
+    def test_hashed_placeholder_format(self, processor: DocumentProcessor) -> None:
+        from openpyxl import Workbook as WB
+        from app.services.hash_encoder import HashEncoder
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d) / "data.xlsx"
+            wb = WB()
+            ws = wb.active
+            ws["A1"] = "stnum"
+            ws["A2"] = 542348
+            wb.save(str(p))
+            _, loaded_wb = processor.load_xlsx(p)
+            encoder = HashEncoder("test-secret")
+            replacements, _ = processor.extract_column_replacements(
+                loaded_wb, ["stnum"], encoder=encoder
+            )
+            assert "542348" in replacements
+            val = replacements["542348"]
+            assert val.startswith("[STNUM_")
+            assert val.endswith("]")
+            assert "_1]" not in val
+
+    def test_hashed_placeholder_consistent_across_calls(self, processor: DocumentProcessor) -> None:
+        from openpyxl import Workbook as WB
+        from app.services.hash_encoder import HashEncoder
+        import tempfile, pathlib
+        encoder = HashEncoder("test-secret")
+        results = []
+        for _ in range(2):
+            with tempfile.TemporaryDirectory() as d:
+                p = pathlib.Path(d) / "data.xlsx"
+                wb = WB()
+                ws = wb.active
+                ws["A1"] = "stnum"
+                ws["A2"] = 542348
+                wb.save(str(p))
+                _, loaded_wb = processor.load_xlsx(p)
+                reps, _ = processor.extract_column_replacements(
+                    loaded_wb, ["stnum"], encoder=encoder
+                )
+                results.append(reps["542348"])
+        assert results[0] == results[1]
+
+    def test_no_encoder_gives_sequential(self, processor: DocumentProcessor) -> None:
+        from openpyxl import Workbook as WB
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as d:
+            p = pathlib.Path(d) / "data.xlsx"
+            wb = WB()
+            ws = wb.active
+            ws["A1"] = "stnum"
+            ws["A2"] = 542348
+            ws["A3"] = 673291
+            wb.save(str(p))
+            _, loaded_wb = processor.load_xlsx(p)
+            replacements, _ = processor.extract_column_replacements(
+                loaded_wb, ["stnum"]
+            )
+            assert "[STNUM_1]" in replacements.values()
+            assert "[STNUM_2]" in replacements.values()

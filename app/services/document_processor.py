@@ -192,17 +192,20 @@ class DocumentProcessor:
         wb.save(str(dest_path))
 
     def extract_column_replacements(
-        self, wb: Workbook, column_names: list[str]
+        self, wb: Workbook, column_names: list[str], encoder=None
     ) -> tuple[dict[str, str], list[str]]:
         """Build a replacement map for the specified column names.
 
         Reads row 1 of each sheet as headers (case-insensitive match). For each
         matching column, collects all unique non-formula values below the header
-        row and assigns sequential placeholders using the uppercased column name
-        as the entity type label (e.g. stnum → [STNUM_1], [STNUM_2]).
+        row and assigns placeholders.
 
-        The same value always maps to the same placeholder across all sheets.
-        Counters are shared per label across sheets so they never reset.
+        When encoder (a HashEncoder) is provided and hashing is enabled:
+          value → [LABEL_XXXX]  where XXXX is a deterministic 4-char HMAC hash.
+          Same value + same secret always produces the same placeholder.
+
+        Without encoder (hashing off):
+          value → [LABEL_N]  sequential counter, shared per label across sheets.
 
         Returns:
             exact_replacements: {str(original_value): placeholder}
@@ -242,8 +245,11 @@ class DocumentProcessor:
                     if not value_str:
                         continue
                     if value_str not in exact_replacements:
-                        exact_replacements[value_str] = f"[{label}_{counters[label]}]"
-                        counters[label] += 1
+                        if encoder:
+                            exact_replacements[value_str] = f"[{label}_{encoder.encode_value(label, value_str)}]"
+                        else:
+                            exact_replacements[value_str] = f"[{label}_{counters[label]}]"
+                            counters[label] += 1
 
         missing = [orig_name for norm_name, orig_name in requested.items() if norm_name not in found]
         return exact_replacements, missing

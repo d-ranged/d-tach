@@ -285,12 +285,13 @@ class FileProcessor:
 
         text, wb = self._doc_processor.load_xlsx(path)
         file_warnings: list[str] = []
+        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
 
         # --- Column-based pass ---
         exact_replacements: dict[str, str] = {}
         if settings.excel_column_names:
             exact_replacements, missing = self._doc_processor.extract_column_replacements(
-                wb, settings.excel_column_names
+                wb, settings.excel_column_names, encoder=encoder
             )
             for col in missing:
                 file_warnings.append(f"Column '{col}' not found in row 1 headers.")
@@ -306,7 +307,6 @@ class FileProcessor:
                 text, language, entities=entities, ad_hoc_recognizers=ad_hoc
             )
             if ner_result.entities:
-                encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
                 substring_replacements = self._build_replacements(ner_result.entities, encoder)
                 ner_entities = ner_result.entities
 
@@ -416,9 +416,14 @@ class FileProcessor:
     ) -> dict[str, str]:
         """Return a mapping of original text → replacement placeholder.
 
-        When hashing is enabled, PERSON entities are replaced with hash-encoded
-        names. All other entity types use the sequential placeholder produced
-        by the Anonymizer.
+        When hashing is enabled all detected PII entities are hash-encoded:
+        - PERSON: name rules (first 2 chars preserved + 4-char hash)
+        - All others except DATE_TIME and NRP: full-value 4-char HMAC hash
+          with a shortened label: [EMAIL_A2B3], [PHONE_C4D1], [BSN_E9F2] etc.
+        - DATE_TIME and NRP: always sequential regardless of hashing setting
+
+        When hashing is disabled all entities use the sequential placeholder
+        produced by the Anonymizer: [PERSON_1], [EMAIL_ADDRESS_1] etc.
         """
         replacements: dict[str, str] = {}
         for entity in entities:
@@ -435,6 +440,9 @@ class FileProcessor:
                 continue
             if encoder and entity.entity_type == "PERSON":
                 replacements[entity.original_text] = f"[{encoder.encode_full_name(entity.original_text)}]"
+            elif encoder:
+                hashed = encoder.encode_entity(entity.entity_type, entity.original_text)
+                replacements[entity.original_text] = hashed if hashed else entity.placeholder
             else:
                 replacements[entity.original_text] = entity.placeholder
         return replacements
