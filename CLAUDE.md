@@ -293,6 +293,15 @@ Short description of what changed (issue #N)
 
 Never commit directly to `main`.
 
+### Multi-step release workflow (preferred for planned releases)
+
+Create **all** Codeberg issues for a release upfront before starting any code.
+Then execute all steps in a single AI session: branch → code → test → PR → merge,
+cycling through every issue without reloading context between steps. Acceptance
+testing runs once at the end across all features. This is more efficient than the
+one-issue-per-session pattern used in v1.1.0, which required context reloads and
+git state recovery between steps.
+
 ---
 
 ## What Claude Is Allowed To Do

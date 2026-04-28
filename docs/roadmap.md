@@ -15,17 +15,12 @@ starting work.
 
 ---
 
-## Planned for v1.1.0
+## ✅ Shipped in v1.1.0
 
-See `docs/step_1.1.0.md` for the full step-by-step build plan for this release.
-
-- **change: standardise placeholder format to [PLACEHOLDER]** — See `step_1.1.0.md` Step 1.
-- **feature: d-ranged branding and two-theme toggle** — See `step_1.1.0.md` Step 2.
-- ~~**fix: PDF replacement text font size and readability**~~ — **Dropped.** Step 3 failed; reverted. See `step_1.1.0.md` Step 3 and ROADMAP section below.
-- **feature: Excel file (.xlsx) anonymization** — See `step_1.1.0.md` Step 4.
-- **feature: Key reference export improvements** — See `step_1.1.0.md` Step 5.
-- **fix: Launcher UX and macOS tkinter fallback** — See `step_1.1.0.md` Step 6.
-- **feature: anonymized subfolder output mode** — See `step_1.1.0.md` Step 7.
+All steps complete. See `docs/step_1.1.0.md` and `CHANGELOG.md` for detail.
+Key additions: bracketed placeholders, d-ranged branding, Excel anonymization,
+key reference export, subfolder output mode, consistent hashing for all entity
+types, URL detection opt-in, macOS launcher fallback.
 
 ---
 
@@ -197,16 +192,14 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
 ## Lower priority
 
 - **Processing architecture review — context efficiency**
-  As the codebase has grown, each development session loads the full spaCy NLP models
-  and Presidio engine, which are large and slow to initialise. Within a single session
-  this is fine (models load once). But repeated context-window sessions (e.g. multi-step
-  build plans over multiple days) pay the cold-start cost on each new conversation.
-  Potential improvements: (1) document the startup cost prominently so AI-assisted
-  development sessions front-load model-related work; (2) evaluate whether any of the
-  service layer can be decoupled further so code changes can be tested without loading
-  spaCy (mock-friendly seams); (3) investigate whether LFS fetch behaviour can be
-  contained — LFS objects being pulled unexpectedly during branch switches added
-  significant overhead in v1.1.0 development.
+  Each AI-assisted development session loads spaCy NLP models and Presidio, which are
+  large and slow to initialise. Within a single session this is fine (models load once),
+  but multi-session build plans pay the cold-start cost on each new conversation.
+  The LFS branch-switching overhead from v1.1.0 is resolved — fixture files are now
+  managed cleanly. Remaining improvements: (1) evaluate mock-friendly seams in the
+  service layer so code changes can be tested without loading spaCy; (2) group all
+  planned issues upfront so a full release can be executed in one session rather than
+  reloading context per step (see CLAUDE.md workflow note).
 
 - **Multi-language architecture — language selectable at install, addable post-install**
   Currently d-tach supports EN and NL only, both baked in. A more extensible
