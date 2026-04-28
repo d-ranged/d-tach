@@ -9,11 +9,28 @@ Version numbers follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.P
 
 ---
 
-## [1.1.0] — Unreleased
+## [1.1.0] — 2026-04-28
+
+### Added
+
+- **Excel (.xlsx) anonymization** — NER-based detection on string cells (names, emails, phones) plus a column-based mode for numeric identifiers (e.g. integer student number columns) that NER cannot reach. Both modes are independent toggles; either or both can be active simultaneously. When both are off, Excel files are skipped entirely.
+- **Advanced Settings panel** — collapsible section in Document Mode exposing Excel-specific controls (NER toggle, column names input) and the new URL detection toggle.
+- **Key reference export improvements** — folder runs produce a single consolidated `KEYREF_<folder>.csv` at the folder root (or inside `anonymized/` in subfolder mode). Text Mode gains a one-click Export CSV button.
+- **Anonymized subfolder output mode** — instead of placing `ANON_`/`CHECKED_` files alongside originals, all output goes into an `anonymized/` subfolder mirroring the original structure with original filenames preserved.
+- **Consistent hashing for all entity types** — when hashing is enabled, emails, phone numbers, BSN, numeric IDs, and locations all receive a deterministic 4-character HMAC hash (`[EMAIL_A2B3]`, `[PHONE_C4D1]`) in addition to names. The same value + same secret always produces the same placeholder across files and sessions.
+- **URL detection toggle** — URL detection is now opt-in (off by default). This removes an overlap between the URL and EMAIL_ADDRESS recognisers that previously caused garbled output when email addresses were present.
 
 ### Changed
 
 - Placeholder format changed from bare identifiers (`PERSON_1`) to bracketed format (`[PERSON_1]`). This affects all output modes: text, DOCX, PDF, and key reference files. **Visible change** — any downstream tooling or workflows that match on placeholder strings must be updated.
+- d-ranged branding applied: SA green / Dutch orange dual-identity theme (T4) is now the default; clicking the logo toggles to a neutral professional theme (T1). Theme preference persists in `localStorage`.
+- Launcher scripts (`launch.bat`, `launch.sh`) open the browser automatically after Flask starts.
+- macOS: graceful fallback when tkinter is not installed — Browse buttons are hidden with a clear inline message; the rest of the app is unaffected.
+
+### Fixed
+
+- `.xlsx` files were not selectable in the single-file Browse dialog — the tkinter file type filter now includes Excel files.
+- Column-not-found warnings in the progress log were displayed with error styling (amber ⚠); they now use a muted grey ℹ indicator to distinguish informational notices from actual processing failures.
 
 ---
 
