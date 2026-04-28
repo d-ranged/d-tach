@@ -78,3 +78,6 @@ logs/
 
 # Personal review checklist — local only, never committed
 craig_check.md
+
+# Local production/marketing material — not project docs
+docs/tutorial.md
