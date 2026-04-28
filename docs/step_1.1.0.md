@@ -16,11 +16,12 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 2 | Branding and Theme System | ✅ Done — PR #30 merged |
 | 3 | Fix PDF Replacement Text Font Size | ❌ Dropped — failed, reverted |
 | 4a | Excel File Anonymization (NER pass) | ✅ Done — issue #32 merged |
-| 4b | Excel Column-Based Anonymization + Advanced Settings | **← Next** |
-| 5 | Key Reference Export Improvements | Pending |
-| 6 | Launcher and UX Polish | Pending |
-| 7 | Anonymized Subfolder Output Mode | Pending |
-| 8 | Acceptance Testing — all features | Pending |
+| 4b | Excel Column-Based Anonymization + Advanced Settings | ✅ Done — issue #34 merged |
+| 5 | Key Reference Export Improvements | ✅ Done — issue #36 merged |
+| 6 | Launcher and UX Polish | ✅ Done — issue #38 merged |
+| 7 | Anonymized Subfolder Output Mode | ✅ Done — issue #40 merged |
+| 8 | Consistent Hashing for All Entity Types | **← Next** |
+| 9 | Acceptance Testing — all features | Pending |
 
 ---
 
@@ -458,15 +459,124 @@ folder/
 
 ---
 
-## Step 8 — Acceptance Testing
+## Step 8 — Consistent Hashing for All Entity Types ← Next
+
+**Codeberg issue to create first:**
+`feature: consistent hashing for all entity types (not PERSON-only)`
+
+**Goal:** When hashing is enabled with a secret, every detected PII entity
+produces a deterministic, secret-keyed placeholder — not just PERSON names.
+The same value + the same secret always maps to the same placeholder across
+files and across sessions, making cross-document pseudonymization coherent.
+
+### Why this is needed
+
+**Current gap:** Hashing is enabled but only PERSON names are actually hashed.
+All other entity types (emails, phone numbers, student numbers, BSN, etc.)
+still use sequential counters (`[EMAIL_ADDRESS_1]`) even when hashing is on.
+That counter resets per file, so `[EMAIL_ADDRESS_1]` in document A and
+`[EMAIL_ADDRESS_1]` in document B may refer to completely different people.
+
+Column-based anonymization has the same gap: `542348` always becomes
+`[STNUM_1]` regardless of the hashing setting.
+
+This undermines the core promise of hashing: consistent pseudonymization that
+can be reversed with the secret.
+
+### Design decisions
+
+**Entities covered:**
+
+| Entity type | Hashed? | Reason |
+|---|---|---|
+| PERSON (name) | ✅ Already (unchanged) | Name rules — first 2 chars + 4-char hash |
+| EMAIL_ADDRESS | ✅ New | Unique identifier; cross-doc consistency matters |
+| PHONE_NUMBER | ✅ New | May uniquely identify a person |
+| NUMERIC_ID (stnum etc.) | ✅ New | Primary key — most important after names |
+| Dutch BSN | ✅ New | National primary key |
+| URL / social profile | ✅ New | LinkedIn URLs uniquely identify a person |
+| LOCATION (address) | ✅ New | Consistency cost-free; no downside |
+| ORG (organisation) | ✅ New | Same reasoning |
+| DATE_TIME | ❌ Excluded | Dates are not person identifiers; hashing `September 2025` is meaningless |
+| NRP (nationality/belief) | ❌ Excluded | Not an identifier |
+
+**New hashing method — `HashEncoder.encode_value(entity_type, value)`:**
+- Input: entity type label + full string value
+- Output: 4 uppercase alphanumeric characters derived from
+  `HMAC-SHA256(secret, entity_type + ":" + value)[:4].upper()`
+- Format: `[EMAIL_A2B3]`, `[STNUM_C4D1]`, `[PHONE_E9F2]`
+- Same value + same type + same secret → same output across sessions
+- Different secrets → different outputs (pseudonymization is secret-keyed)
+- Label is shorter than the NER entity type name (EMAIL not EMAIL_ADDRESS)
+  to keep placeholder length reasonable
+
+**Label shortening for hashed placeholders:**
+
+| NER entity type | Hashed label |
+|---|---|
+| EMAIL_ADDRESS | EMAIL |
+| PHONE_NUMBER | PHONE |
+| NUMERIC_ID | ID |
+| NL_BSN | BSN |
+| URL | URL |
+| LOCATION | LOC |
+| ORG | ORG |
+
+**Column-based mode:** when hashing is on, `extract_column_replacements()`
+uses `encode_value(column_label, str(value))` instead of the sequential
+counter. `542348` in a `stnum` column → `[STNUM_C4D1]` (deterministic).
+
+**Hashing off:** all existing sequential behaviour is completely unchanged.
+
+### What to build
+
+**`HashEncoder`**
+- Add `encode_value(entity_type: str, value: str) -> str` method
+- Returns the 4-char HMAC-derived hash for non-name values
+- Reuses the existing secret already held by the encoder instance
+
+**`FileProcessor._build_replacements()`**
+- When encoder is set: for non-PERSON entities, call
+  `encoder.encode_value(entity_type, original_text)` to get the hash segment;
+  construct `[LABEL_XXXX]` placeholder using the shortened label
+- DATE_TIME and NRP entities: skip hashing, use sequential placeholder as now
+
+**`DocumentProcessor.extract_column_replacements()`**
+- Add optional `encoder: HashEncoder | None = None` parameter
+- When encoder provided: use `encoder.encode_value(label, value_str)`
+  instead of the sequential counter
+- Column label (e.g. `STNUM`) is used as the entity type for hashing
+
+**`FileProcessor._process_xlsx()`**
+- Pass encoder to `extract_column_replacements()` when hashing is enabled
+
+**`CHANGELOG.md`**
+- Visible output change: email/phone/etc. placeholder format changes from
+  `[EMAIL_ADDRESS_1]` to `[EMAIL_A2B3]` when hashing is on.
+  Note clearly in the release that this only affects hashing mode.
+
+### ✅ Complete when
+- Hashing on + email detected by NER → `[EMAIL_A2B3]` — deterministic with secret
+- Hashing on + stnum column → `[STNUM_C4D1]` — same number, same placeholder
+- Same value in two different files with same secret → identical placeholder
+- Hashing off → all sequential behaviour unchanged; no regressions
+- DATE_TIME entities use sequential format even when hashing is on
+- `HashEncoder.encode_value()` tested: consistent across calls, secret-dependent
+- `_build_replacements()` tested: non-PERSON entities hash when encoder provided
+- Column-based with hashing tested: deterministic output confirmed
+- All 155 existing tests still pass
+
+---
+
+## Step 9 — Acceptance Testing
 
 **Codeberg issue to create first:**
 `test: v1.1.0 acceptance testing — all features`
 
 **Goal:** A structured manual test run covering every feature added or changed
-in v1.1.0. Performed after all build steps (1–7 and 4b) are merged to main.
+in v1.1.0. Performed after all build steps (1–8) are merged to main.
 Any failures discovered here are fixed on a branch named
-`fix/issue-N-step8-{short-description}` and merged before release.
+`fix/issue-N-step9-{short-description}` and merged before release.
 
 Running the automated test suite (`pytest`) is a prerequisite but not
 sufficient — these tests confirm behaviour the automated suite cannot reach:
@@ -493,7 +603,7 @@ documents with realistic content.
 
 ---
 
-### 8a — Placeholder format (Step 1)
+### 9a — Placeholder format (Step 1)
 
 Run Text Mode with a name and email in the input.
 
@@ -507,7 +617,7 @@ Run Text Mode with a name and email in the input.
 
 ---
 
-### 8b — Branding and theme (Step 2)
+### 9b — Branding and theme (Step 2)
 
 | Check | Expected |
 |---|---|
@@ -520,7 +630,7 @@ Run Text Mode with a name and email in the input.
 
 ---
 
-### 8c — Excel NER anonymization (Step 4a)
+### 9c — Excel NER anonymization (Step 4a)
 
 Using the test `.xlsx` with a name in a string cell:
 
@@ -534,7 +644,7 @@ Using the test `.xlsx` with a name in a string cell:
 
 ---
 
-### 8d — Excel column-based anonymization (Step 4b)
+### 9d — Excel column-based anonymization (Step 4b)
 
 Using the test `.xlsx` with a `stnum` integer column:
 
@@ -550,7 +660,7 @@ Using the test `.xlsx` with a `stnum` integer column:
 
 ---
 
-### 8e — Key reference export (Step 5)
+### 9e — Key reference export (Step 5)
 
 | Check | Expected |
 |---|---|
@@ -561,7 +671,7 @@ Using the test `.xlsx` with a `stnum` integer column:
 
 ---
 
-### 8f — Launcher and UX (Step 6)
+### 9f — Launcher and UX (Step 6)
 
 | Check | Expected |
 |---|---|
@@ -573,7 +683,7 @@ Using the test `.xlsx` with a `stnum` integer column:
 
 ---
 
-### 8g — Anonymized subfolder output mode (Step 7)
+### 9g — Anonymized subfolder output mode (Step 7)
 
 Process the test folder with subfolder mode selected:
 
@@ -590,21 +700,23 @@ Process the test folder with subfolder mode selected:
 
 ---
 
-### 8h — Cross-feature combinations
+### 9h — Cross-feature combinations
 
 These confirm features work together, not just in isolation:
 
 | Combination | Expected |
 |---|---|
 | Hashing on + DOCX | Name encoded as `[Cr-A2T5 HY23]` or similar; consistent across files |
-| Hashing on + Excel column-based | Column values replaced with hash-encoded names if they are PERSON entities, or typed placeholders for non-name columns |
+| Hashing on + DOCX email | Email encoded as `[EMAIL_A2B3]` — deterministic, not `[EMAIL_ADDRESS_1]` |
+| Hashing on + Excel column-based stnum | `[STNUM_C4D1]` — same number, same placeholder every run |
+| Hashing off → all sequential | `[PERSON_1]`, `[EMAIL_ADDRESS_1]`, `[STNUM_1]` etc. — unchanged |
 | Key reference + folder mode + subfolder output | KEYREF CSV inside `anonymized/`, covers all files |
 | Mixed folder (DOCX + PDF + XLSX) — both Excel modes off | DOCX and PDF processed; XLSX skipped |
 | Mixed folder (DOCX + PDF + XLSX) — column mode only | DOCX and PDF use NER; XLSX uses column replacement only |
 
 ---
 
-### 8i — Regression: existing tests
+### 9i — Regression: existing tests
 
 ```
 pytest
@@ -616,14 +728,14 @@ All tests pass. Record count. Any failure blocks release.
 ### ✅ Complete when
 - All table rows above show expected behaviour
 - `pytest` passes with no failures
-- Any issues found during 8a–8h are fixed on a dedicated branch and merged
+- Any issues found during 9a–9h are fixed on a dedicated branch and merged
   before proceeding to the Release step
 
 ---
 
 ## Release — v1.1.0
 
-Once all steps including Step 8 acceptance testing are complete:
+Once all steps including Step 9 acceptance testing are complete:
 
 1. Bump `__version__` in `app/__init__.py`
 2. Update version badge in `README.md`
