@@ -74,6 +74,17 @@ API appears, re-evaluate.
 
 ## High priority
 
+- **Numeric ID / phone number double-detection overlap**
+  When the Numeric ID toggle is active with a digit count that matches a phone number
+  length (e.g. 10 or 11 digits), the same number is detected as both NUMERIC_ID and
+  PHONE_NUMBER and receives two separate placeholders. The anonymizer currently processes
+  whichever entity appears first; the second detection fires on the already-replaced text
+  and produces a spurious nested replacement. Fix approach: add an overlap-resolution step
+  in Anonymizer that, for the same text span detected by two entity types, keeps the
+  higher-confidence detection and discards the lower. Alternatively, expose a "suppress
+  phone detection when Numeric ID is active" option for users who know their ID format
+  closely resembles a phone number.
+
 - **Improve NER detection accuracy — names in tables and less common names**
   During real-document testing, names in the first-page table of an internship
   document were inconsistently detected: the student name in the table was found
@@ -184,6 +195,18 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
 ---
 
 ## Lower priority
+
+- **Processing architecture review — context efficiency**
+  As the codebase has grown, each development session loads the full spaCy NLP models
+  and Presidio engine, which are large and slow to initialise. Within a single session
+  this is fine (models load once). But repeated context-window sessions (e.g. multi-step
+  build plans over multiple days) pay the cold-start cost on each new conversation.
+  Potential improvements: (1) document the startup cost prominently so AI-assisted
+  development sessions front-load model-related work; (2) evaluate whether any of the
+  service layer can be decoupled further so code changes can be tested without loading
+  spaCy (mock-friendly seams); (3) investigate whether LFS fetch behaviour can be
+  contained — LFS objects being pulled unexpectedly during branch switches added
+  significant overhead in v1.1.0 development.
 
 - **Multi-language architecture — language selectable at install, addable post-install**
   Currently d-tach supports EN and NL only, both baked in. A more extensible
