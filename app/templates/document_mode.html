@@ -21,6 +21,14 @@
 
     <div class="setting-group">
         <label class="toggle">
+            <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Detect URLs</span>
+        </label>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
             <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
             <span class="toggle-track"></span>
             <span class="setting-label">Numeric ID</span>
@@ -76,18 +84,9 @@
     </div>
 </section>
 
-<details class="advanced-settings" {% if not excel_generic_enabled or excel_column_names or anonymize_urls %}open{% endif %}>
+<details class="advanced-settings" {% if not excel_generic_enabled or excel_column_names %}open{% endif %}>
     <summary class="advanced-settings-toggle">Advanced settings</summary>
     <div class="advanced-settings-body">
-        <div class="advanced-section-heading">Detection</div>
-        <div class="advanced-setting-row">
-            <label class="toggle">
-                <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
-                <span class="toggle-track"></span>
-                <span class="setting-label">Detect URLs</span>
-            </label>
-        </div>
-        <p class="advanced-hint">Off by default. When on, web addresses are anonymized. May cause false matches on email addresses when enabled simultaneously.</p>
         <div class="advanced-section-heading">Excel (.xlsx)</div>
         <div class="advanced-setting-row">
             <label class="toggle">

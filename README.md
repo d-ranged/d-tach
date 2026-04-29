@@ -9,6 +9,8 @@ Everything runs locally on your machine. No files or text are ever sent anywhere
 [![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-green)](LICENSE)
 
 [⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)
+&nbsp;
+[▶ Watch the Tutorial](https://youtu.be/8uLj6M8AUug)
 
 ---
 

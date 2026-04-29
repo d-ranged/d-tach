@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-:: ---- First-run setup: create venv and install dependencies ----
+:: ---- First-run setup: create venv and download language models ----
 if not exist ".venv\Scripts\python.exe" (
     echo Setting up d-tach for the first time...
     echo.
@@ -30,6 +30,17 @@ if not exist ".venv\Scripts\python.exe" (
     echo.
     echo Setup complete.
     echo.
+)
+
+:: ---- Sync dependencies (fast when already up to date; picks up new packages after updates) ----
+echo Checking dependencies...
+.venv\Scripts\python -m pip install -r requirements.txt -q
+if errorlevel 1 (
+    echo.
+    echo ERROR: Dependency installation failed.
+    echo.
+    pause
+    exit /b 1
 )
 
 :: ---- Start Flask and open browser after it has had time to bind ----

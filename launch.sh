@@ -2,7 +2,7 @@
 set -e
 cd "$(dirname "$0")"
 
-# ---- First-run setup: create venv and install dependencies ----
+# ---- First-run setup: create venv and download language models ----
 if [ ! -f ".venv/bin/python" ]; then
     if ! command -v python3 &>/dev/null; then
         echo ""
@@ -39,6 +39,16 @@ if [ ! -f ".venv/bin/python" ]; then
     echo ""
     echo "Setup complete."
     echo ""
+fi
+
+# ---- Sync dependencies (fast when already up to date; picks up new packages after updates) ----
+echo "Checking dependencies..."
+.venv/bin/python -m pip install -r requirements.txt -q
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "ERROR: Dependency installation failed."
+    echo ""
+    exit 1
 fi
 
 # ---- Open browser after Flask has had time to bind ----
