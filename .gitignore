@@ -81,3 +81,5 @@ craig_check.md
 
 # Local production/marketing material — not project docs
 docs/tutorial.md
+
+tests/fixtures
