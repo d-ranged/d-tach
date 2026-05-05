@@ -83,3 +83,6 @@ craig_check.md
 docs/tutorial.md
 
 tests/fixtures
+
+# ignore for personal (d-craig) work process file
+context.json
