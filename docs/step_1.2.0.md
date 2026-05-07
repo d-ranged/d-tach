@@ -267,6 +267,106 @@ produce `output_approach_d.pdf` using it.
 
 ---
 
+## v1.3.0 Planning — System Tray App + Configurable Port
+
+Captured here while the thinking is fresh. Actual step breakdown will move to
+`step_1.3.0.md` when v1.2.0 is released.
+
+---
+
+### Background
+
+Running d-tach via `launch.bat` each time creates friction — especially for a tool
+intended to be used regularly. For Craig personally, a Windows Task Scheduler task
+running `serve.py` via `pythonw.exe` is an interim fix. The proper solution for
+both personal use and public distribution is a system tray application.
+
+### Port decision
+
+Default port changes from **5000 → 5555**.
+
+5000 is Flask's default and will conflict if any other Flask project is open simultaneously.
+5555 has no meaningful Windows conflicts and is distinctive enough that users are unlikely
+to have anything else on it. The port should also be user-configurable (see below).
+
+### System tray app
+
+**Goal:** d-tach runs as a persistent background process on login. A system tray icon
+gives the user a visible handle on it — no need to know what a Flask server is.
+
+**Libraries:** `pystray` (tray icon) + `Pillow` (required by pystray for image handling).
+Both are pure Python and pip-installable. Add to `requirements.txt`.
+
+**Behaviour:**
+
+- On launch, start the Flask server in a background thread
+- Display a tray icon using the d-ranged logo
+- Right-click menu (minimum):
+  - **Open d-tach** — opens `http://localhost:{port}` in the default browser
+  - **Quit** — stops the Flask server and exits the tray process
+- Single-click on the icon: open the browser (same as "Open d-tach")
+- If the port is already in use on launch: show a system notification
+  ("d-tach could not start — port {port} is in use") and exit cleanly
+
+**Startup registration:**
+
+The tray app should offer to register itself as a Windows startup program
+(write a registry entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
+This should be a one-time prompt on first launch, not automatic.
+On macOS, the equivalent is a LaunchAgent plist.
+
+**Entry point:**
+
+New file `tray.py` at the project root. This becomes the file users run
+(or the executable users double-click if we later build with PyInstaller).
+`run.py` and `serve.py` remain for development use.
+
+### Configurable port
+
+**Goal:** Users can choose which port d-tach listens on. Needed because:
+- Power users may already have something on 5555
+- Institutions may have firewall or policy constraints
+- Running two d-tach instances (unlikely but possible in a shared machine scenario)
+
+**Design:**
+
+- Default: `5555`
+- Configurable via `UserSettings` — persisted to local storage alongside other settings
+- Exposed in a new **Settings** panel or section within the existing UI (not a launch-time
+  flag — the user should be able to change it from within the running app)
+- Changing the port: show a message "Restart d-tach to apply the new port" — do not
+  attempt a hot reload
+- The tray icon's "Open d-tach" action reads the current configured port from `UserSettings`
+  so the browser link stays correct
+
+**`run.py` and `serve.py`:**
+
+Both should read port from `UserSettings` (or an environment variable fallback `DTACH_PORT`)
+so that development runs also respect the configured port.
+
+### What to build (summary)
+
+| Component | Description |
+|---|---|
+| `tray.py` | New entry point; starts Flask in thread; manages tray icon lifecycle |
+| `UserSettings` | Add `port: int = 5555` field; persist and restore |
+| Settings UI | Port input in the app; "Restart to apply" message on change |
+| `requirements.txt` | Add `pystray` and `Pillow` |
+| `launch.bat` / `launch.sh` | Update to launch `tray.py` instead of (or alongside) `run.py` |
+| `serve.py` | Update to read port from `UserSettings` or `DTACH_PORT` env var |
+| `README.md` | Update installation section to describe tray app as the normal launch path |
+
+### Acceptance criteria
+
+- Fresh install: running `tray.py` starts the server and shows a tray icon
+- Tray icon right-click: "Open d-tach" opens the browser; "Quit" exits cleanly
+- Port can be changed in the Settings panel; changing it shows the restart notice
+- After restart, the new port is used and the tray icon opens the correct URL
+- `launch.bat` launches the tray app (not the raw Flask server)
+- All existing tests pass; `serve.py` and `run.py` still work independently for dev use
+
+---
+
 ## Release — v1.2.0
 
 Once all steps including acceptance testing are complete:
