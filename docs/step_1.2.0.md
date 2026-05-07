@@ -13,23 +13,33 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | Step | Description | Status |
 |---|---|---|
 | 1 | Restore Tab — DOCX, Text, Markdown, Excel | ⬜ Not started |
-| 2 | Restore — PDF support (best-effort) | ⬜ Not started |
-| 3 | Acceptance Testing — all features | ⬜ Not started |
+| 2 | Acceptance Testing | ⬜ Not started |
 
 ---
 
 ## Background
 
-v1.2.0 introduces the **Restore** feature: given an anonymized file and its corresponding
-KEYREF CSV, revert all placeholders back to their original values. This closes the loop on
-the anonymization workflow — users can round-trip a document through d-tach and recover the
-original for authorised parties.
+v1.2.0 introduces the **Restore** feature: given any file containing d-tach placeholders
+and a KEYREF CSV, replace all placeholders with their original values.
+
+The primary use case is **AI-output round-tripping**: the user anonymizes a document,
+sends the anonymized content to an AI tool, and the AI returns new content (a letter,
+feedback report, or summary) that still references `[PERSON_1]`, `[ORG_1]` etc. The user
+then runs Restore on that AI-generated file to produce a final document with real values
+inserted — without the real values ever having been shared with the AI.
+
+This is distinct from "restoring the original" — the original document is never the input
+to Restore. Restore acts on new content that was written using the placeholder vocabulary.
 
 This feature was planned in `roadmap.md` as "De-anonymization (reverse lookup)". The UI
 name is **Restore** — simpler and non-technical.
 
-A parallel PDF research track runs **outside this project** — see the separate research
-project section at the bottom of this file.
+PDF is not supported and is not planned. AI tools return text and markdown, not PDFs.
+The use case for restoring a PDF does not arise. See `roadmap.md` for the rationale.
+
+A parallel PDF research track runs **outside this project** — focused on improving the
+visual quality of anonymized PDF output, not on restore. See the section at the bottom
+of this file.
 
 ---
 
@@ -122,66 +132,12 @@ find-and-replace pass. No NLP, no model loading — pure string substitution.
 
 ---
 
-## Step 2 — Restore: PDF Support (Best-Effort)
-
-**Codeberg issue to create first:**
-`feature: restore tab — PDF support (best-effort)`
-
-**Goal:** Extend the Restore tab to accept PDF files. The restored PDF replaces placeholder
-text with original values using PyMuPDF. Visual quality will be imperfect — the UI says so
-clearly.
-
-**Dependency:** Step 1 must be complete before this step starts.
-
-### Why PDF is a separate step
-
-When d-tach anonymized the PDF, `add_redact_annot()` physically destroyed the original
-text. Restoring means inserting the original value back into the same bounding box — which
-has the same font-fitting problems as the original anonymization. The result may look
-inconsistent when the original text is a different width than the placeholder.
-
-This is best-effort. It is better than nothing and allows PDFs to participate in the
-restore workflow, but visual inconsistency should be expected.
-
-**Note:** If the PDF replace-text research project (below) produces a better approach
-before this step is built, incorporate those findings here instead.
-
-### What to build
-
-**`DocumentProcessor`**
-- `restore_pdf(input_path, output_path, replacements: dict[str, str]) -> int` —
-  open PDF with `fitz`; for each page, search for each placeholder with
-  `page.search_for(placeholder)`; for each match, blank with `add_redact_annot(rect)`,
-  call `apply_redactions()`, then `insert_text()` with the original value into the
-  same bbox; return replacement count
-- Add `.pdf` routing to `FileProcessor.restore_file()`
-
-**UI**
-- Add `.pdf` to the Restore tab file picker `accept` attribute
-- Permanent note below the file inputs:
-  "PDF restore is best-effort — visual quality may vary depending on text length."
-
-**Tests**
-- Test PDF with known placeholder text → `RESTORED_` output contains original value
-- Replacement count returned correctly
-- Multi-page PDF: replacements applied on all pages
-
-### ✅ Complete when
-
-- PDF with `[PERSON_1]` → `RESTORED_` PDF has original name in the correct location
-- Replacement count is accurate
-- UI note about PDF visual quality is visible
-- DOCX / text / xlsx restore unchanged (no regressions from Step 1)
-- All existing tests pass
-
----
-
-## Step 3 — Acceptance Testing
+## Step 2 — Acceptance Testing
 
 **Codeberg issue to create first:**
 `test: acceptance testing — v1.2.0 restore feature`
 
-**Goal:** Manual test run covering the Restore tab end-to-end, after Steps 1 and 2 are
+**Goal:** Manual test run covering the Restore tab end-to-end, after Step 1 is
 merged to main.
 
 ### Pre-test setup
@@ -193,9 +149,8 @@ merged to main.
 - Prepare test files:
   - One DOCX previously anonymized by d-tach (contains `[PERSON_N]`, `[EMAIL_N]` etc.)
   - The corresponding `KEYREF_` CSV from that run
-  - One `.md` file with placeholders
+  - One `.md` file with placeholders (simulate AI-returned content referencing placeholders)
   - One `.xlsx` with placeholder cells
-  - One PDF previously anonymized by d-tach
 
 ### Test cases
 
@@ -204,7 +159,7 @@ merged to main.
 | DOCX + KEYREF → restored | All placeholders replaced; file opens cleanly in Word |
 | `.md` + KEYREF → restored | Correct replacement; line structure preserved |
 | `.xlsx` + KEYREF → restored | Placeholder cells contain original values |
-| PDF + KEYREF → restored | Placeholders replaced; visual quality noted (may vary) |
+| AI-output `.md` with placeholders + KEYREF → restored | Placeholders in new AI content replaced with real values |
 | KEYREF with extra entries not in doc | No error; extra entries ignored |
 | Unsupported file type | Clear error message in UI |
 | Restore tab in nav | Navigable from Text Mode and Document Mode tabs |
@@ -215,7 +170,7 @@ merged to main.
 
 ### ✅ Complete when
 
-- All test cases above pass (PDF visual quality noted but not a blocker)
+- All test cases above pass
 - No regressions in Document or Text Mode
 - `pytest` passes with no failures on main
 
@@ -267,103 +222,14 @@ produce `output_approach_d.pdf` using it.
 
 ---
 
-## v1.3.0 Planning — System Tray App + Configurable Port
+## v1.3.0
 
-Captured here while the thinking is fresh. Actual step breakdown will move to
-`step_1.3.0.md` when v1.2.0 is released.
+See `step_1.3.0.md` for the full build plan.
 
----
-
-### Background
-
-Running d-tach via `launch.bat` each time creates friction — especially for a tool
-intended to be used regularly. For Craig personally, a Windows Task Scheduler task
-running `serve.py` via `pythonw.exe` is an interim fix. The proper solution for
-both personal use and public distribution is a system tray application.
-
-### Port decision
-
-Default port changes from **5000 → 5555**.
-
-5000 is Flask's default and will conflict if any other Flask project is open simultaneously.
-5555 has no meaningful Windows conflicts and is distinctive enough that users are unlikely
-to have anything else on it. The port should also be user-configurable (see below).
-
-### System tray app
-
-**Goal:** d-tach runs as a persistent background process on login. A system tray icon
-gives the user a visible handle on it — no need to know what a Flask server is.
-
-**Libraries:** `pystray` (tray icon) + `Pillow` (required by pystray for image handling).
-Both are pure Python and pip-installable. Add to `requirements.txt`.
-
-**Behaviour:**
-
-- On launch, start the Flask server in a background thread
-- Display a tray icon using the d-ranged logo
-- Right-click menu (minimum):
-  - **Open d-tach** — opens `http://localhost:{port}` in the default browser
-  - **Quit** — stops the Flask server and exits the tray process
-- Single-click on the icon: open the browser (same as "Open d-tach")
-- If the port is already in use on launch: show a system notification
-  ("d-tach could not start — port {port} is in use") and exit cleanly
-
-**Startup registration:**
-
-The tray app should offer to register itself as a Windows startup program
-(write a registry entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
-This should be a one-time prompt on first launch, not automatic.
-On macOS, the equivalent is a LaunchAgent plist.
-
-**Entry point:**
-
-New file `tray.py` at the project root. This becomes the file users run
-(or the executable users double-click if we later build with PyInstaller).
-`run.py` and `serve.py` remain for development use.
-
-### Configurable port
-
-**Goal:** Users can choose which port d-tach listens on. Needed because:
-- Power users may already have something on 5555
-- Institutions may have firewall or policy constraints
-- Running two d-tach instances (unlikely but possible in a shared machine scenario)
-
-**Design:**
-
-- Default: `5555`
-- Configurable via `UserSettings` — persisted to local storage alongside other settings
-- Exposed in a new **Settings** panel or section within the existing UI (not a launch-time
-  flag — the user should be able to change it from within the running app)
-- Changing the port: show a message "Restart d-tach to apply the new port" — do not
-  attempt a hot reload
-- The tray icon's "Open d-tach" action reads the current configured port from `UserSettings`
-  so the browser link stays correct
-
-**`run.py` and `serve.py`:**
-
-Both should read port from `UserSettings` (or an environment variable fallback `DTACH_PORT`)
-so that development runs also respect the configured port.
-
-### What to build (summary)
-
-| Component | Description |
-|---|---|
-| `tray.py` | New entry point; starts Flask in thread; manages tray icon lifecycle |
-| `UserSettings` | Add `port: int = 5555` field; persist and restore |
-| Settings UI | Port input in the app; "Restart to apply" message on change |
-| `requirements.txt` | Add `pystray` and `Pillow` |
-| `launch.bat` / `launch.sh` | Update to launch `tray.py` instead of (or alongside) `run.py` |
-| `serve.py` | Update to read port from `UserSettings` or `DTACH_PORT` env var |
-| `README.md` | Update installation section to describe tray app as the normal launch path |
-
-### Acceptance criteria
-
-- Fresh install: running `tray.py` starts the server and shows a tray icon
-- Tray icon right-click: "Open d-tach" opens the browser; "Quit" exits cleanly
-- Port can be changed in the Settings panel; changing it shows the restart notice
-- After restart, the new port is used and the tray icon opens the correct URL
-- `launch.bat` launches the tray app (not the raw Flask server)
-- All existing tests pass; `serve.py` and `run.py` still work independently for dev use
+Summary: system tray app, configurable port, language management (on-demand model
+download). These three are co-designed — the tray makes d-tach a persistent background
+process, which makes RAM cost of loaded spaCy models concrete, which drives the language
+management work.
 
 ---
 

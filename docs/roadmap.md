@@ -127,19 +127,21 @@ API appears, re-evaluate.
 
 ## Medium priority
 
-- **De-anonymization (reverse lookup)**
-  Given a KEYREF CSV export and an anonymized file, replace all placeholders back
-  with the original values, producing a de-anonymized document.
+- **De-anonymization / Restore**
+  ➡️ **Planned for v1.2.0** — see `step_1.2.0.md`.
 
-  - Supported file types: DOCX and plain text. **Not PDF** — redaction is structurally
-    destructive and cannot be reversed.
-  - User flow: upload the KEYREF CSV → upload the anonymized file → download the
-    de-anonymized output.
-  - Placeholder format must match the KEYREF (works correctly after Step 1 standardises
-    the `[PLACEHOLDER]` format).
-  - Implementation approach: simple find-and-replace on all `[PLACEHOLDER_N]` tokens
-    using the CSV mapping; no NLP required.
-  - Earliest version: v1.2.0 or later. Do not start until v1.1.0 is shipped.
+  Given a KEYREF CSV and any file containing d-tach placeholders, replace all
+  placeholders with their original values. The primary use case is AI-output
+  round-tripping: the user anonymizes a document, sends it to an AI tool, and the AI
+  returns new content (a letter, feedback report, summary) referencing `[PERSON_1]`
+  etc. Restore substitutes real values back into that AI-generated output — the
+  original document is never the restore target.
+
+  Supported file types: DOCX, plain text, markdown, Excel.
+
+  **PDF is not supported and not planned.** AI tools return text and markdown, not
+  PDFs. The restore use case does not arise for PDFs. The PDF anonymization quality
+  research (font-fit) is a separate concern tracked below.
 
 - **Visual highlighting of detected entities in Text Mode**
   Highlight detected PII in the output panel so the user can visually verify what
@@ -201,37 +203,32 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
   planned issues upfront so a full release can be executed in one session rather than
   reloading context per step (see CLAUDE.md workflow note).
 
+- **UI interface language / internationalisation (i18n)**
+  The application interface is currently English-only. The language selection in
+  v1.3.0 controls NLP analysis language, not the interface language. If d-tach is
+  later distributed to non-English-speaking communities, the interface should be
+  translatable. Significant scope — i18n touches every string in every template.
+  Better addressed once the app is stable and has real non-English users requesting it.
+
 - **Multi-language architecture — language selectable at install, addable post-install**
-  Currently d-tach supports EN and NL only, both baked in. A more extensible
-  approach would let users select the active language(s) during first-run setup
-  (spaCy model downloaded at that point rather than always both), and add further
-  languages post-install via a CLI command or in-app settings panel.
-
-  Key design questions to resolve before starting:
-  - Is the install-time selection worth the complexity? Most users will want both
-    EN and NL. A simpler alternative: ship EN + NL always, make adding a third
-    language a documented manual step.
-  - Language packages: each language requires a spaCy model download and
-    potentially custom Presidio recognizer rules for local PII formats (e.g.
-    German Personalausweis, French NIR). Scope carefully.
-  - UI impact: the language selector currently has two fixed options. A dynamic
-    list driven by installed models requires a model discovery utility.
-
-  Suggested approach: build a `LanguageRegistry` class that scans installed spaCy
-  models and exposes only languages that have both a model and a Presidio
-  recognizer set. Adding a language = adding a model + a recognizer module +
-  registering it.
-
-  **Earliest version:** v1.2.0. Do not start until v1.1.0 is shipped.
+  ➡️ **Incorporated into v1.3.0 planning** — see `step_1.3.0.md`, Language Management section.
+  The connection to the v1.3.0 tray/background work is that persistent background
+  processes make the RAM cost of always-loaded spaCy models concrete: a large model
+  is 400–700 MB, and loading languages the user never uses wastes that RAM all day.
+  Language management is therefore co-designed with the tray and Settings work.
 
 - **Batch summary log**
   After a folder processing run, save a machine-readable summary log (JSON or CSV)
   to the processed folder listing each file's status, entity count, and output path.
 
 - **Standalone packaged installer (PyInstaller)**
-  Use PyInstaller to produce a single-folder distribution that includes the Python
-  interpreter, all dependencies, and the spaCy models. Target audience: colleagues
-  without Python experience who cannot or will not run the launcher scripts.
-  Known challenges: spaCy model size, Flask static file paths under
-  `sys._MEIPASS`, and `tkinter` bundling on macOS. Investigate once the app is
-  stable post-public.
+  ➡️ **Planned for v1.4.0** — see `step_1.3.0.md` for the planning note.
+
+  v1.3.0 language management (on-demand model download) unlocks this: the binary
+  ships without models, making it small enough (~80–150 MB) to publish on Codeberg's
+  free storage tier without a quota increase. Do not start until v1.3.0 is shipped.
+
+  Target audience: users without Python experience who cannot or will not run the
+  launcher scripts.
+  Known challenges: Flask static file paths under `sys._MEIPASS`, `tkinter` bundling
+  on macOS, confirming actual binary size on a clean build.
