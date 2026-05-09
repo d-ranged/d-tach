@@ -115,6 +115,101 @@ Both should read port from `UserSettings` (or an environment variable fallback
 | `launch.bat` / `launch.sh` | Update to launch `tray.py` instead of (or alongside) `run.py` |
 | `serve.py` | Update to read port from `UserSettings` or `DTACH_PORT` env var |
 | `README.md` | Update installation section to describe tray app as the normal launch path |
+| `text_routes.py` | Accept `?q=` URL parameter to pre-fill text mode input (see below) |
+
+### URL parameter — pre-fill text mode from external tools
+
+**Goal:** `GET /text?q=some+text+here` opens text mode with the input pre-filled.
+This enables OS-level keyboard shortcuts (and future browser extensions) to send
+clipboard content directly into d-tach without manual paste.
+
+**What to build:**
+
+- In the `GET /text` route, read `request.args.get('q', '')` and pass it to the template
+- In `text_mode.html`, set the textarea value from the template variable if present
+- No authentication or length limit beyond what the browser URL supports — this is
+  local-only, the same trust boundary as the rest of the app
+
+**Cross-platform OS shortcut setup (document in README):**
+
+These are personal automation scripts — not bundled with d-tach. Document the approach
+in README so users know it is possible. The shortcut key combination does not matter;
+suggested defaults are listed below.
+
+**Windows** — PowerShell + native shortcut file, no keyboard listener:
+```powershell
+# d-anonymize.ps1
+$text    = Get-Clipboard
+if (-not $text -or $text.Trim() -eq "") { exit }
+$encoded = [System.Uri]::EscapeDataString($text)
+Start-Process "http://localhost:5555/text?q=$encoded"
+```
+Create a `.lnk` shortcut pointing to:
+`powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "path\to\d-anonymize.ps1"`
+Assign shortcut key `Ctrl+Alt+A` via the shortcut's Properties dialog.
+Place the shortcut on the Desktop or in the Start Menu folder for the hotkey to work
+system-wide. No background process required.
+
+**macOS** — shell script + System Preferences keyboard shortcut:
+```bash
+#!/bin/bash
+# d-anonymize.sh
+TEXT=$(pbpaste)
+[ -z "$TEXT" ] && exit
+ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))" <<< "$TEXT")
+open "http://localhost:5555/text?q=$ENCODED"
+```
+`chmod +x d-anonymize.sh`, then assign a shortcut in:
+System Preferences → Keyboard → Shortcuts → App Shortcuts (or use Automator Quick Action
+for a right-click Services menu entry instead of a keyboard shortcut).
+
+**Linux** — shell script + desktop environment shortcut:
+```bash
+#!/bin/bash
+# d-anonymize.sh
+# Wayland
+if command -v wl-paste &>/dev/null; then
+    TEXT=$(wl-paste)
+else
+    TEXT=$(xclip -selection clipboard -o 2>/dev/null)
+fi
+[ -z "$TEXT" ] && exit
+ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))" <<< "$TEXT")
+xdg-open "http://localhost:5555/text?q=$ENCODED"
+```
+Assign the shortcut via GNOME Settings → Keyboard → Custom Shortcuts,
+or KDE System Settings → Shortcuts → Custom Shortcuts.
+
+### Automated shortcut setup — first-run opt-in (design note)
+
+The OS shortcut scripts above could be created automatically during first run of the
+tray app, with user permission. This fits the existing first-run prompt pattern (startup
+registration question) rather than the installer.
+
+**Proposed prompt on first tray launch:**
+
+> "Would you like to set up a keyboard shortcut to send clipboard text to d-tach?
+> This creates a small script on your machine and registers Ctrl+Alt+A as a system shortcut."
+> [Set up]  [Skip]  [Show me what it creates]
+
+"Show me what it creates" must be available — transparency principle; user sees the exact
+files and system change before agreeing.
+
+**Platform feasibility:**
+
+| Platform | Script creation | Shortcut registration |
+|---|---|---|
+| Windows | ✅ trivial | ✅ via COM / pywin32 — reliable |
+| macOS | ✅ trivial | 🟡 keyboard shortcut plist is fragile; Automator `.workflow` in `~/Library/Services/` is more reliable but user still assigns the key manually |
+| Linux | ✅ trivial | 🟠 GNOME via `gsettings`, KDE via config file; other DEs fall back to manual instructions |
+
+**Fallback for all platforms:** if automated registration is not possible or the user
+skips, show the manual setup steps from the README.
+
+This feature can be added to the tray first-run flow in the same step as startup
+registration — scope it together rather than as a separate issue.
+
+---
 
 ### ✅ Complete when
 
@@ -124,6 +219,9 @@ Both should read port from `UserSettings` (or an environment variable fallback
 - After restart, the new port is used and the tray icon opens the correct URL
 - `launch.bat` launches the tray app
 - `serve.py` and `run.py` still work independently for dev use
+- `GET /text?q=hello` opens text mode with "hello" pre-filled in the input
+- `GET /text` (no parameter) opens text mode with empty input — existing behaviour unchanged
+- README documents the OS shortcut approach for Windows, macOS, and Linux
 - All existing tests pass
 
 ---
