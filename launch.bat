@@ -45,6 +45,6 @@ if errorlevel 1 (
 
 :: ---- Start Flask and open browser after it has had time to bind ----
 echo Starting d-tach...
-start /b cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:5000"
+start /b cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:5555"
 .venv\Scripts\python run.py
 pause

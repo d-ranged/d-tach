@@ -12,6 +12,7 @@ const keyrefBody           = document.getElementById("keyref-body");
 const exportKeyrefBtn      = document.getElementById("export-keyref-btn");
 const datesToggle          = document.getElementById("dates-toggle");
 const urlsToggle           = document.getElementById("urls-toggle");
+const locationsToggle      = document.getElementById("locations-toggle");
 const numericIdToggle      = document.getElementById("numeric-id-toggle");
 const digitCountInput      = document.getElementById("digit-count");
 const langSelector         = document.getElementById("lang-selector");
@@ -68,6 +69,7 @@ async function runAnonymize() {
                 secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
                 anonymize_dates: datesToggle.checked,
+                anonymize_locations: locationsToggle.checked,
                 anonymize_urls: urlsToggle.checked,
                 numeric_id_enabled: numericIdToggle.checked,
                 digit_count: parseInt(digitCountInput.value, 10) || 7,

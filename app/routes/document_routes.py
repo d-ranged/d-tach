@@ -21,6 +21,7 @@ def document_mode():
         hashing_enabled=settings.hashing_enabled,
         hashing_secret=settings.hashing_secret,
         anonymize_dates=settings.anonymize_dates,
+        anonymize_locations=settings.anonymize_locations,
         anonymize_urls=settings.anonymize_urls,
         pattern_config=settings.pattern_config,
         excel_generic_enabled=settings.excel_generic_enabled,
@@ -97,6 +98,7 @@ def process_folder():
     key_reference_enabled = args.get("key_reference_enabled", "false").lower() == "true"
     check_file_names = args.get("check_file_names", "false").lower() == "true"
     anonymize_dates = args.get("anonymize_dates", "false").lower() == "true"
+    anonymize_locations = args.get("anonymize_locations", "false").lower() == "true"
     anonymize_urls = args.get("anonymize_urls", "false").lower() == "true"
     numeric_id_enabled = args.get("numeric_id_enabled", "false").lower() == "true"
     digit_count_raw = args.get("digit_count", "7")
@@ -145,6 +147,7 @@ def process_folder():
             check_file_names=check_file_names,
             language=language,
             anonymize_dates=anonymize_dates,
+            anonymize_locations=anonymize_locations,
             anonymize_urls=anonymize_urls,
             numeric_id_enabled=numeric_id_enabled,
             digit_count=digit_count,
@@ -191,6 +194,7 @@ def process_folder():
         user_settings.language = language
         user_settings.hashing_enabled = hashing_enabled
         user_settings.anonymize_dates = anonymize_dates
+        user_settings.anonymize_locations = anonymize_locations
         user_settings.anonymize_urls = anonymize_urls
         if hashing_enabled and secret.strip():
             user_settings.hashing_secret = secret
@@ -238,6 +242,7 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
         check_file_names=bool(data.get("check_file_names", False)),
         language=language,
         anonymize_dates=bool(data.get("anonymize_dates", False)),
+        anonymize_locations=bool(data.get("anonymize_locations", False)),
         anonymize_urls=bool(data.get("anonymize_urls", False)),
         numeric_id_enabled=bool(data.get("numeric_id_enabled", False)),
         digit_count=digit_count,
@@ -255,6 +260,7 @@ def _persist_settings(data: dict) -> None:
         user_settings.language = language
     user_settings.hashing_enabled = bool(data.get("hashing_enabled", False))
     user_settings.anonymize_dates = bool(data.get("anonymize_dates", False))
+    user_settings.anonymize_locations = bool(data.get("anonymize_locations", False))
     user_settings.anonymize_urls = bool(data.get("anonymize_urls", False))
     secret = data.get("secret", "")
     if data.get("hashing_enabled") and secret.strip():

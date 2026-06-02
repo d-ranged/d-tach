@@ -54,9 +54,9 @@ fi
 # ---- Open browser after Flask has had time to bind ----
 (sleep 3 && {
     if command -v open &>/dev/null; then
-        open http://localhost:5000
+        open http://localhost:5555
     elif command -v xdg-open &>/dev/null; then
-        xdg-open http://localhost:5000
+        xdg-open http://localhost:5555
     fi
 }) &
 

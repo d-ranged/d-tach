@@ -14,6 +14,7 @@ _DEFAULTS: Final[dict] = {
     "hashing_secret": "",
     "language": "en",
     "anonymize_dates": False,
+    "anonymize_locations": False,
     "anonymize_urls": False,
     "pattern_config": {
         "digit_count": 7,
@@ -81,6 +82,15 @@ class UserSettings:
     @anonymize_dates.setter
     def anonymize_dates(self, value: bool) -> None:
         self._data["anonymize_dates"] = bool(value)
+
+    @property
+    def anonymize_locations(self) -> bool:
+        """Whether LOCATION entities should be anonymized (off by default — often meaningful context)."""
+        return self._data.get("anonymize_locations", False)
+
+    @anonymize_locations.setter
+    def anonymize_locations(self, value: bool) -> None:
+        self._data["anonymize_locations"] = bool(value)
 
     @property
     def anonymize_urls(self) -> bool:
@@ -184,6 +194,8 @@ class UserSettings:
             merged["language"] = raw["language"]
         if isinstance(raw.get("anonymize_dates"), bool):
             merged["anonymize_dates"] = raw["anonymize_dates"]
+        if isinstance(raw.get("anonymize_locations"), bool):
+            merged["anonymize_locations"] = raw["anonymize_locations"]
         if isinstance(raw.get("anonymize_urls"), bool):
             merged["anonymize_urls"] = raw["anonymize_urls"]
         if isinstance(raw.get("pattern_config"), dict):
