@@ -29,6 +29,14 @@
 
     <div class="setting-group">
         <label class="toggle">
+            <input type="checkbox" id="locations-toggle" {% if anonymize_locations %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Anonymize locations</span>
+        </label>
+    </div>
+
+    <div class="setting-group">
+        <label class="toggle">
             <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
             <span class="toggle-track"></span>
             <span class="setting-label">Numeric ID</span>

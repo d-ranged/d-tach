@@ -11,6 +11,7 @@ const numericIdToggle        = document.getElementById("numeric-id-toggle");
 const digitCountInput        = document.getElementById("digit-count");
 const langSelector           = document.getElementById("lang-selector");
 const urlsToggle             = document.getElementById("urls-toggle");
+const locationsToggle        = document.getElementById("locations-toggle");
 const excelNerToggle         = document.getElementById("excel-ner-toggle");
 const excelColumnsInput      = document.getElementById("excel-columns");
 const progressArea      = document.getElementById("progress-area");
@@ -165,6 +166,7 @@ async function runProcessFile() {
                 key_reference_enabled: keyrefToggle.checked,
                 check_file_names: namesToggle.checked,
                 anonymize_dates: datesToggle.checked,
+                anonymize_locations: locationsToggle.checked,
                 anonymize_urls: urlsToggle.checked,
                 numeric_id_enabled: numericIdToggle.checked,
                 digit_count: parseInt(digitCountInput.value, 10) || 7,
@@ -241,6 +243,7 @@ function runProcessFolder() {
         key_reference_enabled: keyrefToggle.checked,
         check_file_names: namesToggle.checked,
         anonymize_dates: datesToggle.checked,
+        anonymize_locations: locationsToggle.checked,
         anonymize_urls: urlsToggle.checked,
         numeric_id_enabled: numericIdToggle.checked,
         digit_count: parseInt(digitCountInput.value, 10) || 7,

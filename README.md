@@ -53,7 +53,7 @@ On first run, the launcher checks your Python version, then installs all require
 
 > **Python not installed yet?** The launcher will display a clear error message with a download link and step-by-step instructions. Install Python, then double-click `launch.bat` again.
 
-A browser window will open at `http://localhost:5000`. Keep the terminal window open while you use the application — closing it stops the server.
+A browser window will open at `http://localhost:5555`. Keep the terminal window open while you use the application — closing it stops the server.
 
 ### Installation and first run (macOS / Linux)
 
@@ -121,7 +121,7 @@ python run.py
 
 Or double-click `launch.bat` (Windows) / run `./launch.sh` (macOS / Linux). Both launchers handle first-time setup automatically.
 
-The app is available at `http://localhost:5000`.
+The app is available at `http://localhost:5555`.
 
 ### Running tests
 
