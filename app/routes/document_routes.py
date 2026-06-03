@@ -201,6 +201,7 @@ def process_folder():
         user_settings.pattern_config = PatternConfig(
             digit_count=digit_count,
             numeric_id_enabled=numeric_id_enabled,
+            check_file_names=check_file_names,
         )
         user_settings.excel_generic_enabled = excel_generic_enabled
         user_settings.excel_column_names = excel_column_names
@@ -273,6 +274,7 @@ def _persist_settings(data: dict) -> None:
     user_settings.pattern_config = PatternConfig(
         digit_count=digit_count,
         numeric_id_enabled=numeric_id_enabled,
+        check_file_names=bool(data.get("check_file_names", False)),
     )
     user_settings.excel_generic_enabled = bool(data.get("excel_generic_enabled", True))
     excel_col_raw = data.get("excel_column_names", "").strip()

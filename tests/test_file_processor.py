@@ -507,3 +507,58 @@ class TestConsistentHashing:
             out_doc = DocxDoc(str(result.output_path))
             text = "\n".join(p.text for p in out_doc.paragraphs)
             assert "[EMAIL_ADDRESS_1]" in text
+
+
+class TestCheckFileNames:
+    """Tests for file name anonymization via check_file_names setting (issue #48)."""
+
+    def test_prefix_mode_filename_anonymized_using_content_replacements(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        """Name detected in document content is applied case-insensitively to filename."""
+        source = tmp_path / "John_Smith_report.docx"
+        make_docx(source, ["My name is John Smith and I work here."])
+        settings = ProcessingSettings(check_file_names=True)
+        result = file_processor.process(source, settings)
+        assert result.output_path is not None
+        assert "John" not in result.output_path.name
+        assert "Smith" not in result.output_path.name
+
+    def test_prefix_mode_filename_unchanged_when_check_file_names_off(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        """Without check_file_names, original name is preserved (ANON_ prefix only)."""
+        source = tmp_path / "John_Smith_report.docx"
+        make_docx(source, ["My name is John Smith and I work here."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.output_path is not None
+        assert result.output_path.name == "ANON_John_Smith_report.docx"
+
+    def test_subfolder_mode_filename_anonymized(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        """In subfolder output mode, file name is anonymized when check_file_names is on."""
+        source = tmp_path / "John_Smith_report.docx"
+        make_docx(source, ["My name is John Smith and I work here."])
+        output_dir = tmp_path / "anonymized"
+        output_dir.mkdir()
+        override = output_dir / "John_Smith_report.docx"
+        settings = ProcessingSettings(check_file_names=True)
+        result = file_processor.process(source, settings, override)
+        assert result.output_path is not None
+        assert "John" not in result.output_path.name
+        assert "Smith" not in result.output_path.name
+
+    def test_subfolder_mode_filename_unchanged_when_check_file_names_off(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        """In subfolder mode without check_file_names, override path is used as-is."""
+        source = tmp_path / "John_Smith_report.docx"
+        make_docx(source, ["My name is John Smith."])
+        output_dir = tmp_path / "anonymized"
+        output_dir.mkdir()
+        override = output_dir / "John_Smith_report.docx"
+        settings = ProcessingSettings(check_file_names=False)
+        result = file_processor.process(source, settings, override)
+        assert result.output_path is not None
+        assert result.output_path.name == "John_Smith_report.docx"
