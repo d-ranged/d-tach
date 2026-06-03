@@ -462,3 +462,73 @@ class TestSubfolderOutputMode:
         assert result.status == "anonymized"
         assert result.output_path is not None
         assert result.output_path.name.startswith("ANON_")
+
+
+# ---------------------------------------------------------------------------
+# folder name anonymization (issue #49)
+# ---------------------------------------------------------------------------
+
+class TestFolderRenaming:
+    """Folder names inside the anonymized/ output directory are renamed when
+    check_file_names is enabled in subfolder output mode (issue #49)."""
+
+    def test_folder_name_with_pii_renamed_in_output(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        """Subfolder named after a person detected in document content is renamed."""
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        make_docx(student_dir / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder", check_file_names=True)
+        list(folder_processor.process(tmp_path, settings))
+        anonymized_root = tmp_path / "anonymized"
+        output_folder_names = [p.name for p in anonymized_root.iterdir() if p.is_dir()]
+        assert "John_Smith" not in output_folder_names
+
+    def test_source_folder_not_renamed(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        """Source directories are never modified — only the anonymized/ output is renamed."""
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        make_docx(student_dir / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder", check_file_names=True)
+        list(folder_processor.process(tmp_path, settings))
+        assert student_dir.exists(), "Source folder must not be renamed or deleted"
+
+    def test_folder_renaming_disabled_without_check_file_names(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        """When check_file_names is off, output folder names are preserved as-is."""
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        make_docx(student_dir / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder", check_file_names=False)
+        list(folder_processor.process(tmp_path, settings))
+        assert (tmp_path / "anonymized" / "John_Smith").exists()
+
+    def test_folder_renaming_disabled_in_prefix_mode(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        """Folder renaming is not attempted in prefix mode (source folders stay intact)."""
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        make_docx(student_dir / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="prefix", check_file_names=True)
+        list(folder_processor.process(tmp_path, settings))
+        assert student_dir.exists()
+
+    def test_nested_folders_renamed_deepest_first(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        """Deep subfolder renamed before its parent — paths remain valid throughout."""
+        outer = tmp_path / "John_Smith"
+        inner = outer / "Documents"
+        inner.mkdir(parents=True)
+        make_docx(inner / "report.docx", ["My name is John Smith."])
+        settings = ProcessingSettings(output_mode="subfolder", check_file_names=True)
+        list(folder_processor.process(tmp_path, settings))
+        anonymized_root = tmp_path / "anonymized"
+        # No path component should still be "John_Smith"
+        for p in anonymized_root.rglob("*"):
+            assert "John_Smith" not in p.name

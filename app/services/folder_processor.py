@@ -27,9 +27,10 @@ class FolderSummary:
 class FolderProcessor:
     """Recursively processes all supported files in a folder.
 
-    Files are processed deepest-first (via rglob). Folder renaming is not
-    implemented in this step — that requires tracking every output path and
-    renaming directories after all content is processed, which is Step 9+.
+    Files are processed deepest-first (via rglob). When check_file_names is
+    enabled and output_mode is subfolder, folder names inside the anonymized/
+    output directory are renamed after all file content is complete, deepest
+    first so that renaming a parent never invalidates a child's path.
 
     Progress is reported by yielding each FileResult as it completes so the
     caller can stream updates to the UI.
@@ -92,6 +93,7 @@ class FolderProcessor:
             else settings
         )
 
+        completed: list[FileResult] = []
         for index, path in enumerate(files, start=1):
             output_path_override = None
             if settings.output_mode == "subfolder":
@@ -107,7 +109,39 @@ class FolderProcessor:
                     source_path=path,
                     error_message=str(exc),
                 )
+            completed.append(result)
             yield result, index, total
+
+        if settings.output_mode == "subfolder" and settings.check_file_names:
+            all_replacements: dict[str, str] = {}
+            for r in completed:
+                all_replacements.update(r.replacements)
+            self._rename_output_folders(folder / "anonymized", all_replacements, settings)
+
+    def _rename_output_folders(
+        self,
+        output_root: Path,
+        all_replacements: dict[str, str],
+        settings: ProcessingSettings,
+    ) -> None:
+        """Rename directories inside output_root whose names contain PII.
+
+        Processes deepest directories first so that renaming a child directory
+        does not invalidate the paths of its siblings, and renaming a parent
+        does not invalidate the already-resolved paths of its children.
+        Source directories are never touched — only directories inside
+        output_root (i.e. the anonymized/ subfolder) are renamed.
+        """
+        dirs = sorted(
+            [p for p in output_root.rglob("*") if p.is_dir()],
+            key=lambda p: -len(p.parts),
+        )
+        for d in dirs:
+            new_name = self._file_processor.anonymize_filename(
+                d.name, "", all_replacements, settings, settings.language,
+            )
+            if new_name != d.name:
+                d.rename(d.parent / new_name)
 
     def summarise(
         self,
