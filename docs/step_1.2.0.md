@@ -13,7 +13,8 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | Step | Description | Status |
 |---|---|---|
 | 1 | Restore Tab — DOCX, Text, Markdown, Excel | ⬜ Not started |
-| 2 | Acceptance Testing | ⬜ Not started |
+| 2 | Known Values — user-managed list of names always anonymized | ⬜ Not started |
+| 3 | Acceptance Testing | ⬜ Not started |
 
 ---
 
@@ -132,13 +133,99 @@ find-and-replace pass. No NLP, no model loading — pure string substitution.
 
 ---
 
-## Step 2 — Acceptance Testing
+## Step 2 — Known Values (User-Managed PII List)
 
 **Codeberg issue to create first:**
-`test: acceptance testing — v1.2.0 restore feature`
+`feature: known values list — user-managed names always anonymized`
 
-**Goal:** Manual test run covering the Restore tab end-to-end, after Step 1 is
-merged to main.
+**Goal:** The user can maintain a persistent list of strings (typically names or IDs that
+the NER model consistently misses) that are always anonymized, regardless of whether
+Presidio detects them. Adding, viewing, and removing entries is done in the UI.
+
+**Background:** Uncommon names — particularly those from less-represented languages or
+cultures — are often missed by spaCy's NER models, which are trained predominantly on
+English and Dutch text corpora. A student named Egidijus Ukrinas may not be detected
+as a PERSON even in a full-sentence context. The known values list is the user's
+escape hatch: declare it once, and it is caught from that point forward.
+
+### Design decisions
+
+**Storage:** A flat list of strings in `user_settings.json` under `"known_values"`.
+Persisted via `UserSettings`, restored on launch. Global — applies to every run.
+Case-insensitive matching at detection time (stored in original casing for display).
+
+**Pipeline position:** Applied as a pre-pass before Presidio NER, inside
+`_build_ad_hoc_recognizers()`. Each known value is converted to an exact
+case-insensitive regex pattern with a high confidence score (0.99) and entity type
+`PERSON`. This ensures hashing applies consistently using the PERSON rules when
+hashing is enabled. Values that do not look like names (e.g. an ID string) receive
+entity type `NUMERIC_ID` or `PERSON` at the user's discretion — for v1.2.0 always
+use `PERSON` and note in the UI that this is the entity type used.
+
+**Scope:** Applies in both Text Mode and Document Mode (same shared list). Also
+applied in filename and folder name anonymization when check_file_names is enabled.
+
+**Partial names:** Each entry is treated as an independent token. If the user adds
+"Egidijus Ukrinas" as a single entry AND "Egidijus" as a separate entry, both are
+stored. The multi-word entry is matched first (longest-first ordering, consistent
+with existing anonymizer behaviour).
+
+### What to build
+
+**`UserSettings`**
+- Add `known_values: list[str]` property backed by `user_settings.json`
+- Default: empty list
+- Getter returns the list; setter replaces the list and saves
+
+**`Anonymizer`** (or route-level `_build_ad_hoc_recognizers`)
+- `build_known_value_recognizers(known_values: list[str]) -> list[PatternRecognizer]`
+  — one recognizer per entry, case-insensitive exact match, confidence 0.99, type PERSON
+- Called from `_build_ad_hoc_recognizers()` in `file_processor.py`; recognizers are
+  prepended so they run before NER-based detections
+
+**`ProcessingSettings`**
+- Add `known_values: list[str]` field (default empty list)
+- Routes populate this from `user_settings.known_values` at request time
+
+**New API routes — `document_routes.py` and/or a dedicated `settings_routes.py`**
+- `GET /settings/known-values` — returns the current list as JSON
+- `POST /settings/known-values` — body: `{"value": "Egidijus Ukrinas"}` — appends and saves
+- `DELETE /settings/known-values` — body: `{"value": "Egidijus Ukrinas"}` — removes and saves
+
+**UI — both `document_mode.html` and `text_mode.html`** (or a shared component)
+- A collapsible "Known names" panel in the settings bar, alongside the existing toggles
+- A text input labelled "Add name" with an Add button (Enter key also submits)
+- Each saved name renders as a tag/chip with an × to remove; click × calls the DELETE route
+- Panel loads current list on page open via GET route
+- Empty state shows a brief placeholder: "No known names yet — add names that are
+  consistently missed by the anonymizer"
+
+### Guard rails
+
+- Duplicate values are silently ignored (case-insensitive comparison before storing)
+- Empty string rejected at the route level
+- Values are stored as the user typed them (original casing) for readability in the UI;
+  matching at runtime is always case-insensitive
+- No limit on list size in v1.2.0 — revisit if performance becomes a concern
+
+### ✅ Complete when
+
+- A name added via the UI is anonymized in the next run in both Text and Document modes
+- A name added is detected in filenames when check_file_names is enabled
+- The name persists after app restart
+- Removing a name from the UI stops it being detected in the next run
+- Duplicate prevention works (adding same name twice results in one entry)
+- All existing tests pass; new tests cover recognizer creation and round-trip persistence
+
+---
+
+## Step 3 — Acceptance Testing
+
+**Codeberg issue to create first:**
+`test: acceptance testing — v1.2.0 restore and known values`
+
+**Goal:** Manual test run covering the Restore tab and Known Values list end-to-end,
+after Steps 1 and 2 are merged to main.
 
 ### Pre-test setup
 
@@ -151,8 +238,9 @@ merged to main.
   - The corresponding `KEYREF_` CSV from that run
   - One `.md` file with placeholders (simulate AI-returned content referencing placeholders)
   - One `.xlsx` with placeholder cells
+  - One DOCX or folder containing a name you know the NER misses
 
-### Test cases
+### Test cases — Restore
 
 | Check | Expected |
 |---|---|
@@ -164,8 +252,24 @@ merged to main.
 | Unsupported file type | Clear error message in UI |
 | Restore tab in nav | Navigable from Text Mode and Document Mode tabs |
 | Last-used paths | Restored on next launch |
-| Regression — Document Mode | Anonymization still works correctly |
-| Regression — Text Mode | Text anonymization still works correctly |
+
+### Test cases — Known Values
+
+| Check | Expected |
+|---|---|
+| Add a name the NER misses (e.g. uncommon first + last name) | Name anonymized in next Document Mode run |
+| Same name detected in Text Mode | Name anonymized when pasted text is processed |
+| Name survives app restart | Still in list and still detected after closing and reopening |
+| Remove name from UI | Next run does not detect/replace it |
+| Add same name twice | Only one entry stored |
+| Name detected in filename | Anonymized in output filename when check_file_names is enabled |
+
+### Test cases — Regression
+
+| Check | Expected |
+|---|---|
+| Document Mode anonymization | Still works correctly |
+| Text Mode anonymization | Still works correctly |
 | `pytest` | All tests pass |
 
 ### ✅ Complete when

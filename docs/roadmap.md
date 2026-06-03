@@ -69,6 +69,24 @@ API appears, re-evaluate.
 
 ## High priority
 
+- **Known Values — user-managed list of names always anonymized**
+  ➡️ **Planned for v1.2.0** — see `step_1.2.0.md` Step 2.
+
+  Presidio's NER models are trained predominantly on English and Dutch text and
+  consistently miss uncommon names from other language backgrounds. The user needs
+  an escape hatch: a persistent list of strings that are always caught regardless
+  of whether NER detects them.
+
+  Each entry is stored in `user_settings.json` and converted at runtime to a
+  high-confidence (0.99) case-insensitive regex recognizer with entity type PERSON,
+  prepended before NER in `_build_ad_hoc_recognizers()`. Hashing applies using the
+  PERSON rules when enabled. The list is shared across Text Mode and Document Mode
+  and applies to filename anonymization when check_file_names is on.
+
+  UI: collapsible "Known names" panel in the settings bar; text input + Add button;
+  entries render as removable tags. Separate API routes handle add and remove with
+  immediate persistence.
+
 - **Numeric ID / phone number double-detection overlap**
   When the Numeric ID toggle is active with a digit count that matches a phone number
   length (e.g. 10 or 11 digits), the same number is detected as both NUMERIC_ID and
