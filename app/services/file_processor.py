@@ -164,15 +164,23 @@ class FileProcessor:
     ) -> Path:
         """Return the output path for a processed file.
 
-        In subfolder mode (override provided): return override as-is — the
-        caller (FolderProcessor) computed the mirror path.
+        In subfolder mode (override provided): apply filename anonymization to
+        the override stem when check_file_names is enabled, then return the
+        updated path.  No ANON_/CHECKED_ prefix is added in subfolder mode —
+        the anonymized/ subfolder itself distinguishes output from source.
         In prefix mode: apply ANON_/CHECKED_ prefix, optionally running
         filename anonymization when check_file_names is enabled.
         """
         if override is not None:
+            if settings.check_file_names:
+                new_name = self.anonymize_filename(
+                    override.stem, override.suffix,
+                    replacements, settings, language,
+                )
+                return override.parent / new_name
             return override
         if settings.check_file_names:
-            output_name = self._anonymize_filename(
+            output_name = self.anonymize_filename(
                 f"{prefix}{source_path.stem}", source_path.suffix,
                 replacements, settings, language,
             )
@@ -463,7 +471,7 @@ class FileProcessor:
                 replacements[entity.original_text] = entity.placeholder
         return replacements
 
-    def _anonymize_filename(
+    def anonymize_filename(
         self,
         stem: str,
         suffix: str,
