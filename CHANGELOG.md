@@ -9,6 +9,20 @@ Version numbers follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.P
 
 ---
 
+## [1.2.0] — 2026-06-07
+
+### Added
+
+- **Restore tab** — new mode for reversing anonymization. Select any file containing d-tach placeholders (DOCX, XLSX, MD, TXT) and a KEYREF CSV; the tool replaces all placeholders with their original values and saves a `RESTORED_` copy. The primary use case is AI-output round-tripping: anonymize a document, send it to an AI tool, then restore the AI's response so real names and values appear in the final output. Placeholder tokens in the filename itself are also resolved in the output filename. The KEYREF Browse button opens a dialog filtered to CSV files.
+- **Known values list** — add names that the NER model consistently misses (e.g. uncommon names from less-represented language backgrounds) via a collapsible "Known names" panel in both Text and Document modes. Entries are stored in `user_settings.json` and applied as high-confidence (0.99) case-insensitive recognizers before every run, across both modes and including filename anonymization when that option is enabled.
+
+### Fixed
+
+- **PDF unreadable detection** — image-based PDFs or PDFs with non-standard encoding previously produced a silent `CHECKED_` output, falsely implying the file had been inspected for PII. They now produce an `UNREADABLE_` copy with a clear amber warning in the UI. Folder runs continue processing remaining files and include an unreadable count in the summary.
+- **Numeric ID / phone number overlap** — when Numeric ID detection was active with a digit count matching a common phone number length (10–11 digits), the same number was detected by both recognizers and produced corrupted placeholder output. The anonymizer now resolves overlapping spans by confidence, keeping only the stronger detection.
+
+---
+
 ## [1.1.0] — 2026-04-28
 
 ### Added
