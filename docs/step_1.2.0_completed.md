@@ -1,4 +1,4 @@
-# step_1.2.0.md — d-tach v1.2.0 Build Plan
+# step_1.2.0_completed.md — d-tach v1.2.0 Build Plan
 
 This document breaks the v1.2.0 planned work into ordered, testable steps.
 Each step should map to one or more Codeberg issues created before starting.
@@ -16,7 +16,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 2 | #55 | Numeric ID / phone double-detection overlap fix | ✅ Done |
 | 3 | #52 | Restore Tab — DOCX, Text, Markdown, Excel | ✅ Done |
 | 4 | #53 | Known Values — user-managed list of names always anonymized | ✅ Done |
-| 5 | #56 | Acceptance Testing | ⬜ Not started |
+| 5 | #56 | Acceptance Testing | ✅ Done |
 
 ---
 
@@ -395,7 +395,7 @@ produce `output_approach_d.pdf` using it.
 
 ## v1.3.0
 
-See `step_1.3.0.md` for the full build plan.
+See `step_1.3.0_next.md` for the full build plan.
 
 Summary: system tray app, configurable port, language management (on-demand model
 download). These three are co-designed — the tray makes d-tach a persistent background

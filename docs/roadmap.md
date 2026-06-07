@@ -4,7 +4,7 @@ Issues and ideas for versions after v1.0.0. Items here do not need to be done
 in sequence — pick up by priority or contributor interest.
 
 When an item is selected for a release, move it into a versioned step file
-(e.g. `step_1.2.0.md`) and create the corresponding Codeberg issues before
+(e.g. `step_1.3.0_next.md`) and create the corresponding Codeberg issues before
 starting work.
 
 **When completing any issue that ships a change to users:**
@@ -15,9 +15,18 @@ starting work.
 
 ---
 
+## ✅ Shipped in v1.2.0
+
+All steps complete. See `docs/step_1.2.0_completed.md` and `CHANGELOG.md` for detail.
+Key additions: Restore tab (AI round-tripping), Known values list (names always
+anonymized), PDF unreadable detection (UNREADABLE_ prefix), numeric ID / phone
+overlap fix.
+
+---
+
 ## ✅ Shipped in v1.1.0
 
-All steps complete. See `docs/step_1.1.0.md` and `CHANGELOG.md` for detail.
+All steps complete. See `docs/step_1.1.0_completed.md` and `CHANGELOG.md` for detail.
 Key additions: bracketed placeholders, d-ranged branding, Excel anonymization,
 key reference export, subfolder output mode, consistent hashing for all entity
 types, URL detection opt-in, macOS launcher fallback.
@@ -69,35 +78,6 @@ API appears, re-evaluate.
 
 ## High priority
 
-- **Known Values — user-managed list of names always anonymized**
-  ➡️ **Planned for v1.2.0** — see `step_1.2.0.md` Step 2.
-
-  Presidio's NER models are trained predominantly on English and Dutch text and
-  consistently miss uncommon names from other language backgrounds. The user needs
-  an escape hatch: a persistent list of strings that are always caught regardless
-  of whether NER detects them.
-
-  Each entry is stored in `user_settings.json` and converted at runtime to a
-  high-confidence (0.99) case-insensitive regex recognizer with entity type PERSON,
-  prepended before NER in `_build_ad_hoc_recognizers()`. Hashing applies using the
-  PERSON rules when enabled. The list is shared across Text Mode and Document Mode
-  and applies to filename anonymization when check_file_names is on.
-
-  UI: collapsible "Known names" panel in the settings bar; text input + Add button;
-  entries render as removable tags. Separate API routes handle add and remove with
-  immediate persistence.
-
-- **Numeric ID / phone number double-detection overlap**
-  When the Numeric ID toggle is active with a digit count that matches a phone number
-  length (e.g. 10 or 11 digits), the same number is detected as both NUMERIC_ID and
-  PHONE_NUMBER and receives two separate placeholders. The anonymizer currently processes
-  whichever entity appears first; the second detection fires on the already-replaced text
-  and produces a spurious nested replacement. Fix approach: add an overlap-resolution step
-  in Anonymizer that, for the same text span detected by two entity types, keeps the
-  higher-confidence detection and discards the lower. Alternatively, expose a "suppress
-  phone detection when Numeric ID is active" option for users who know their ID format
-  closely resembles a phone number.
-
 - **Improve NER detection accuracy — names in tables and less common names**
   During real-document testing, names in the first-page table of an internship
   document were inconsistently detected: the student name in the table was found
@@ -145,22 +125,6 @@ API appears, re-evaluate.
 
 ## Medium priority
 
-- **De-anonymization / Restore**
-  ➡️ **Planned for v1.2.0** — see `step_1.2.0.md`.
-
-  Given a KEYREF CSV and any file containing d-tach placeholders, replace all
-  placeholders with their original values. The primary use case is AI-output
-  round-tripping: the user anonymizes a document, sends it to an AI tool, and the AI
-  returns new content (a letter, feedback report, summary) referencing `[PERSON_1]`
-  etc. Restore substitutes real values back into that AI-generated output — the
-  original document is never the restore target.
-
-  Supported file types: DOCX, plain text, markdown, Excel.
-
-  **PDF is not supported and not planned.** AI tools return text and markdown, not
-  PDFs. The restore use case does not arise for PDFs. The PDF anonymization quality
-  research (font-fit) is a separate concern tracked below.
-
 - **Visual highlighting of detected entities in Text Mode**
   Highlight detected PII in the output panel so the user can visually verify what
   was replaced. `Mark.js` is the documented candidate library (see `project_guide.md`).
@@ -180,7 +144,7 @@ API appears, re-evaluate.
   long enough for Flask and the spaCy models to finish loading. Replace the fixed
   delay with a poll loop (`curl` on Windows bat, `curl` on shell) that waits until
   port 5000 responds before opening the browser. Already planned for Step 6a in
-  `step_1.1.0.md`; log here in case it slips to a later version.
+  `step_1.1.0_completed.md`; log here in case it slips to a later version.
 
 ---
 
@@ -229,7 +193,7 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
   Better addressed once the app is stable and has real non-English users requesting it.
 
 - **Multi-language architecture — language selectable at install, addable post-install**
-  ➡️ **Incorporated into v1.3.0 planning** — see `step_1.3.0.md`, Language Management section.
+  ➡️ **Incorporated into v1.3.0 planning** — see `step_1.3.0_next.md`, Language Management section.
   The connection to the v1.3.0 tray/background work is that persistent background
   processes make the RAM cost of always-loaded spaCy models concrete: a large model
   is 400–700 MB, and loading languages the user never uses wastes that RAM all day.
@@ -240,7 +204,7 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
   to the processed folder listing each file's status, entity count, and output path.
 
 - **Standalone packaged installer (PyInstaller)**
-  ➡️ **Planned for v1.4.0** — see `step_1.3.0.md` for the planning note.
+  ➡️ **Planned for v1.4.0** — see `step_1.3.0_next.md` for the planning note.
 
   v1.3.0 language management (on-demand model download) unlocks this: the binary
   ships without models, making it small enough (~80–150 MB) to publish on Codeberg's

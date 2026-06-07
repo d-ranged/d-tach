@@ -46,6 +46,19 @@ Before coding any feature, consult these files in order:
   are on before writing code
 - `CLAUDE.md` — this file; coding conventions and permissions
 
+### Step file naming convention
+
+Step files use a suffix to signal their status at a glance without opening them:
+
+| Suffix | Meaning |
+|---|---|
+| `step_X.Y.Z_completed.md` | Release shipped; all steps done |
+| `step_X.Y.Z_next.md` | The active or upcoming release |
+| `step_X.Y.Z.md` | (Legacy — no suffix means in-progress; rename on completion) |
+
+When a release is done: rename `_next.md` → `_completed.md` and rename or create
+the new upcoming file as `_next.md`. Documentation-only renames go directly to main.
+
 ---
 
 ## Language and Framework

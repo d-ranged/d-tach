@@ -1,4 +1,4 @@
-# step_1.3.0.md — d-tach v1.3.0 Build Plan
+# step_1.3.0_next.md — d-tach v1.3.0 Build Plan
 
 This document breaks the v1.3.0 planned work into ordered, testable steps.
 Each step should map to one or more Codeberg issues created before starting.
@@ -406,7 +406,7 @@ to main.
 
 ## PDF Anonymization Quality Research (Separate — Not d-tach)
 
-The standalone PDF replace-text research project from `step_1.2.0.md` continues in
+The standalone PDF replace-text research project from `step_1.2.0_completed.md` continues in
 parallel outside the d-tach codebase. If that research produces a clearly better approach
 to in-place PDF text replacement, the findings should be assessed against the current
 d-tach PDF anonymization before v1.4.0 is planned. No action required within this release.
