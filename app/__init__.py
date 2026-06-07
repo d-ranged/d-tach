@@ -40,9 +40,13 @@ def create_app() -> Flask:
     from app.routes.text_routes import bp as text_bp
     from app.routes.document_routes import bp as document_bp
     from app.routes.browse_routes import bp as browse_bp
+    from app.routes.settings_routes import bp as settings_bp
+    from app.routes.restore_routes import bp as restore_bp
 
     app.register_blueprint(text_bp)
     app.register_blueprint(document_bp)
     app.register_blueprint(browse_bp)
+    app.register_blueprint(settings_bp)
+    app.register_blueprint(restore_bp)
 
     return app

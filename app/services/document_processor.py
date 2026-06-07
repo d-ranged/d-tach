@@ -1,3 +1,4 @@
+import csv
 import logging
 import re
 from pathlib import Path
@@ -360,3 +361,107 @@ class DocumentProcessor:
             if page_text.strip():
                 parts.append(page_text)
         return "\n".join(parts)
+
+    # ------------------------------------------------------------------
+    # Restore methods (reverse anonymization: placeholder → original)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def load_keyref_csv(path: Path) -> dict[str, str]:
+        """Read a KEYREF CSV and return {placeholder: original_value}.
+
+        Expects a two-column CSV with a header row (Placeholder, Original value)
+        as produced by d-tach's consolidated keyref export.
+        """
+        result: dict[str, str] = {}
+        with path.open(newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            try:
+                next(reader)  # skip header
+            except StopIteration:
+                return result
+            for row in reader:
+                if len(row) >= 2:
+                    placeholder, original = row[0].strip(), row[1].strip()
+                    if placeholder:
+                        result[placeholder] = original
+        return result
+
+    def restore_docx(
+        self, input_path: Path, output_path: Path, replacements: dict[str, str]
+    ) -> int:
+        """Replace all placeholders with originals in a DOCX.
+
+        Returns the number of unique placeholders that were found and replaced
+        at least once (not total occurrences).
+        """
+        doc = Document(str(input_path))
+        sorted_rep = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+        found: set[str] = set()
+
+        def _restore_para(para) -> None:
+            for run in para.runs:
+                text = run.text
+                for placeholder, original in sorted_rep:
+                    if placeholder in text:
+                        text = text.replace(placeholder, original)
+                        found.add(placeholder)
+                run.text = text
+
+        for para in doc.paragraphs:
+            _restore_para(para)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        _restore_para(para)
+        for section in doc.sections:
+            for para in section.header.paragraphs:
+                _restore_para(para)
+            for para in section.footer.paragraphs:
+                _restore_para(para)
+
+        doc.save(str(output_path))
+        return len(found)
+
+    def restore_xlsx(
+        self, input_path: Path, output_path: Path, replacements: dict[str, str]
+    ) -> int:
+        """Replace all placeholders with originals in an Excel file.
+
+        Returns the number of unique placeholders found and replaced.
+        """
+        wb = load_workbook(str(input_path))
+        sorted_rep = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+        found: set[str] = set()
+        for sheet in wb.worksheets:
+            for row in sheet.iter_rows():
+                for cell in row:
+                    if not isinstance(cell.value, str) or cell.value.startswith("="):
+                        continue
+                    text = cell.value
+                    for placeholder, original in sorted_rep:
+                        if placeholder in text:
+                            text = text.replace(placeholder, original)
+                            found.add(placeholder)
+                    cell.value = text
+        wb.save(str(output_path))
+        return len(found)
+
+    @staticmethod
+    def restore_text(
+        input_path: Path, output_path: Path, replacements: dict[str, str]
+    ) -> int:
+        """Replace all placeholders with originals in a text/markdown file.
+
+        Returns the number of unique placeholders found and replaced.
+        """
+        text = input_path.read_text(encoding="utf-8")
+        sorted_rep = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+        found: set[str] = set()
+        for placeholder, original in sorted_rep:
+            if placeholder in text:
+                text = text.replace(placeholder, original)
+                found.add(placeholder)
+        output_path.write_text(text, encoding="utf-8")
+        return len(found)

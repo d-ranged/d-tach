@@ -2,7 +2,14 @@ import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from app.services.anonymizer import ENTITIES, LOCATION_ENTITY, NUMERIC_ID_ENTITY, URL_ENTITY, build_numeric_id_recognizer
+from app.services.anonymizer import (
+    ENTITIES,
+    LOCATION_ENTITY,
+    NUMERIC_ID_ENTITY,
+    URL_ENTITY,
+    build_known_value_recognizers,
+    build_numeric_id_recognizer,
+)
 from app.services.hash_encoder import HashEncoder, UNHASHABLE_ENTITIES
 from app.services.pattern_config import PatternConfig
 
@@ -92,10 +99,13 @@ def anonymize():
 
     entities_to_detect = _build_entity_list(anonymize_dates, numeric_id_enabled, anonymize_urls, anonymize_locations)
 
-    ad_hoc = []
+    ad_hoc: list = []
+    known_values = current_app.user_settings.known_values
+    if known_values:
+        ad_hoc.extend(build_known_value_recognizers(known_values, language))
     if numeric_id_enabled:
         config = PatternConfig(digit_count=digit_count)
-        ad_hoc = [build_numeric_id_recognizer(config, language)]
+        ad_hoc.append(build_numeric_id_recognizer(config, language))
 
     result = current_app.anonymizer.anonymize(
         text, language, entities=entities_to_detect, ad_hoc_recognizers=ad_hoc

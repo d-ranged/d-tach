@@ -10,11 +10,13 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 
 ## Status at a Glance
 
-| Step | Description | Status |
-|---|---|---|
-| 1 | Restore Tab — DOCX, Text, Markdown, Excel | ⬜ Not started |
-| 2 | Known Values — user-managed list of names always anonymized | ⬜ Not started |
-| 3 | Acceptance Testing | ⬜ Not started |
+| Step | Issue | Description | Status |
+|---|---|---|---|
+| 1 | #54 | PDF unreadable detection — UNREADABLE_ prefix, summary, UI | ✅ Done |
+| 2 | #55 | Numeric ID / phone double-detection overlap fix | ✅ Done |
+| 3 | #52 | Restore Tab — DOCX, Text, Markdown, Excel | ✅ Done |
+| 4 | #53 | Known Values — user-managed list of names always anonymized | ✅ Done |
+| 5 | #56 | Acceptance Testing | ⬜ Not started |
 
 ---
 
@@ -44,10 +46,62 @@ of this file.
 
 ---
 
-## Step 1 — Restore Tab (DOCX, Text, Markdown, Excel)
+## Step 1 — PDF Unreadable Detection
 
-**Codeberg issue to create first:**
-`feature: restore tab — reverse anonymization using KEYREF file`
+**Codeberg issue:** `fix: flag unreadable PDFs instead of silently writing CHECKED_ output` (#54)
+
+**Goal:** When a PDF cannot be read (image-based, unusual compression, encrypted),
+PyMuPDF extracts empty text. Previously d-tach wrote a `CHECKED_` output file anyway,
+giving the user false confidence. Now it writes an `UNREADABLE_` copy and reports a
+clear message, keeping file processing non-fatal (folder runs continue).
+
+### Changes
+
+- `file_processor.py` — `_process_pdf()`: when extracted text is empty, return
+  `FileResult(status="unreadable")` with `UNREADABLE_` prefix and an explanatory
+  `error_message`. Logs a warning. Does not raise.
+- `folder_processor.py` — `FolderSummary`: add `unreadable: int = 0` field; count
+  `unreadable` status in `summarise()`.
+- `document_routes.py` — SSE summary event: add `unreadable` count.
+- `document_mode.js` — `appendLogEntry()`: amber `⚠` icon for unreadable; `renderFileSummary()`
+  and `renderFolderSummary()` handle `unreadable` status with descriptive message.
+- `main.css` — `.log-unreadable { color: #c17000; }`.
+
+### ✅ Complete when
+
+- Image-based PDF → `UNREADABLE_` prefix, amber warning in UI, no `CHECKED_` output
+- Folder run with mixed readable/unreadable PDFs → unreadable count in summary
+- Readable PDFs still processed normally
+
+---
+
+## Step 2 — Numeric ID / Phone Overlap Fix
+
+**Codeberg issue:** `fix: numeric ID and phone number double-detection produces nested placeholder` (#55)
+
+**Goal:** When Numeric ID toggle is active with a digit count matching a phone number
+length (10–11 digits), Presidio fires both NUMERIC_ID and PHONE_NUMBER on the same span.
+The second detection previously produced a spurious nested placeholder. Now the higher-confidence
+detection wins and the duplicate is discarded.
+
+### Changes
+
+- `anonymizer.py` — `Anonymizer.anonymize()`: after `analyze()`, call `_resolve_overlaps()`
+  to deduplicate overlapping spans by confidence (highest wins).
+- `_resolve_overlaps()`: static method; sorts by `.score` descending, accepts each result
+  only if it does not overlap any already-accepted span.
+
+### ✅ Complete when
+
+- A 10-digit number with Numeric ID enabled: detected once (as NUMERIC_ID, higher confidence),
+  not twice
+- Existing PHONE_NUMBER detection unaffected when Numeric ID is off
+
+---
+
+## Step 3 — Restore Tab (DOCX, Text, Markdown, Excel)
+
+**Codeberg issue:** `feature: restore tab — reverse anonymization using KEYREF file` (#52)
 
 **Goal:** Add a Restore tab to the UI. The user selects an anonymized file and a KEYREF
 CSV produced by d-tach. The tool replaces all `[PLACEHOLDER_N]` tokens with their original
@@ -133,10 +187,9 @@ find-and-replace pass. No NLP, no model loading — pure string substitution.
 
 ---
 
-## Step 2 — Known Values (User-Managed PII List)
+## Step 4 — Known Values (User-Managed PII List)
 
-**Codeberg issue to create first:**
-`feature: known values list — user-managed names always anonymized`
+**Codeberg issue:** `feature: known values list — user-managed names always anonymized` (#53)
 
 **Goal:** The user can maintain a persistent list of strings (typically names or IDs that
 the NER model consistently misses) that are always anonymized, regardless of whether
@@ -219,10 +272,9 @@ with existing anonymizer behaviour).
 
 ---
 
-## Step 3 — Acceptance Testing
+## Step 5 — Acceptance Testing
 
-**Codeberg issue to create first:**
-`test: acceptance testing — v1.2.0 restore and known values`
+**Codeberg issue:** `test: acceptance testing — v1.2.0` (#56)
 
 **Goal:** Manual test run covering the Restore tab and Known Values list end-to-end,
 after Steps 1 and 2 are merged to main.
@@ -239,6 +291,21 @@ after Steps 1 and 2 are merged to main.
   - One `.md` file with placeholders (simulate AI-returned content referencing placeholders)
   - One `.xlsx` with placeholder cells
   - One DOCX or folder containing a name you know the NER misses
+
+### Test cases — PDF Unreadable Detection
+
+| Check | Expected |
+|---|---|
+| Image-based PDF (single file) | `UNREADABLE_` prefix; amber warning in UI showing the error message |
+| Image-based PDF in folder run | Counted in `Unreadable PDF: N` line of summary; does not stop folder processing |
+| Text-based PDF (readable) | Processed normally; `ANON_` or `CHECKED_` as before |
+
+### Test cases — Numeric ID / Phone Overlap
+
+| Check | Expected |
+|---|---|
+| 10-digit number with Numeric ID on | Detected once as NUMERIC_ID; no nested placeholder |
+| Phone number with Numeric ID off | Still detected as PHONE_NUMBER |
 
 ### Test cases — Restore
 

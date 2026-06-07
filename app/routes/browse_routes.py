@@ -63,6 +63,26 @@ def _open_file_dialog() -> str:
     return path or ""
 
 
+def _open_csv_dialog() -> str:
+    """Open a native OS file picker filtered to CSV files."""
+    _ensure_tcl_available()
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    root.wm_attributes("-topmost", True)
+    path = filedialog.askopenfilename(
+        title="Select a KEYREF CSV file",
+        filetypes=[
+            ("CSV files", "*.csv"),
+            ("All files", "*.*"),
+        ],
+    )
+    root.destroy()
+    return path or ""
+
+
 def _open_folder_dialog() -> str:
     """Open a native OS folder picker and return the selected path, or empty string."""
     _ensure_tcl_available()
@@ -104,6 +124,26 @@ def browse_file():
         return jsonify({"path": path})
     except Exception as exc:
         logger.error("File browser dialog failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/browse/csv")
+def browse_csv():
+    """Open a native file picker filtered to CSV files and return the selected path.
+
+    Used by the Restore tab's KEYREF file input.
+    Returns JSON: {"path": "<selected path>"} or {"path": ""} if cancelled.
+    """
+    if not _TKINTER_AVAILABLE:
+        return jsonify({
+            "error": "Browse buttons require tkinter, which is not installed on this system.",
+            "tkinter_unavailable": True,
+        })
+    try:
+        path = _open_csv_dialog()
+        return jsonify({"path": path})
+    except Exception as exc:
+        logger.error("CSV browser dialog failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 

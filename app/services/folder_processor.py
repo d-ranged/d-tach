@@ -18,6 +18,7 @@ class FolderSummary:
     total: int = 0
     anonymized: int = 0
     clean: int = 0
+    unreadable: int = 0
     skipped: int = 0
     errors: int = 0
     results: list[FileResult] = field(default_factory=list)
@@ -162,6 +163,8 @@ class FolderProcessor:
                 summary.anonymized += 1
             elif r.status == "clean":
                 summary.clean += 1
+            elif r.status == "unreadable":
+                summary.unreadable += 1
             elif r.status == "skipped":
                 summary.skipped += 1
             else:

@@ -72,13 +72,14 @@ class ProcessingSettings:
     excel_generic_enabled: bool = True
     excel_column_names: list[str] = field(default_factory=list)
     output_mode: str = "prefix"  # "prefix" | "subfolder"
+    known_values: list[str] = field(default_factory=list)
 
 
 @dataclass
 class FileResult:
     """The outcome of processing a single file."""
 
-    status: str  # "anonymized" | "clean" | "error" | "skipped"
+    status: str  # "anonymized" | "clean" | "unreadable" | "error" | "skipped"
     source_path: Path
     output_path: Optional[Path] = None
     keyref_path: Optional[Path] = None
@@ -246,11 +247,19 @@ class FileProcessor:
 
         if not text.strip():
             doc.close()
-            output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
-            clean_doc = fitz.open(str(path))
-            self._doc_processor.save_pdf_copy(clean_doc, output_path)
-            clean_doc.close()
-            return FileResult(status="clean", source_path=path, output_path=output_path)
+            logger.warning(
+                "PDF %s yielded no extractable text — may be image-based or have non-standard encoding.", path
+            )
+            output_path = self._output_path(path, "UNREADABLE_", {}, settings, settings.language, output_path_override)
+            unreadable_doc = fitz.open(str(path))
+            self._doc_processor.save_pdf_copy(unreadable_doc, output_path)
+            unreadable_doc.close()
+            return FileResult(
+                status="unreadable",
+                source_path=path,
+                output_path=output_path,
+                error_message="PDF could not be read — may be image-based or have non-standard encoding. Convert to a text-based PDF and retry.",
+            )
 
         language = settings.language
         entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations)
@@ -424,14 +433,19 @@ class FileProcessor:
     def _build_ad_hoc_recognizers(
         self, settings: ProcessingSettings, language: str
     ) -> list:
-        """Return a list of ad-hoc recognizers for this processing run.
+        """Return ad-hoc recognizers for this processing run.
 
-        Includes a NumericIdRecognizer when numeric ID detection is enabled.
+        Known values are prepended first (confidence 0.99) so they take priority
+        over NER. NumericIdRecognizer is appended when numeric ID detection is on.
         """
-        if not settings.numeric_id_enabled:
-            return []
-        config = PatternConfig(digit_count=settings.digit_count)
-        return [build_numeric_id_recognizer(config, language)]
+        from app.services.anonymizer import build_known_value_recognizers
+        recognizers: list = []
+        if settings.known_values:
+            recognizers.extend(build_known_value_recognizers(settings.known_values, language))
+        if settings.numeric_id_enabled:
+            config = PatternConfig(digit_count=settings.digit_count)
+            recognizers.append(build_numeric_id_recognizer(config, language))
+        return recognizers
 
     def _build_replacements(
         self,
@@ -519,6 +533,80 @@ class FileProcessor:
         # Restore separator style (spaces → underscores in the new stem)
         new_stem = readable.replace(" ", "_")
         return new_stem + suffix
+
+    # ------------------------------------------------------------------
+    # Restore
+    # ------------------------------------------------------------------
+
+    _RESTORABLE_EXTENSIONS: frozenset[str] = frozenset({".docx", ".txt", ".md", ".xlsx"})
+
+    def restore_file(self, input_path: Path, keyref_path: Path) -> FileResult:
+        """Restore an anonymized file using a KEYREF CSV.
+
+        Reads {placeholder: original} from keyref_path and replaces all
+        occurrences in input_path, writing output to RESTORED_{filename}
+        in the same directory. Returns replacement count in entities_found.
+        """
+        ext = input_path.suffix.lower()
+        if ext not in self._RESTORABLE_EXTENSIONS:
+            return FileResult(
+                status="error",
+                source_path=input_path,
+                error_message=(
+                    f"Unsupported file type for restore: {input_path.suffix}. "
+                    "Supported: DOCX, XLSX, MD, TXT."
+                ),
+            )
+
+        try:
+            replacements = self._doc_processor.load_keyref_csv(keyref_path)
+        except Exception as exc:
+            logger.error("Failed to read KEYREF %s: %s", keyref_path, exc)
+            return FileResult(
+                status="error",
+                source_path=input_path,
+                error_message=f"Could not read KEYREF file: {exc}",
+            )
+
+        if not replacements:
+            return FileResult(
+                status="error",
+                source_path=input_path,
+                error_message="KEYREF file contained no placeholder mappings.",
+            )
+
+        # Apply replacements to the filename stem so any placeholders in the
+        # anonymized filename are also resolved (e.g. ANON_[PERSON_1]_report.docx
+        # → RESTORED_Craig_Bradley_report.docx).
+        restored_stem = input_path.stem
+        for placeholder, original in sorted(
+            replacements.items(), key=lambda x: len(x[0]), reverse=True
+        ):
+            if placeholder in restored_stem:
+                restored_stem = restored_stem.replace(placeholder, original)
+        output_path = input_path.parent / f"RESTORED_{restored_stem}{input_path.suffix}"
+
+        try:
+            if ext == ".docx":
+                count = self._doc_processor.restore_docx(input_path, output_path, replacements)
+            elif ext == ".xlsx":
+                count = self._doc_processor.restore_xlsx(input_path, output_path, replacements)
+            else:
+                count = self._doc_processor.restore_text(input_path, output_path, replacements)
+        except Exception as exc:
+            logger.error("Restore failed for %s: %s", input_path, exc)
+            return FileResult(
+                status="error",
+                source_path=input_path,
+                error_message=str(exc),
+            )
+
+        return FileResult(
+            status="restored",
+            source_path=input_path,
+            output_path=output_path,
+            entities_found=count,
+        )
 
     def _write_keyref(
         self,

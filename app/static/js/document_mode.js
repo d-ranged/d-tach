@@ -198,6 +198,9 @@ function renderFileSummary(data) {
     } else if (data.status === "clean") {
         lines.push(`\u2714 No PII detected \u2014 file copied with CHECKED_ prefix.`);
         lines.push(`Output: ${data.output_path}`);
+    } else if (data.status === "unreadable") {
+        lines.push(`\u26A0 PDF unreadable \u2014 ${data.error_message}`);
+        lines.push(`File copied as: ${data.output_path}`);
     } else if (data.status === "skipped") {
         lines.push(`\u26A0 Skipped: ${data.error_message}`);
     } else {
@@ -301,9 +304,10 @@ function finishFolderProcessing() {
 function appendLogEntry(data) {
     const line = document.createElement("div");
     line.className = "log-entry log-" + data.status;
-    const icon = data.status === "anonymized" ? "\u2714"
-               : data.status === "clean"      ? "\u2714"
-               : data.status === "skipped"    ? "\u26A0"
+    const icon = data.status === "anonymized"  ? "\u2714"
+               : data.status === "clean"       ? "\u2714"
+               : data.status === "unreadable"  ? "\u26A0"
+               : data.status === "skipped"     ? "\u26A0"
                : "\u2718";
     const detail = data.status === "anonymized"
         ? ` \u2014 ${data.entities_found} value(s) replaced`
@@ -331,8 +335,9 @@ function renderFolderSummary(data) {
         `  \u2714 Anonymized: ${data.anonymized}`,
         `  \u2714 Clean (no PII): ${data.clean}`,
     ];
-    if (data.skipped) lines.push(`  \u26A0 Skipped: ${data.skipped}`);
-    if (data.errors)  lines.push(`  \u2718 Errors: ${data.errors}`);
+    if (data.unreadable) lines.push(`  \u26A0 Unreadable PDF: ${data.unreadable}`);
+    if (data.skipped)    lines.push(`  \u26A0 Skipped: ${data.skipped}`);
+    if (data.errors)     lines.push(`  \u2718 Errors: ${data.errors}`);
     if (data.keyref_csv_path) lines.push(`Key reference: ${data.keyref_csv_path}`);
     setSummary(lines.join("\n"), data.errors > 0);
 }
