@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Restore{% endblock %}
+
+{% block content %}
+<section class="doc-section">
+    <h2 class="section-heading">Restore</h2>
+    <p class="advanced-hint">
+        Replace placeholders in an anonymized file with the original values from a KEYREF CSV.
+        Use this when an AI tool has returned new content referencing <code>[PERSON_1]</code> etc.
+        and you want to produce the final document with real values inserted.
+        Supported file types: DOCX, XLSX, MD, TXT.
+    </p>
+
+    <div class="folder-input-row">
+        <label class="advanced-label" for="input-path">Anonymized file</label>
+        <input
+            type="text"
+            id="input-path"
+            class="folder-path-display"
+            placeholder="Path to anonymized file (DOCX, XLSX, MD, TXT)"
+            value="{{ restore_input_path }}"
+        >
+        <button class="btn btn-secondary" id="browse-input-btn">Browse&hellip;</button>
+        <span class="browse-unavailable-note muted" id="browse-input-note" hidden>Browse unavailable</span>
+    </div>
+
+    <div class="folder-input-row">
+        <label class="advanced-label" for="keyref-path">KEYREF file</label>
+        <input
+            type="text"
+            id="keyref-path"
+            class="folder-path-display"
+            placeholder="Path to KEYREF .csv file"
+            value="{{ restore_keyref_path }}"
+        >
+        <button class="btn btn-secondary" id="browse-keyref-btn">Browse&hellip;</button>
+        <span class="browse-unavailable-note muted" id="browse-keyref-note" hidden>Browse unavailable</span>
+    </div>
+
+    <div>
+        <button class="btn btn-primary" id="restore-btn">Restore</button>
+    </div>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Result</h2>
+    <div class="summary-area" id="restore-result">
+        <span class="muted">Result will appear here after running Restore.</span>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/restore_mode.js') }}"></script>
+{% endblock %}

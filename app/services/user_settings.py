@@ -24,6 +24,9 @@ _DEFAULTS: Final[dict] = {
     "excel_generic_enabled": True,
     "excel_column_names": "",
     "output_mode": "prefix",
+    "known_values": [],
+    "restore_input_path": "",
+    "restore_keyref_path": "",
 }
 
 
@@ -140,6 +143,33 @@ class UserSettings:
             raise ValueError(f"output_mode must be 'prefix' or 'subfolder', got {value!r}")
         self._data["output_mode"] = value
 
+    @property
+    def known_values(self) -> list[str]:
+        """Persistent list of strings always anonymized regardless of NER detection."""
+        return list(self._data.get("known_values", []))
+
+    @known_values.setter
+    def known_values(self, value: list[str]) -> None:
+        self._data["known_values"] = [str(v) for v in value]
+
+    @property
+    def restore_input_path(self) -> str:
+        """Last-used input file path for the Restore tab."""
+        return self._data.get("restore_input_path", "")
+
+    @restore_input_path.setter
+    def restore_input_path(self, value: str) -> None:
+        self._data["restore_input_path"] = str(value)
+
+    @property
+    def restore_keyref_path(self) -> str:
+        """Last-used KEYREF file path for the Restore tab."""
+        return self._data.get("restore_keyref_path", "")
+
+    @restore_keyref_path.setter
+    def restore_keyref_path(self, value: str) -> None:
+        self._data["restore_keyref_path"] = str(value)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -215,4 +245,10 @@ class UserSettings:
             merged["excel_column_names"] = raw["excel_column_names"]
         if raw.get("output_mode") in ("prefix", "subfolder"):
             merged["output_mode"] = raw["output_mode"]
+        if isinstance(raw.get("known_values"), list):
+            merged["known_values"] = [str(v) for v in raw["known_values"] if isinstance(v, str) and v.strip()]
+        if isinstance(raw.get("restore_input_path"), str):
+            merged["restore_input_path"] = raw["restore_input_path"]
+        if isinstance(raw.get("restore_keyref_path"), str):
+            merged["restore_keyref_path"] = raw["restore_keyref_path"]
         return merged

@@ -117,6 +117,23 @@
     </div>
 </details>
 
+<details class="advanced-settings">
+    <summary class="advanced-settings-toggle">Known names</summary>
+    <div class="advanced-settings-body">
+        <p class="advanced-hint">Add names consistently missed by the anonymizer. Applied in every run across Text and Document modes.</p>
+        <div class="advanced-setting-row">
+            <input
+                type="text"
+                id="known-name-input"
+                class="excel-columns-input"
+                placeholder="Enter a name to always anonymize"
+            >
+            <button class="btn btn-secondary btn-sm" id="add-known-name-btn">Add</button>
+        </div>
+        <div id="known-names-tags" class="known-names-tags"></div>
+    </div>
+</details>
+
 <section class="doc-section">
     <h2 class="section-heading">Input</h2>
 
@@ -187,4 +204,5 @@
 {% block scripts %}
 <script>const INITIAL_LANGUAGE = "{{ language }}";</script>
 <script src="{{ url_for('static', filename='js/document_mode.js') }}"></script>
+<script src="{{ url_for('static', filename='js/known_values.js') }}"></script>
 {% endblock %}

@@ -154,6 +154,7 @@ def process_folder():
             excel_generic_enabled=excel_generic_enabled,
             excel_column_names=excel_column_names,
             output_mode=output_mode,
+            known_values=user_settings.known_values,
         )
 
         all_results = []
@@ -184,6 +185,7 @@ def process_folder():
             "total": summary.total,
             "anonymized": summary.anonymized,
             "clean": summary.clean,
+            "unreadable": summary.unreadable,
             "skipped": summary.skipped,
             "errors": summary.errors,
             "keyref_csv_path": str(summary.keyref_csv_path) if summary.keyref_csv_path else None,
@@ -236,6 +238,9 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
     excel_column_names_raw = data.get("excel_column_names", "").strip()
     excel_column_names = [c.strip() for c in excel_column_names_raw.split(",") if c.strip()]
 
+    from flask import current_app
+    known_values = current_app.user_settings.known_values
+
     return ProcessingSettings(
         hashing_enabled=hashing_enabled,
         secret=secret,
@@ -249,6 +254,7 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
         digit_count=digit_count,
         excel_generic_enabled=bool(data.get("excel_generic_enabled", True)),
         excel_column_names=excel_column_names,
+        known_values=known_values,
     ), ""
 
 

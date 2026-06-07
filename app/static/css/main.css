@@ -709,6 +709,10 @@ body {
     color: var(--color-text);
 }
 
+.log-unreadable {
+    color: #c17000;
+}
+
 .log-skipped {
     color: #a06000;
 }
@@ -834,4 +838,42 @@ details[open] .advanced-settings-toggle::before {
     color: var(--color-text-muted);
     font-style: italic;
     line-height: 1.5;
+}
+
+/* ---- Known names tags ---- */
+
+.known-names-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    min-height: 26px;
+    align-items: center;
+}
+
+.known-name-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    background: var(--accent-light);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    font-size: 0.8rem;
+    color: var(--color-text);
+}
+
+.known-name-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    padding: 0;
+    line-height: 1;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+}
+
+.known-name-remove:hover {
+    color: #c0392b;
 }
