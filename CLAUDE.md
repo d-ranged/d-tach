@@ -274,11 +274,25 @@ chore/issue-{number}-{short-description}
 
 ### Commit Messages
 
-Every commit must reference its issue:
+Every commit must reference its issue and include both co-authors:
 
 ```
 Short description of what changed (issue #N)
+
+Co-authored by d-craig and Claude Code
 ```
+
+For multi-issue commits (grouped releases):
+
+```
+Short description covering all issues (closes #N, #M, #P)
+
+Co-authored by d-craig and Claude Code
+```
+
+**Rule: create the branch before writing any code.** If code is written on `main`
+without a branch, no commit can be made (we never commit directly to `main`).
+The correct sequence is: issue created → branch created → code written → committed.
 
 ### Workflow Per Feature
 
@@ -286,9 +300,9 @@ Short description of what changed (issue #N)
 2. **Before creating a branch:** `git checkout main && git pull` — always pull the
    latest main first, even if you believe it is up to date. Previous step merges
    happen on Codeberg and the local repo will be behind until pulled.
-3. Create a branch from `main`
-4. Commit regularly with issue references
-5. Open a merge request when complete and tested
+3. **Create the branch immediately** — do not write any code on `main`
+4. Commit per issue as work is completed, with co-author lines in every message
+5. Open a pull request when complete and tested
 6. Merge to `main` only when working
 
 Never commit directly to `main`.
