@@ -532,3 +532,114 @@ class TestFolderRenaming:
         # No path component should still be "John_Smith"
         for p in anonymized_root.rglob("*"):
             assert "John_Smith" not in p.name
+
+
+# ---------------------------------------------------------------------------
+# pass-through extensions (issue #58)
+# ---------------------------------------------------------------------------
+
+class TestPassThroughExtensions:
+    def test_normalize_extensions_adds_leading_dot(self) -> None:
+        from app.services.folder_processor import normalize_extensions
+        assert normalize_extensions("sql, .yml, DBML") == [".sql", ".yml", ".dbml"]
+
+    def test_normalize_extensions_empty_input(self) -> None:
+        from app.services.folder_processor import normalize_extensions
+        assert normalize_extensions("") == []
+
+    def test_pass_through_file_collected(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        (tmp_path / "script.sql").write_text("SELECT 1;")
+        files = folder_processor.collect_files(tmp_path, frozenset({".sql"}))
+        assert tmp_path / "script.sql" in files
+
+    def test_pass_through_disabled_by_default(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        (tmp_path / "script.sql").write_text("SELECT 1;")
+        files = folder_processor.collect_files(tmp_path)
+        assert files == []
+
+    def test_pass_through_copied_in_subfolder_mode(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        (tmp_path / "script.sql").write_text("SELECT 1;")
+        settings = ProcessingSettings(output_mode="subfolder", pass_through_extensions=[".sql"])
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings)]
+        assert len(results) == 1
+        assert results[0].status == "copied"
+        copied_path = tmp_path / "anonymized" / "script.sql"
+        assert copied_path.exists()
+        assert copied_path.read_text() == "SELECT 1;"
+        assert (tmp_path / "script.sql").exists()  # source untouched
+
+    def test_pass_through_copied_in_prefix_mode(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        (tmp_path / "script.sql").write_text("SELECT 1;")
+        settings = ProcessingSettings(output_mode="prefix", pass_through_extensions=[".sql"])
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings)]
+        assert len(results) == 1
+        assert results[0].status == "copied"
+        copied_path = tmp_path / "anonymized" / "script.sql"
+        assert copied_path.exists()
+        assert copied_path.read_text() == "SELECT 1;"
+
+    def test_pass_through_preserves_directory_structure(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "model.dbml").write_text("Table x {}")
+        settings = ProcessingSettings(output_mode="subfolder", pass_through_extensions=[".dbml"])
+        list(folder_processor.process(tmp_path, settings))
+        assert (tmp_path / "anonymized" / "sub" / "model.dbml").exists()
+
+    def test_pass_through_alongside_scanned_files(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        make_docx(tmp_path / "report.docx", ["My name is John Smith."])
+        (tmp_path / "data.sql").write_text("SELECT 1;")
+        settings = ProcessingSettings(output_mode="subfolder", pass_through_extensions=[".sql"])
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings)]
+        statuses = {r.source_path.name: r.status for r in results}
+        assert statuses["report.docx"] == "anonymized"
+        assert statuses["data.sql"] == "copied"
+
+    def test_unrelated_extension_still_skipped(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        (tmp_path / "data.csv").write_text("a,b,c")
+        settings = ProcessingSettings(output_mode="subfolder", pass_through_extensions=[".sql"])
+        results = [r for r, _, _ in folder_processor.process(tmp_path, settings)]
+        assert results == []
+
+    def test_summarise_counts_copied_distinctly(
+        self, folder_processor: FolderProcessor
+    ) -> None:
+        results = [
+            FileResult(status="copied", source_path=Path("a.sql")),
+            FileResult(status="anonymized", source_path=Path("b.docx")),
+        ]
+        summary = folder_processor.summarise(results)
+        assert summary.copied == 1
+        assert summary.anonymized == 1
+
+    def test_folder_renaming_applies_with_pass_through_only_in_prefix_mode(
+        self, tmp_path: Path, folder_processor: FolderProcessor
+    ) -> None:
+        """check_file_names still renames anonymized/ output folders even when
+        the only content is pass-through files copied in prefix mode, since
+        renaming operates on the output tree regardless of file type."""
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        (student_dir / "notes.sql").write_text("SELECT 1;")
+        settings = ProcessingSettings(
+            output_mode="prefix", check_file_names=True, pass_through_extensions=[".sql"],
+        )
+        list(folder_processor.process(tmp_path, settings))
+        anonymized_root = tmp_path / "anonymized"
+        output_folder_names = [p.name for p in anonymized_root.iterdir() if p.is_dir()]
+        assert "John_Smith" not in output_folder_names
+        assert student_dir.exists()  # source untouched

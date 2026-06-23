@@ -73,13 +73,14 @@ class ProcessingSettings:
     excel_column_names: list[str] = field(default_factory=list)
     output_mode: str = "prefix"  # "prefix" | "subfolder"
     known_values: list[str] = field(default_factory=list)
+    pass_through_extensions: list[str] = field(default_factory=list)
 
 
 @dataclass
 class FileResult:
     """The outcome of processing a single file."""
 
-    status: str  # "anonymized" | "clean" | "unreadable" | "error" | "skipped"
+    status: str  # "anonymized" | "clean" | "unreadable" | "error" | "skipped" | "copied"
     source_path: Path
     output_path: Optional[Path] = None
     keyref_path: Optional[Path] = None

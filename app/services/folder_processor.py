@@ -1,5 +1,6 @@
 import csv
 import logging
+import shutil
 from dataclasses import dataclass, field, replace as dc_replace
 from pathlib import Path
 from typing import Generator, Optional
@@ -9,6 +10,24 @@ from app.services.file_processor import FileProcessor, FileResult, ProcessingSet
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf", ".md", ".xlsx"})
+
+
+def normalize_extensions(raw: str) -> list[str]:
+    """Parse a comma-separated extension list into normalized lowercase forms.
+
+    Accepts entries with or without a leading dot (e.g. "sql" or ".sql");
+    both are stored as ".sql". Blank entries are dropped. Empty input
+    returns an empty list.
+    """
+    extensions: list[str] = []
+    for part in raw.split(","):
+        ext = part.strip().lower()
+        if not ext:
+            continue
+        if not ext.startswith("."):
+            ext = f".{ext}"
+        extensions.append(ext)
+    return extensions
 
 
 @dataclass
@@ -21,6 +40,7 @@ class FolderSummary:
     unreadable: int = 0
     skipped: int = 0
     errors: int = 0
+    copied: int = 0
     results: list[FileResult] = field(default_factory=list)
     keyref_csv_path: Optional[Path] = None
 
@@ -41,20 +61,26 @@ class FolderProcessor:
         """Initialise with a shared FileProcessor instance."""
         self._file_processor = file_processor
 
-    def collect_files(self, folder: Path) -> list[Path]:
-        """Return all supported files under folder, sorted deepest-first.
+    def collect_files(
+        self, folder: Path, pass_through_extensions: frozenset[str] = frozenset()
+    ) -> list[Path]:
+        """Return all supported and pass-through files under folder, sorted deepest-first.
 
         Deepest-first ensures subfolders are fully processed before their
         parent, which matters when folder renaming is added later.
+
+        pass_through_extensions are file types copied verbatim without PII
+        scanning (e.g. .sql, .py) — opt-in, empty by default.
 
         The anonymized/ subfolder (created in subfolder output mode) is always
         excluded so re-running on the same folder does not re-process output.
         """
         anonymized_root = folder / "anonymized"
+        allowed = SUPPORTED_EXTENSIONS | pass_through_extensions
         files = [
             p for p in folder.rglob("*")
             if p.is_file()
-            and p.suffix.lower() in SUPPORTED_EXTENSIONS
+            and p.suffix.lower() in allowed
             and anonymized_root not in p.parents
         ]
         # Sort by depth (number of parts) descending, then alphabetically
@@ -83,7 +109,10 @@ class FolderProcessor:
             for result, n, total in processor.process(folder, settings):
                 # stream result to UI
         """
-        files = self.collect_files(folder)
+        pass_through_extensions = frozenset(
+            e.lower() for e in settings.pass_through_extensions
+        )
+        files = self.collect_files(folder, pass_through_extensions)
         total = len(files)
 
         # Suppress per-file keyrefs in folder mode — a consolidated CSV is written
@@ -96,6 +125,12 @@ class FolderProcessor:
 
         completed: list[FileResult] = []
         for index, path in enumerate(files, start=1):
+            if path.suffix.lower() in pass_through_extensions and path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                result = self._copy_pass_through(path, folder)
+                completed.append(result)
+                yield result, index, total
+                continue
+
             output_path_override = None
             if settings.output_mode == "subfolder":
                 output_path_override = self._subfolder_output_path(path, folder)
@@ -113,11 +148,29 @@ class FolderProcessor:
             completed.append(result)
             yield result, index, total
 
-        if settings.output_mode == "subfolder" and settings.check_file_names:
-            all_replacements: dict[str, str] = {}
-            for r in completed:
-                all_replacements.update(r.replacements)
-            self._rename_output_folders(folder / "anonymized", all_replacements, settings)
+        if settings.check_file_names:
+            anonymized_root = folder / "anonymized"
+            if anonymized_root.exists():
+                all_replacements: dict[str, str] = {}
+                for r in completed:
+                    all_replacements.update(r.replacements)
+                self._rename_output_folders(anonymized_root, all_replacements, settings)
+
+    def _copy_pass_through(self, path: Path, folder: Path) -> FileResult:
+        """Copy a pass-through file verbatim to its mirrored anonymized/ path.
+
+        No PII scanning or renaming is performed — original filename and
+        content are preserved exactly. Used for non-scannable file types
+        (e.g. .sql, .py, .mp4) opted into via PASS_THROUGH_EXTENSIONS.
+        """
+        output_path = self._subfolder_output_path(path, folder)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(path, output_path)
+        except OSError as exc:
+            logger.error("Failed to copy pass-through file %s: %s", path, exc)
+            return FileResult(status="error", source_path=path, error_message=str(exc))
+        return FileResult(status="copied", source_path=path, output_path=output_path)
 
     def _rename_output_folders(
         self,
@@ -167,6 +220,8 @@ class FolderProcessor:
                 summary.unreadable += 1
             elif r.status == "skipped":
                 summary.skipped += 1
+            elif r.status == "copied":
+                summary.copied += 1
             else:
                 summary.errors += 1
 
