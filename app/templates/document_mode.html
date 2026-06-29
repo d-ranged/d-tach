@@ -179,6 +179,17 @@
                 Subfolder (<code>anonymized/</code>)
             </label>
         </div>
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="pass-through-extensions">Pass-through extensions (no scanning)</label>
+            <input
+                type="text"
+                id="pass-through-extensions"
+                class="excel-columns-input"
+                placeholder=".sql, .yml, .dbml, .py, .mp4"
+                value="{{ pass_through_extensions }}"
+            >
+        </div>
+        <p class="advanced-hint">Comma-separated. Files with these extensions are copied as-is into <code>anonymized/</code> without any PII scanning. Off/empty by default.</p>
     </div>
 </section>
 

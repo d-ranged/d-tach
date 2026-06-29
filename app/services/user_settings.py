@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import Final
 
+from app.services.folder_processor import normalize_extensions
 from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ _DEFAULTS: Final[dict] = {
     "excel_generic_enabled": True,
     "excel_column_names": "",
     "output_mode": "prefix",
+    "pass_through_extensions": "",
     "known_values": [],
     "restore_input_path": "",
     "restore_keyref_path": "",
@@ -144,6 +146,15 @@ class UserSettings:
         self._data["output_mode"] = value
 
     @property
+    def pass_through_extensions(self) -> list[str]:
+        """Extensions copied verbatim in folder mode without PII scanning (empty by default)."""
+        return normalize_extensions(self._data.get("pass_through_extensions", ""))
+
+    @pass_through_extensions.setter
+    def pass_through_extensions(self, value: list[str]) -> None:
+        self._data["pass_through_extensions"] = ", ".join(value)
+
+    @property
     def known_values(self) -> list[str]:
         """Persistent list of strings always anonymized regardless of NER detection."""
         return list(self._data.get("known_values", []))
@@ -245,6 +256,8 @@ class UserSettings:
             merged["excel_column_names"] = raw["excel_column_names"]
         if raw.get("output_mode") in ("prefix", "subfolder"):
             merged["output_mode"] = raw["output_mode"]
+        if isinstance(raw.get("pass_through_extensions"), str):
+            merged["pass_through_extensions"] = raw["pass_through_extensions"]
         if isinstance(raw.get("known_values"), list):
             merged["known_values"] = [str(v) for v in raw["known_values"] if isinstance(v, str) and v.strip()]
         if isinstance(raw.get("restore_input_path"), str):

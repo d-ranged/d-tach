@@ -15,6 +15,9 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 1 | System tray app + configurable port | ⬜ Not started |
 | 2 | Language management — on-demand download, first-launch selection | ⬜ Not started |
 | 3 | Acceptance Testing — all features | ⬜ Not started |
+| 4 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
+| 5 | Class list import — bulk-populate known values from a roster file | ⬜ Not started |
+| 6 | AI Mode — local API for AI-assisted anonymize/restore | ⬜ Not started |
 
 ---
 
@@ -401,6 +404,369 @@ to main.
 - All test cases above pass
 - No regressions in any existing feature
 - `pytest` passes with no failures on main
+
+---
+
+## Step 4 — Fix Double-Anonymization of Already-Anonymized Text
+
+**Codeberg issue to create first:**
+`fix: anonymizer re-wraps already-anonymized placeholders`
+
+### Why this must be fixed here, not just logged
+
+AI Mode (Step 5) depends on round-tripping text through `anonymize()` and `restore_string()`
+correctly within a session. If a placeholder ever gets wrapped a second time
+(`[[PERSON_1]_1]` or a hashed placeholder re-tagged as a new PERSON), `restore_string()`'s
+exact-match dictionary lookup silently fails to unwrap the outer layer — the AI-mode user
+gets a final document with a literal bracket-soup placeholder still in it instead of a name.
+This is worse in AI Mode than in Text/Document mode today, because AI Mode is specifically
+sold on "no more manual re-matching" — a silent restore failure undermines that. Fix it
+before Step 5 ships, not after.
+
+### Root cause
+
+`Anonymizer.anonymize()` (`app/services/anonymizer.py`) runs spaCy NER and the pattern
+recognizers over whatever text it's given, with no awareness of d-tach's own placeholder
+syntax. If the input text already contains a sequential placeholder (`[PERSON_1]`,
+`[EMAIL_ADDRESS_1]`) or a hashed placeholder (`[Cr-A2T5 HY23]`, `[EMAIL_A2B3]`), nothing
+stops NER or a pattern recognizer from matching that bracketed text again — most often
+spaCy tagging a hashed placeholder's letters-and-digits as a new PERSON, since it looks
+like a short proper-noun token.
+
+### Fix
+
+Add a placeholder-recognition guard in `anonymize()`, after the existing
+`results = [r for r in results if r.entity_type in active_set]` filter
+(`app/services/anonymizer.py` around line 200):
+
+- Add a module-level regex `PLACEHOLDER_PATTERN` matching both placeholder shapes d-tach
+  produces:
+  - Sequential: `\[[A-Z_]+_\d+\]` (e.g. `[PERSON_1]`, `[NUMERIC_ID_3]`)
+  - Hashed: `\[[A-Za-z]{0,2}-?[A-Z0-9]{4}(?:\s[A-Z0-9]{4})?\]` (e.g. `[Cr-A2T5 HY23]`,
+    `[EMAIL_A2B3]`) — match against the actual `HashEncoder` output format, not just this
+    approximation; confirm exact shape from `hash_encoder.py` before finalizing the regex.
+- Filter `results` to drop any entity whose `text[r.start:r.end]` fully matches
+  `PLACEHOLDER_PATTERN` — these spans are already-anonymized and must pass through
+  untouched rather than being re-detected.
+- This is a pure detection-time guard; it does not change placeholder format, hashing, or
+  any existing output for text that has no pre-existing placeholders in it (the common
+  case today), so it should not be visible as a behaviour change for Text/Document mode
+  on first-time anonymization.
+
+### What to build
+
+| Component | Description |
+|---|---|
+| `app/services/anonymizer.py` | Add `PLACEHOLDER_PATTERN` regex; filter already-anonymized spans out of `results` before placeholder assignment |
+| `tests/test_anonymizer.py` | New cases: re-running `anonymize()` on already-anonymized text (sequential and hashed forms) leaves it unchanged; mixed text (one real name + one existing placeholder) anonymizes only the real name |
+
+### ✅ Complete when
+
+- Running `anonymize()` twice on the same input is idempotent: second pass produces
+  identical output to the first (no nested brackets)
+- A hashed placeholder (`[Cr-A2T5 HY23]`) is never re-tagged as a new PERSON
+- Mixed input (one new name + one existing placeholder) anonymizes only the new name and
+  leaves the existing placeholder untouched
+- All existing Text/Document/Restore mode tests still pass — no behaviour change for
+  text with no pre-existing placeholders
+- `pytest` passes with no failures
+
+---
+
+## Step 5 — Class List Import
+
+**Codeberg issue to create first:**
+`feature: import known values in bulk from a class list (Excel)`
+
+### Background
+
+The "known values" list (`UserSettings.known_values`, shipped v1.2.0) lets a user add
+specific names that should always be anonymized, regardless of NER confidence —
+important for names the spaCy models miss. Today these are added one at a time by typing
+each name into the Settings UI. For a class of 20–30 students this is slow and easy to
+get wrong (a typo means that student's name is never reliably caught).
+
+Most teaching staff already have a class list / attendance register as an Excel file
+with columns like student number, first name, last name. d-tach already has Excel
+reading via `openpyxl` (`document_processor.py`). This step lets the user point at that
+file once, pick which columns matter, and bulk-populate known values from every row —
+making every student in the class a guaranteed-caught known value on the very first
+anonymization pass, not just after a miss is noticed.
+
+This is scoped before AI Mode (Step 6) because AI Mode's safety story depends on
+anonymization being as complete as possible *before* any text reaches a cloud model —
+this closes a real, common gap (a full roster of names) ahead of that, the same way
+Step 4 closes the round-trip-integrity gap ahead of it.
+
+### Schema change — typed known values
+
+Different columns need different entity types: a name column should anonymize as
+`PERSON`; a student number column should anonymize as `NUMERIC_ID` (correct placeholder
+label, and safe even if the existing digit-count Numeric ID setting doesn't match the ID
+format on that particular roster). This requires `known_values` to carry a type per
+entry instead of being a flat list of PERSON-only strings.
+
+- `UserSettings.known_values` changes from `list[str]` to `list[dict]`, each entry
+  `{"value": str, "entity_type": str, "source": "manual" | "class_list"}`.
+- **Migration:** on load, any existing plain-string entries are wrapped as
+  `{"value": v, "entity_type": "PERSON", "source": "manual"}`. Follows the same pattern
+  already used in `PatternConfig.from_dict` for its old-key migration
+  (`pattern_config.py`) — load old format, normalize to new, save in new format from
+  then on.
+- `build_known_value_recognizers` (`anonymizer.py`) reads `entity_type` per entry instead
+  of hardcoding `PERSON`.
+- The `source` tag lets a "Clear class list values" action remove only imported entries
+  without touching manually-added ones.
+
+### One remembered class list, not many
+
+Support exactly one current class-list source, not a managed collection of multiple
+lists — matches the existing single-flat-list simplicity of known_values and avoids
+the UI complexity of tracking which list contributed which names.
+
+- `UserSettings` additions: `class_list_path: str`, `class_list_column_mapping: dict[str, str]`
+  (header name → entity type, e.g. `{"stNum": "NUMERIC_ID", "First Name": "PERSON", "Last Name": "PERSON"}`).
+- Settings UI shows the remembered file path and column mapping (if any) with a
+  **Re-sync** button — re-reads the same file with the same mapping and adds any new
+  rows. Useful when a roster gains late enrollments without re-doing the column picker.
+- Pointing at a *different* file overwrites the remembered path/mapping — explicitly
+  one current list, not an accumulating set.
+
+### Workflow
+
+1. Settings → Known Values gains an **Import from class list** sub-panel with a file
+   browse button (reuses the existing `/browse/file` backend).
+2. On selecting an `.xlsx` file, the UI calls a new endpoint to read just the header row
+   and returns the column names.
+3. For each column, the UI offers a type dropdown: **Ignore** (default for
+   unrecognized headers) / **Person name** / **Numeric ID** / **Email**. Header text is
+   used to pre-guess a sensible default (e.g. a header containing "name" suggests
+   Person name, "number" or "id" suggests Numeric ID) — the user confirms or overrides
+   before importing, nothing is auto-applied silently.
+4. **Import** reads every row, pulls cell values from the mapped columns, normalizes
+   (trim whitespace, skip blanks), dedupes case-insensitively against existing
+   `known_values` (regardless of source), and adds the new ones tagged
+   `source: "class_list"`. Returns a count: added / already-present / total.
+5. The file path and column mapping are saved so **Re-sync** can repeat the same import
+   later without re-picking columns.
+
+### New endpoints — `app/routes/settings_routes.py`
+
+| Endpoint | Method | Request | Response |
+|---|---|---|---|
+| `/settings/known-values/class-list/columns` | POST | `{file_path}` | `{columns: [str, ...]}` — header row only, no row data read yet |
+| `/settings/known-values/class-list/import` | POST | `{file_path, column_mapping: {header: entity_type}}` | `{added, already_present, total_known_values}` |
+| `/settings/known-values/class-list/clear` | DELETE | — | Removes all `source: "class_list"` entries; manual entries untouched |
+
+Reuses `openpyxl` loading already present via `document_processor.load_xlsx` — no new
+Excel dependency.
+
+### What to build
+
+| Component | Description |
+|---|---|
+| `user_settings.py` | Migrate `known_values` to typed entries; add `class_list_path`, `class_list_column_mapping` |
+| `anonymizer.py` | `build_known_value_recognizers` reads `entity_type` per entry |
+| `app/routes/settings_routes.py` | New class-list columns/import/clear endpoints |
+| Settings UI — Known Values | Import sub-panel: file browse, column type dropdowns, Import button, remembered path + Re-sync button, Clear class list values button |
+| `static/js/known_values.js` | Extend to render typed entries and the new import sub-panel |
+
+### ✅ Complete when
+
+- Existing plain-string `known_values` from before this change load correctly as
+  `PERSON`-typed entries after migration (no data loss on upgrade)
+- Pointing at a real class-list `.xlsx` returns its header row for column mapping
+- Importing with a mapping (e.g. stNum → Numeric ID, First/Last Name → Person name) adds
+  one typed entry per unique value per row, skipping duplicates already in the list
+- Imported `NUMERIC_ID` entries anonymize with `[NUMERIC_ID_N]`, not `[PERSON_N]`
+- Re-sync against the same file with new rows added only adds the new rows, not
+  duplicates of existing ones
+- "Clear class list values" removes only `source: "class_list"` entries; manually-added
+  names remain
+- All existing known-values tests pass with the new schema; new tests cover migration,
+  import, dedup, and clear
+- `pytest` passes with no failures
+
+---
+
+## Step 6 — AI Mode
+
+**Codeberg issue to create first:**
+`feature: AI mode — local API for AI-assisted anonymize/restore`
+
+### Background
+
+Today, getting an AI assistant to analyze a sensitive document means a manual round
+trip: anonymize a file in Document Mode → paste the anonymized text/KEYREF into the
+AI conversation → get feedback back referencing placeholders → manually re-match those
+placeholders to real names using the KEYREF file. Re-pasting placeholder ↔ name mappings
+back into output by hand is slow and risks mismatches, and anonymization sometimes misses
+values embedded in images with no tight feedback loop to fix the miss going forward.
+
+d-tach already does text extraction (PDF/DOCX/XLSX/MD) and already has a `restore_text`
+placeholder-substitution primitive (`document_processor.py`) and a persisted "always
+anonymize this" list (`UserSettings.known_values`, shipped v1.2.0). AI Mode exposes these
+as a small local API so an AI agent (e.g. Claude Code) calls d-tach directly instead of a
+human manually copying text back and forth — cutting out the re-matching step entirely
+while keeping the same trust boundary: **anonymization always happens locally, before any
+text reaches a cloud model.**
+
+This step is additive and does not depend on or block Steps 1–3.
+
+### Workflow
+
+1. The AI agent calls `POST /ai/extract` with a file path. d-tach extracts text (reusing
+   the existing `load_docx`/`load_pdf`/`load_xlsx`/`load_md` loaders) and anonymizes it
+   (reusing `Anonymizer`), exactly as Document Mode does today — but returns the
+   anonymized text directly in the response instead of writing an output file.
+2. d-tach keeps the placeholder → original mapping server-side, keyed by a `session_id`
+   returned in that response. The AI never receives real values.
+3. The AI works with the anonymized text (sends it to a cloud model, drafts a report,
+   etc.).
+4. When the AI has output text containing placeholders, it calls `POST /ai/restore` with
+   `{session_id, text}`. d-tach substitutes placeholders back to real values locally and
+   returns the restored text. The AI writes that to disk itself — d-tach does not touch
+   the filesystem for AI-mode output.
+5. If the AI notices a real name slip through unanonymized in extracted text, it calls
+   `POST /ai/flag-term` with the missed value — this appends to the existing
+   `UserSettings.known_values` list so it's caught on every future run, not just
+   retroactively in the current session.
+
+Images and image-only PDF pages have no text layer today (`pymupdf` doesn't OCR). Rather
+than add OCR now, `/ai/extract` reports per-page/file "no extractable text" warnings so
+the user knows exactly what needs manual review — never silently passing image bytes
+through. OCR is deferred; see `roadmap.md`.
+
+### New service: `app/services/ai_session.py`
+
+- `AISessionStore` — in-memory dict, `session_id -> {created_at, replacements: dict[placeholder, original], source_path}`.
+- Sessions expire after a configurable idle period (default 60 min) and are also cleared
+  on server restart — intentionally not durable storage; it only needs to live as long as
+  one AI conversation.
+- Shared helper `compose_replacements(entities) -> dict[str, str]` — extract this out of
+  `_build_replacements` in `file_processor.py` rather than duplicating it.
+
+### `document_processor.py` — small addition
+
+Add `restore_string(text: str, replacements: dict[str, str]) -> tuple[str, int]`, a
+string-in/string-out version of the existing file-in/file-out `restore_text`. Have
+`restore_text` call `restore_string` internally so there's one substitution
+implementation, not two.
+
+### New route: `app/routes/ai_routes.py`
+
+| Endpoint | Method | Request | Response |
+|---|---|---|---|
+| `/ai/status` | GET | — | `{enabled: bool}` — lets the AI check AI mode is on before trying anything else |
+| `/ai/extract` | POST | `{file_path, language, hashing_enabled, secret, ...same settings as /document/process-file}` | Inline: `{session_id, anonymized_text, entities, warnings}`. Large file: `{session_id, anonymized_text_path, entities, warnings}` |
+| `/ai/restore` | POST | `{session_id, text}` **or** `{session_id, text_path}` | Inline: `{restored_text, replacements_applied}`. Large input: `{restored_text_path, replacements_applied}` |
+| `/ai/flag-term` | POST | `{value}` | `{status: "added", known_values: [...]}` |
+
+All four require header `X-D-Tach-Token: <token>` (see Settings below). Reuses
+`current_app.file_processor` / `current_app.anonymizer` — no new extraction or detection
+logic, only new glue around existing pieces.
+
+`/ai/extract` internally: load the file via the same per-extension branch as
+`file_processor._process_docx/_process_pdf/_process_xlsx/_process_markdown`, but stop
+short of writing an output file — return text + entities instead. Refactor those four
+`_process_*` methods minimally so the "extract + detect + build replacements" portion is
+callable without the "write output file" portion, then have both Document Mode and
+`/ai/extract` call the shared portion.
+
+### Large file handling — inline text vs. temp file
+
+JSON-over-HTTP can carry many MB without trouble — the real constraint is the AI's
+context window, not d-tach or Flask. A 100-page report inlined as JSON would dominate a
+single turn's useful context on one file. d-tach enforces a size cutoff and switches to a
+file handoff above it:
+
+- **Setting:** `ai_inline_text_max_chars` (default **50,000** chars, ≈ 12–15k tokens).
+  Configurable in the AI Mode settings panel.
+- **Setting:** `ai_temp_dir` (default: OS temp dir + `d-tach-ai/`; user can point it
+  elsewhere). Must exist and be writable; validated when AI Mode is enabled.
+- **`/ai/extract`:** if anonymized text length ≤ threshold, return it inline
+  (`anonymized_text`). If over, write it to `{ai_temp_dir}/{session_id}_extracted.txt`
+  and return `anonymized_text_path` instead (`anonymized_text` omitted) — the AI reads
+  the file directly.
+- **`/ai/restore`:** accepts either inline `text` or a `text_path`. Response mirrors the
+  same inline-vs-path rule on the way out, using the same threshold.
+- Temp files are named with the `session_id` so they're traceable to a session and get
+  cleaned up when that session expires (`AISessionStore` deletes its temp files on
+  expiry, not just the in-memory entry).
+- This threshold is a quality-of-context safeguard, not a security boundary — both paths
+  go through the same anonymize/restore logic either way.
+
+### Settings — AI Mode panel
+
+New section in the existing Settings UI:
+
+- **Enable AI Mode** toggle — default **off**. `/ai/*` routes return 404 (not 403, to
+  avoid confirming the route exists) when disabled.
+- **Local API token** — generated once (`secrets.token_urlsafe(32)`), shown with a
+  "Regenerate" button, stored in `UserSettings`. Copy-to-clipboard button.
+- **AI agent instructions** — a read-only text block with copy-paste instructions for the
+  AI's system prompt / CLAUDE.md, e.g.:
+  > "AI Mode is enabled on d-tach (http://localhost:{port}). Never read file contents
+  > directly when working with files in an anonymization-required context. Always call
+  > `POST /ai/extract` with the file path first, work only with the returned
+  > `anonymized_text`, and call `POST /ai/restore` before writing any final output to
+  > disk. Include header `X-D-Tach-Token: {token}` on every request."
+- **Session timeout** — minutes, default 60.
+- **Temp folder** — path picker, default OS temp dir + `d-tach-ai/`; validated writable
+  on save.
+- **Inline text limit** — characters, default 50,000; one-line note: "Larger extractions
+  are written to the temp folder instead of returned directly, to avoid flooding the
+  AI's context window."
+
+`UserSettings` additions: `ai_mode_enabled: bool = False`, `ai_api_token: str` (generated
+lazily on first enable), `ai_session_timeout_minutes: int = 60`,
+`ai_inline_text_max_chars: int = 50000`, `ai_temp_dir: str` (default computed from OS
+temp dir).
+
+### Explicitly deferred (not part of this step)
+
+- **OCR for images/scanned PDFs** — flagged, not solved. `/ai/extract` reports the gap;
+  revisit as a roadmap item once flag-only behaviour has been used for a while.
+- **d-tach writing output files on the AI's behalf** — `/ai/restore` returns text; the AI
+  writes the file. Keeps d-tach a stateless text transform for this feature.
+
+### What to build
+
+| Component | Description |
+|---|---|
+| `app/routes/ai_routes.py` | New — `/ai/status`, `/ai/extract`, `/ai/restore`, `/ai/flag-term` |
+| `app/services/ai_session.py` | New — `AISessionStore`, session expiry, temp-file cleanup |
+| `document_processor.py` | Add `restore_string`; refactor `restore_text` to call it |
+| `file_processor.py` | Extract shared "detect + build replacements" helper out of the `_process_*` methods for reuse by `/ai/extract` |
+| `user_settings.py` | Add `ai_mode_enabled`, `ai_api_token`, `ai_session_timeout_minutes`, `ai_inline_text_max_chars`, `ai_temp_dir` |
+| Settings UI — AI Mode | Enable toggle, token display/regenerate, instructions block, timeout, temp folder, inline limit |
+| `app/__init__.py` | Register `ai_routes` blueprint |
+| `docs/roadmap.md` | Add double-anonymization bug as a tracked high-priority item |
+
+### ✅ Complete when
+
+- AI Mode is off by default; `/ai/*` returns 404 when disabled
+- Enabling AI Mode in Settings generates and displays a token; instructions block is
+  copyable
+- `POST /ai/extract` on a real PDF/DOCX/XLSX/MD file returns anonymized text + entity
+  list + a `session_id`, without writing any file to disk
+- `POST /ai/extract` on an image-only PDF page returns a `warnings` entry instead of
+  silently passing image content through
+- `POST /ai/extract` on a file producing anonymized text over `ai_inline_text_max_chars`
+  writes to `ai_temp_dir` and returns `anonymized_text_path` instead of inlining it;
+  under the threshold it inlines as before
+- `POST /ai/restore` accepts both inline `text` and `text_path`, and applies the same
+  inline/path rule to its response
+- `POST /ai/restore` with a `session_id` and placeholder-containing text returns the
+  original values correctly substituted back
+- `POST /ai/flag-term` adds a value to `UserSettings.known_values`, visible afterward in
+  the Settings known-values list and applied on the next extraction
+- Requests without the correct `X-D-Tach-Token` header are rejected
+- Existing Text/Document/Restore modes have no behavioural change (refactor of shared
+  helpers is non-breaking)
+- New unit tests: `tests/test_ai_session.py`, `tests/test_ai_routes.py`, plus a
+  `restore_string` test in `tests/test_document_processor.py`
+- All existing tests pass
 
 ---
 

@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Blueprint, Response, current_app, jsonify, render_template, request
 
 from app.services.file_processor import ProcessingSettings
+from app.services.folder_processor import normalize_extensions
 
 bp = Blueprint("document", __name__)
 
@@ -27,6 +28,7 @@ def document_mode():
         excel_generic_enabled=settings.excel_generic_enabled,
         excel_column_names=", ".join(settings.excel_column_names),
         output_mode=settings.output_mode,
+        pass_through_extensions=", ".join(settings.pass_through_extensions),
     )
 
 
@@ -86,7 +88,7 @@ def process_folder():
         type: "progress"  — one file completed
             n, total, status, file_name, output_path, entities_found, error_message
         type: "summary"   — all files done
-            total, anonymized, clean, skipped, errors
+            total, anonymized, clean, skipped, errors, copied
         type: "error"     — folder-level validation failure
             message
     """
@@ -113,6 +115,7 @@ def process_folder():
     output_mode = args.get("output_mode", "prefix")
     if output_mode not in ("prefix", "subfolder"):
         output_mode = "prefix"
+    pass_through_extensions = normalize_extensions(args.get("pass_through_extensions", "").strip())
 
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
@@ -155,6 +158,7 @@ def process_folder():
             excel_column_names=excel_column_names,
             output_mode=output_mode,
             known_values=user_settings.known_values,
+            pass_through_extensions=pass_through_extensions,
         )
 
         all_results = []
@@ -188,6 +192,7 @@ def process_folder():
             "unreadable": summary.unreadable,
             "skipped": summary.skipped,
             "errors": summary.errors,
+            "copied": summary.copied,
             "keyref_csv_path": str(summary.keyref_csv_path) if summary.keyref_csv_path else None,
         })
 
@@ -208,6 +213,7 @@ def process_folder():
         user_settings.excel_generic_enabled = excel_generic_enabled
         user_settings.excel_column_names = excel_column_names
         user_settings.output_mode = output_mode
+        user_settings.pass_through_extensions = pass_through_extensions
         user_settings.save()
 
     return Response(stream(), mimetype="text/event-stream",
