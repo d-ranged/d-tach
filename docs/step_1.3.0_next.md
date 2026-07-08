@@ -17,7 +17,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 3 | Acceptance Testing — all features | ⬜ Not started |
 | 4 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
 | 5 | Class list import — bulk-populate known values from a roster file | ⬜ Not started |
-| 6 | AI Mode — local API for AI-assisted anonymize/restore | ⬜ Not started |
+| 6 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ⬜ Not started |
 
 ---
 
@@ -611,23 +611,74 @@ human manually copying text back and forth — cutting out the re-matching step 
 while keeping the same trust boundary: **anonymization always happens locally, before any
 text reaches a cloud model.**
 
+**Single-tree design — this is the point of AI Mode, not a detail of it.** Earlier
+anonymization workflows (Document Mode's `anonymized/` mirror) create a second folder tree
+that has to be kept in sync with the original and cross-referenced back against the source
+system (e.g. BrightSpace) by hand — this round trip between two trees is exactly the
+friction AI Mode exists to remove. AI Mode assumes **one** folder, containing the user's
+real files exactly as downloaded, with **only the file and folder names** anonymized
+in place. File *content* is never rewritten to disk — it stays real, and is anonymized
+only in-flight, per file, when the AI agent requests it through the API below. This is why
+the filename/folder-only rename (see Prerequisite, below) has to exist before AI Mode is
+usable: without it, an agent enumerating the tree to decide what to read next would see
+real names in the paths themselves, which defeats the entire point of anonymizing the
+content.
+
 This step is additive and does not depend on or block Steps 1–3.
+
+### Prerequisite — Filename/Folder-Only Anonymization
+
+**Goal:** anonymize every file and folder *name* in a tree, in place, without touching any
+file's content and without producing a second copy of the tree.
+
+This reuses the exact hash-rename logic already shipped for `check_file_names` in Document
+Mode (see `step_1.1.0_completed.md`) — the new part is exposing it as a standalone action
+that skips content extraction/anonymization entirely, rather than always running alongside
+a full Document Mode pass.
+
+**UI:** a new option in Document Mode's folder picker (or its own entry point): **"Rename
+names only — don't touch file content."** When selected:
+
+- File and folder names are checked against NER + `known_values` (same detection as
+  content mode) and renamed **in place** using the existing hash/sequential placeholder
+  logic — no `anonymized/` output folder is created, no file is opened for content
+  rewriting.
+- Processing order matches the existing rule: files deepest-first, then folders
+  deepest-first (so a folder isn't renamed out from under files still being processed).
+- The KEYREF export (if enabled) still applies — it is the only artifact needed to map a
+  renamed path back to the real one, and only the human user (not the AI agent) reads it.
+
+**Typical use:** a user downloads a whole folder of real submissions as-is (e.g. from
+BrightSpace, which itself embeds real names in exported folder names) into one working
+folder, runs this rename-only pass once over that folder before ever pointing an AI agent
+at it, and from then on the tree's paths are safe to enumerate.
 
 ### Workflow
 
-1. The AI agent calls `POST /ai/extract` with a file path. d-tach extracts text (reusing
-   the existing `load_docx`/`load_pdf`/`load_xlsx`/`load_md` loaders) and anonymizes it
-   (reusing `Anonymizer`), exactly as Document Mode does today — but returns the
-   anonymized text directly in the response instead of writing an output file.
-2. d-tach keeps the placeholder → original mapping server-side, keyed by a `session_id`
-   returned in that response. The AI never receives real values.
-3. The AI works with the anonymized text (sends it to a cloud model, drafts a report,
-   etc.).
-4. When the AI has output text containing placeholders, it calls `POST /ai/restore` with
-   `{session_id, text}`. d-tach substitutes placeholders back to real values locally and
-   returns the restored text. The AI writes that to disk itself — d-tach does not touch
-   the filesystem for AI-mode output.
-5. If the AI notices a real name slip through unanonymized in extracted text, it calls
+1. The AI agent lists the (already name-anonymized) folder tree itself — normal directory
+   listing is safe now, because Step-6's prerequisite means no real name appears in any
+   path. The agent **never reads file content directly** (no local file-read call) for any
+   file inside an AI-Mode-managed tree — content only ever comes back through step 2.
+2. For each file the agent wants to read, it calls `POST /ai/extract` with that file's
+   (anonymized) path. d-tach extracts text (reusing the existing
+   `load_docx`/`load_pdf`/`load_xlsx`/`load_md` loaders) and anonymizes it (reusing
+   `Anonymizer`), exactly as Document Mode does today — but returns the anonymized text
+   directly in the response instead of writing an output file, and the source file on disk
+   is never modified.
+3. d-tach keeps the placeholder → original mapping server-side, keyed by a `session_id`
+   returned in that response. The AI never receives real values from this call.
+4. The AI works with the anonymized text (sends it to a cloud model, drafts notes,
+   marksheet comments, etc.) — using only placeholders/hash keys to refer to the subject
+   of the file, never a real name it doesn't have.
+5. When the AI has produced final output that should contain real values again (e.g. a
+   completed marksheet ready for the human to paste elsewhere), it calls `POST /ai/restore`
+   with `{session_id, text, output_path}`. d-tach substitutes placeholders back to real
+   values locally and **writes the restored result directly to `output_path` on disk** —
+   the restored text is not included in the HTTP response, so it never enters the AI
+   agent's own context. If `output_path` is omitted, `/ai/restore` behaves as before and
+   returns the restored text inline — that mode is for a human-in-the-loop caller (e.g. a
+   manual API call the user makes themselves), not for an AI agent working unattended.
+6. If the AI notices a real name slip through unanonymized in extracted text, it calls
    `POST /ai/flag-term` with the missed value — this appends to the existing
    `UserSettings.known_values` list so it's caught on every future run, not just
    retroactively in the current session.
@@ -659,7 +710,7 @@ implementation, not two.
 |---|---|---|---|
 | `/ai/status` | GET | — | `{enabled: bool}` — lets the AI check AI mode is on before trying anything else |
 | `/ai/extract` | POST | `{file_path, language, hashing_enabled, secret, ...same settings as /document/process-file}` | Inline: `{session_id, anonymized_text, entities, warnings}`. Large file: `{session_id, anonymized_text_path, entities, warnings}` |
-| `/ai/restore` | POST | `{session_id, text}` **or** `{session_id, text_path}` | Inline: `{restored_text, replacements_applied}`. Large input: `{restored_text_path, replacements_applied}` |
+| `/ai/restore` | POST | `{session_id, text}` **or** `{session_id, text_path}`, plus optional `{output_path}` | No `output_path`: inline `{restored_text, replacements_applied}` (large input: `{restored_text_path, replacements_applied}`). With `output_path`: writes restored text to that path and returns `{status: "written", output_path, replacements_applied}` only — no restored content in the response |
 | `/ai/flag-term` | POST | `{value}` | `{status: "added", known_values: [...]}` |
 
 All four require header `X-D-Tach-Token: <token>` (see Settings below). Reuses
@@ -706,11 +757,15 @@ New section in the existing Settings UI:
   "Regenerate" button, stored in `UserSettings`. Copy-to-clipboard button.
 - **AI agent instructions** — a read-only text block with copy-paste instructions for the
   AI's system prompt / CLAUDE.md, e.g.:
-  > "AI Mode is enabled on d-tach (http://localhost:{port}). Never read file contents
-  > directly when working with files in an anonymization-required context. Always call
-  > `POST /ai/extract` with the file path first, work only with the returned
-  > `anonymized_text`, and call `POST /ai/restore` before writing any final output to
-  > disk. Include header `X-D-Tach-Token: {token}` on every request."
+  > "AI Mode is enabled on d-tach (http://localhost:{port}). Before pointing me at a
+  > folder, run Document Mode's 'Rename names only' pass on it once so every path is
+  > already name-anonymized. From then on: normal directory listing of that folder is
+  > safe, but never read a file's contents directly — always call `POST /ai/extract`
+  > with the file path first and work only with the returned `anonymized_text`. Refer to
+  > the subject of each file only by its placeholder/hash, never a name you weren't given.
+  > When producing final output that needs real values restored, call `POST /ai/restore`
+  > with an `output_path` so the restored text is written straight to disk — never ask
+  > for it inline. Include header `X-D-Tach-Token: {token}` on every request."
 - **Session timeout** — minutes, default 60.
 - **Temp folder** — path picker, default OS temp dir + `d-tach-ai/`; validated writable
   on save.
@@ -727,16 +782,20 @@ temp dir).
 
 - **OCR for images/scanned PDFs** — flagged, not solved. `/ai/extract` reports the gap;
   revisit as a roadmap item once flag-only behaviour has been used for a while.
-- **d-tach writing output files on the AI's behalf** — `/ai/restore` returns text; the AI
-  writes the file. Keeps d-tach a stateless text transform for this feature.
+- **d-tach writing arbitrary, un-anonymized files on the AI's behalf** — `/ai/restore`
+  with `output_path` only ever writes the *restored* text of a session it already holds
+  the mapping for; it does not become a general-purpose "AI writes any file" primitive.
+  Still in scope for this step (see `output_path` above) — what's deferred is generalizing
+  it beyond the restore use case.
 
 ### What to build
 
 | Component | Description |
 |---|---|
+| Document Mode — rename-only toggle | New folder-picker option: rename file/folder names in place using existing hash logic, skip content extraction/anonymization entirely, no `anonymized/` output tree |
 | `app/routes/ai_routes.py` | New — `/ai/status`, `/ai/extract`, `/ai/restore`, `/ai/flag-term` |
 | `app/services/ai_session.py` | New — `AISessionStore`, session expiry, temp-file cleanup |
-| `document_processor.py` | Add `restore_string`; refactor `restore_text` to call it |
+| `document_processor.py` | Add `restore_string`; refactor `restore_text` to call it; `restore_string` callers may pass `output_path` to write instead of returning text |
 | `file_processor.py` | Extract shared "detect + build replacements" helper out of the `_process_*` methods for reuse by `/ai/extract` |
 | `user_settings.py` | Add `ai_mode_enabled`, `ai_api_token`, `ai_session_timeout_minutes`, `ai_inline_text_max_chars`, `ai_temp_dir` |
 | Settings UI — AI Mode | Enable toggle, token display/regenerate, instructions block, timeout, temp folder, inline limit |
@@ -745,6 +804,9 @@ temp dir).
 
 ### ✅ Complete when
 
+- Document Mode's folder picker offers "Rename names only" — running it against a folder
+  renames files/folders in place using existing hash logic, leaves every file's content
+  byte-for-byte unchanged, and creates no `anonymized/` output tree
 - AI Mode is off by default; `/ai/*` returns 404 when disabled
 - Enabling AI Mode in Settings generates and displays a token; instructions block is
   copyable
@@ -756,16 +818,19 @@ temp dir).
   writes to `ai_temp_dir` and returns `anonymized_text_path` instead of inlining it;
   under the threshold it inlines as before
 - `POST /ai/restore` accepts both inline `text` and `text_path`, and applies the same
-  inline/path rule to its response
+  inline/path rule to its response when no `output_path` is given
 - `POST /ai/restore` with a `session_id` and placeholder-containing text returns the
   original values correctly substituted back
+- `POST /ai/restore` with `output_path` set writes the restored text to that path and
+  the HTTP response contains no restored content, only a status and the path
 - `POST /ai/flag-term` adds a value to `UserSettings.known_values`, visible afterward in
   the Settings known-values list and applied on the next extraction
 - Requests without the correct `X-D-Tach-Token` header are rejected
 - Existing Text/Document/Restore modes have no behavioural change (refactor of shared
   helpers is non-breaking)
-- New unit tests: `tests/test_ai_session.py`, `tests/test_ai_routes.py`, plus a
-  `restore_string` test in `tests/test_document_processor.py`
+- New unit tests: `tests/test_ai_session.py`, `tests/test_ai_routes.py`, a
+  `restore_string` test in `tests/test_document_processor.py`, and a rename-only test
+  confirming file content is untouched
 - All existing tests pass
 
 ---
