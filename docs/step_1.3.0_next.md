@@ -864,6 +864,65 @@ A full step breakdown will be written as `step_1.4.0.md` when v1.3.0 is released
 
 ---
 
+## v1.4.0 Planning Note — GitHub Mirror + Pages
+
+**Investigate when v1.4.0 is picked up. Nothing to do during v1.3.0.**
+
+Arrived here from the summer-holiday plan
+(`general/planning/summerholiday/step-3-den-sync.md`, step 3.3), where it was
+originally bundled with a question about moving the personal `d-workspace` repo
+to GitHub. That move was **declined** — but the reasoning does not carry over to
+d-tach, and mixing the two muddied both. The d-workspace repo holds family and
+financial records, so a permanent copy on US infrastructure was not worth it.
+d-tach is public code under EUPL-1.2, so none of that applies.
+
+### The proposal
+
+Keep **Codeberg as origin** and add **GitHub as a push mirror**. Codeberg stays
+the place issues, PRs and releases live — no change to the workflow in
+`CLAUDE.md`. GitHub becomes a read-only reflection.
+
+Two things it would buy:
+
+1. **Pages that works.** Codeberg Pages has been attempted several times and has
+   not come together. GitHub Pages is the fallback that would actually publish.
+   The `d-ranged/pages/` folder is currently empty pending this.
+2. **Reach.** GitHub is where people look for open source. For a project about
+   to go public, discoverability is a real argument — a privacy tool nobody
+   finds helps nobody.
+
+### The tension worth naming
+
+d-ranged's stated principles include a European sensibility and privacy-first
+software, and Codeberg was chosen deliberately for that (`d-ranged/CLAUDE.md`).
+Mirroring to a Microsoft-owned US platform sits awkwardly against that, even for
+public code. 🟠 The counter-argument is that a mirror is a *reflection*, not a
+move — origin, issues, and identity all stay on Codeberg, and reach serves the
+principles rather than trading them away. This is a values call, not a technical
+one, and should be made consciously rather than by drift.
+
+### Questions to resolve
+
+- Does the mirror push automatically (Codeberg has a built-in push-mirror
+  setting) or via CI? Built-in is preferable — no secrets to manage.
+- Do GitHub Pages get built from the mirrored repo, or does the site live in its
+  own separate GitHub repo? A mirrored repo is force-overwritten on each sync,
+  which may fight with a Pages build branch.
+- Where does the README point contributors — Codeberg only, or both? A clear
+  "issues and PRs live on Codeberg" banner on the GitHub side avoids splitting
+  the community across two platforms.
+- 🟡 Does this also solve the **release binary hosting** problem from the
+  PyInstaller note above? GitHub Releases has a far more generous asset quota
+  than Codeberg's free tier. If so, this note and that one are the same decision
+  and should be planned together — see also `secrets/codeberg_storage_request.md`.
+
+### Related
+
+- `d-ranged/pages/README.md` — the Pages folder, empty pending this decision
+- v1.4.0 PyInstaller packaging note above — overlapping storage/quota question
+
+---
+
 ## Release — v1.3.0
 
 Once all steps including acceptance testing are complete:
