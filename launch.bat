@@ -43,8 +43,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
-:: ---- Start Flask and open browser after it has had time to bind ----
+:: ---- Start d-tach (tray app) and open browser after it has had time to bind ----
+:: Assumes the default port (5555); if you changed the port in Settings, open
+:: the browser manually from the tray icon instead.
 echo Starting d-tach...
 start /b cmd /c "timeout /t 3 /nobreak >nul && start http://localhost:5555"
-.venv\Scripts\python run.py
+.venv\Scripts\python tray.py
 pause

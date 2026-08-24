@@ -49,8 +49,13 @@ def index():
 
 @bp.route("/text")
 def text_mode():
-    """Render the Text Mode page."""
-    return _render_text_mode()
+    """Render the Text Mode page.
+
+    Accepts an optional ?q= query parameter to pre-fill the input textarea,
+    so external tools (e.g. an OS keyboard shortcut sending clipboard text)
+    can open d-tach with text already in place.
+    """
+    return _render_text_mode(prefill_text=request.args.get("q", ""))
 
 
 @bp.route("/text/anonymize", methods=["POST"])
@@ -174,7 +179,7 @@ def anonymize():
     })
 
 
-def _render_text_mode():
+def _render_text_mode(prefill_text: str = ""):
     """Render text_mode.html with current UserSettings restored from disk."""
     settings = current_app.user_settings
     return render_template(
@@ -187,4 +192,5 @@ def _render_text_mode():
         anonymize_locations=settings.anonymize_locations,
         anonymize_urls=settings.anonymize_urls,
         pattern_config=settings.pattern_config,
+        prefill_text=prefill_text,
     )

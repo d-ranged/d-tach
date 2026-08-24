@@ -1,6 +1,45 @@
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, render_template, request
+
+from app.services.user_settings import MAX_PORT, MIN_PORT
 
 bp = Blueprint("settings", __name__)
+
+
+@bp.route("/settings")
+def settings_page():
+    """Render the Settings page."""
+    settings = current_app.user_settings
+    return render_template(
+        "settings.html",
+        active_mode="settings",
+        port=settings.port,
+        min_port=MIN_PORT,
+        max_port=MAX_PORT,
+    )
+
+
+@bp.route("/settings/port", methods=["POST"])
+def update_port():
+    """Update the configured port. Takes effect after restart.
+
+    Body: {"port": 5555}
+    Returns {"port": <int>} on success, {"error": "..."} on invalid input.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    raw_port = data.get("port")
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Port must be a whole number."}), 400
+
+    settings = current_app.user_settings
+    try:
+        settings.port = port
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    settings.save()
+
+    return jsonify({"port": settings.port})
 
 
 @bp.route("/settings/known-values", methods=["GET"])

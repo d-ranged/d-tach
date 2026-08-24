@@ -53,7 +53,7 @@ On first run, the launcher checks your Python version, then installs all require
 
 > **Python not installed yet?** The launcher will display a clear error message with a download link and step-by-step instructions. Install Python, then double-click `launch.bat` again.
 
-A browser window will open at `http://localhost:5555`. Keep the terminal window open while you use the application — closing it stops the server.
+A browser window opens at `http://localhost:5555`, and a d-tach icon appears in the system tray — this is how you keep using the app after closing the browser tab. Right-click the tray icon for **Open d-tach** and **Quit**; left-click it to open d-tach directly. On first launch you'll be asked whether d-tach should start automatically when you log in — a one-time choice you can decline.
 
 ### Installation and first run (macOS / Linux)
 
@@ -63,7 +63,7 @@ A browser window will open at `http://localhost:5555`. Keep the terminal window 
    bash launch.sh
    ```
 
-On first run, the launcher checks your Python version, installs all dependencies automatically, and opens the app in your browser. Subsequent runs start immediately.
+On first run, the launcher checks your Python version, installs all dependencies automatically, and opens the app in your browser. Subsequent runs start immediately. A d-tach icon also appears in the system tray (menu bar on macOS) — this is how you keep using the app after closing the browser tab, and how you quit it.
 
 > **Python not installed or too old?** The launcher will display a clear error message. Install Python 3.11+ and run `bash launch.sh` again.
 
@@ -84,6 +84,73 @@ On first run, the launcher checks your Python version, installs all dependencies
 1. Click **Browse…** to select a file or folder, or type the path directly.
 2. Adjust settings as needed.
 3. Click **Process**. Anonymized copies are saved to the same folder as the originals.
+
+**Settings**
+
+The Settings tab lets you change the port d-tach listens on (default `5555`) —
+useful if another application already uses that port, or your institution's
+firewall blocks it. Changing the port requires restarting d-tach (quit and
+reopen from the tray icon) to take effect.
+
+### Send clipboard text to d-tach with a keyboard shortcut (optional)
+
+`GET /text?q=your+text` opens Text Mode with `your text` already in the input
+box. Combined with an OS-level keyboard shortcut, this lets you select text
+anywhere, press a hotkey, and have it appear in d-tach ready to anonymize —
+without switching windows and pasting manually. These are personal automation
+scripts you set up yourself; d-tach does not install or manage them.
+
+**Windows** — PowerShell + a shortcut file, no background process required:
+
+```powershell
+# d-anonymize.ps1
+$text    = Get-Clipboard
+if (-not $text -or $text.Trim() -eq "") { exit }
+$encoded = [System.Uri]::EscapeDataString($text)
+Start-Process "http://localhost:5555/text?q=$encoded"
+```
+
+Create a `.lnk` shortcut pointing to
+`powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "path\to\d-anonymize.ps1"`,
+then assign a shortcut key (e.g. `Ctrl+Alt+A`) via the shortcut's Properties
+dialog. Place the shortcut on the Desktop or in the Start Menu folder for the
+hotkey to work system-wide.
+
+**macOS** — shell script + a Keyboard Shortcuts / Automator entry:
+
+```bash
+#!/bin/bash
+# d-anonymize.sh
+TEXT=$(pbpaste)
+[ -z "$TEXT" ] && exit
+ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))" <<< "$TEXT")
+open "http://localhost:5555/text?q=$ENCODED"
+```
+
+Run `chmod +x d-anonymize.sh`, then assign a shortcut in System Preferences →
+Keyboard → Shortcuts → App Shortcuts (or wrap it in an Automator Quick Action
+for a right-click Services menu entry instead of a keyboard shortcut).
+
+**Linux** — shell script + a desktop environment shortcut:
+
+```bash
+#!/bin/bash
+# d-anonymize.sh
+if command -v wl-paste &>/dev/null; then
+    TEXT=$(wl-paste)
+else
+    TEXT=$(xclip -selection clipboard -o 2>/dev/null)
+fi
+[ -z "$TEXT" ] && exit
+ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.stdin.read()))" <<< "$TEXT")
+xdg-open "http://localhost:5555/text?q=$ENCODED"
+```
+
+Assign the shortcut via GNOME Settings → Keyboard → Custom Shortcuts, or KDE
+System Settings → Shortcuts → Custom Shortcuts.
+
+> If you changed the port in Settings, replace `5555` in the script with your
+> configured port.
 
 ---
 
@@ -116,12 +183,21 @@ python -m spacy download nl_core_news_md
 ### Running
 
 ```bash
-python run.py
+python tray.py
+```
+
+This is the normal launch path — it starts the Flask server and shows a
+system tray icon. `run.py` (debug mode) and `serve.py` (no tray, no debug)
+remain available for development. All three read the port from
+`UserSettings`, or from the `DTACH_PORT` environment variable if set:
+
+```bash
+DTACH_PORT=5001 python run.py
 ```
 
 Or double-click `launch.bat` (Windows) / run `./launch.sh` (macOS / Linux). Both launchers handle first-time setup automatically.
 
-The app is available at `http://localhost:5555`.
+The app is available at `http://localhost:5555` by default (configurable in Settings).
 
 ### Running tests
 
@@ -134,15 +210,17 @@ pytest
 ```
 d-tach/
 ├── app/
-│   ├── routes/          # Flask blueprints (text, document, browse)
+│   ├── routes/          # Flask blueprints (text, document, browse, settings, restore)
 │   ├── services/        # Business logic (Anonymizer, FileProcessor, etc.)
 │   ├── static/          # CSS and JavaScript
 │   └── templates/       # HTML templates
 ├── tests/
-├── docs/                # project_guide.md, original_steps.md, roadmap.md, step_1.1.0.md
+├── docs/                # project_guide.md, original_steps.md, roadmap.md, step files
 ├── launch.bat           # Windows launcher (auto-setup on first run)
 ├── launch.sh            # macOS / Linux launcher (auto-setup on first run)
-├── run.py               # Application entry point
+├── tray.py              # Normal launch path — Flask + system tray icon
+├── run.py               # Development entry point (debug mode)
+├── serve.py             # Development entry point (no debug, no tray)
 └── requirements.txt
 ```
 

@@ -12,7 +12,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 
 | Step | Description | Status |
 |---|---|---|
-| 1 | System tray app + configurable port | ⬜ Not started |
+| 1 | System tray app + configurable port | ✅ Complete |
 | 2 | Language management — on-demand download, first-launch selection | ⬜ Not started |
 | 3 | Acceptance Testing — all features | ⬜ Not started |
 | 4 | Fix double-anonymization of already-anonymized text | ⬜ Not started |

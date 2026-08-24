@@ -52,6 +52,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # ---- Open browser after Flask has had time to bind ----
+# Assumes the default port (5555); if you changed the port in Settings, open
+# the browser manually from the tray icon instead.
 (sleep 3 && {
     if command -v open &>/dev/null; then
         open http://localhost:5555
@@ -60,6 +62,6 @@ fi
     fi
 }) &
 
-# ---- Start Flask ----
+# ---- Start d-tach (tray app) ----
 echo "Starting d-tach..."
-.venv/bin/python run.py
+.venv/bin/python tray.py

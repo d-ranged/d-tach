@@ -10,9 +10,15 @@ logger = logging.getLogger(__name__)
 
 SETTINGS_FILE: Final[Path] = Path("user_settings.json")
 
+DEFAULT_PORT: Final[int] = 5555
+MIN_PORT: Final[int] = 1024
+MAX_PORT: Final[int] = 65535
+
 _DEFAULTS: Final[dict] = {
     "hashing_enabled": False,
     "hashing_secret": "",
+    "port": DEFAULT_PORT,
+    "tray_startup_prompt_shown": False,
     "language": "en",
     "anonymize_dates": False,
     "anonymize_locations": False,
@@ -67,6 +73,27 @@ class UserSettings:
     @hashing_secret.setter
     def hashing_secret(self, value: str) -> None:
         self._data["hashing_secret"] = str(value)
+
+    @property
+    def port(self) -> int:
+        """The port the Flask server listens on (default 5555)."""
+        return self._data.get("port", DEFAULT_PORT)
+
+    @port.setter
+    def port(self, value: int) -> None:
+        value = int(value)
+        if not (MIN_PORT <= value <= MAX_PORT):
+            raise ValueError(f"port must be between {MIN_PORT} and {MAX_PORT}, got {value!r}.")
+        self._data["port"] = value
+
+    @property
+    def tray_startup_prompt_shown(self) -> bool:
+        """Whether the one-time 'run at startup?' prompt has already been shown."""
+        return self._data.get("tray_startup_prompt_shown", False)
+
+    @tray_startup_prompt_shown.setter
+    def tray_startup_prompt_shown(self, value: bool) -> None:
+        self._data["tray_startup_prompt_shown"] = bool(value)
 
     @property
     def language(self) -> str:
@@ -231,6 +258,10 @@ class UserSettings:
             merged["hashing_enabled"] = raw["hashing_enabled"]
         if isinstance(raw.get("hashing_secret"), str):
             merged["hashing_secret"] = raw["hashing_secret"]
+        if isinstance(raw.get("port"), int) and MIN_PORT <= raw["port"] <= MAX_PORT:
+            merged["port"] = raw["port"]
+        if isinstance(raw.get("tray_startup_prompt_shown"), bool):
+            merged["tray_startup_prompt_shown"] = raw["tray_startup_prompt_shown"]
         if raw.get("language") in ("en", "nl"):
             merged["language"] = raw["language"]
         if isinstance(raw.get("anonymize_dates"), bool):
