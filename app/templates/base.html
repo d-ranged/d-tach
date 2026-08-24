@@ -28,6 +28,10 @@
                    class="nav-link {% if active_mode == 'restore' %}active{% endif %}">
                     Restore
                 </a>
+                <a href="{{ url_for('settings.settings_page') }}"
+                   class="nav-link {% if active_mode == 'settings' %}active{% endif %}">
+                    Settings
+                </a>
             </nav>
         </div>
     </header>

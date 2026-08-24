@@ -12,7 +12,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 
 | Step | Description | Status |
 |---|---|---|
-| 1 | System tray app + configurable port | ⬜ Not started |
+| 1 | System tray app + configurable port | ✅ Complete |
 | 2 | Language management — on-demand download, first-launch selection | ⬜ Not started |
 | 3 | Acceptance Testing — all features | ⬜ Not started |
 | 4 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
@@ -46,8 +46,10 @@ therefore a packaging/installer release that becomes feasible only after v1.3.0 
 
 ## Step 1 — System Tray App + Configurable Port
 
-**Codeberg issue to create first:**
-`feature: system tray app and configurable port`
+
+
+**Codeberg issue created:**
+`d-ranged/d-tach#60`
 
 ### Port decision
 

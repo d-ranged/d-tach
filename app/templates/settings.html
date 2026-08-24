@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<section class="doc-section">
+    <h2 class="section-heading">Port</h2>
+    <p class="advanced-hint">
+        The port d-tach listens on. Change this if another application on your
+        machine already uses {{ port }}, or if your institution's firewall
+        restricts it.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="advanced-label" for="port-input">Port</label>
+        <input
+            type="number"
+            id="port-input"
+            class="digit-input"
+            value="{{ port }}"
+            min="{{ min_port }}"
+            max="{{ max_port }}"
+        >
+        <button class="btn btn-primary btn-sm" id="save-port-btn">Save</button>
+    </div>
+
+    <p class="muted" id="port-restart-notice" hidden>Restart d-tach to apply the new port.</p>
+    <p class="error-text" id="port-error" hidden></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}
