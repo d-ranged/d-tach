@@ -137,3 +137,84 @@ class TestLanguageManagementMigration:
         settings = UserSettings(settings_path=settings_path)
         assert settings.language_setup_complete is False
         assert settings.enabled_languages == ["en"]
+
+
+class TestKnownValuesDefaults:
+    def test_fresh_install_has_no_known_values(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.known_values == []
+
+
+class TestKnownValuesSetter:
+    def test_dict_entries_round_trip(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.known_values = [{"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual"}]
+        assert settings.known_values == [{"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual"}]
+
+    def test_missing_entity_type_defaults_to_person(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.known_values = [{"value": "12345"}]
+        assert settings.known_values[0]["entity_type"] == "PERSON"
+
+    def test_invalid_source_defaults_to_manual(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.known_values = [{"value": "x", "source": "bogus"}]
+        assert settings.known_values[0]["source"] == "manual"
+
+    def test_known_values_round_trip_through_save_and_reload(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.known_values = [{"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}]
+        settings.save()
+
+        reloaded = UserSettings(settings_path=settings_path)
+        assert reloaded.known_values == [{"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}]
+
+
+class TestKnownValuesMigration:
+    """Pre-Step-4 known_values was a plain list[str]; must migrate without data loss."""
+
+    def test_legacy_string_list_migrates_to_typed_dicts(self, settings_path: Path) -> None:
+        settings_path.write_text('{"known_values": ["Craig Bradley", "Nick"]}', encoding="utf-8")
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.known_values == [
+            {"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual"},
+            {"value": "Nick", "entity_type": "PERSON", "source": "manual"},
+        ]
+
+    def test_blank_legacy_strings_are_dropped(self, settings_path: Path) -> None:
+        settings_path.write_text('{"known_values": ["Craig", "  ", ""]}', encoding="utf-8")
+        settings = UserSettings(settings_path=settings_path)
+        assert [v["value"] for v in settings.known_values] == ["Craig"]
+
+    def test_already_typed_entries_pass_through(self, settings_path: Path) -> None:
+        settings_path.write_text(
+            '{"known_values": [{"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}]}',
+            encoding="utf-8",
+        )
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.known_values == [
+            {"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}
+        ]
+
+
+class TestClassListFields:
+    def test_defaults_are_empty(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.class_list_path == ""
+        assert settings.class_list_column_mapping == {}
+
+    def test_round_trip_through_save_and_reload(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.class_list_path = "C:/roster.xlsx"
+        settings.class_list_column_mapping = {"Name": "PERSON", "Student number": "NUMERIC_ID"}
+        settings.save()
+
+        reloaded = UserSettings(settings_path=settings_path)
+        assert reloaded.class_list_path == "C:/roster.xlsx"
+        assert reloaded.class_list_column_mapping == {"Name": "PERSON", "Student number": "NUMERIC_ID"}
+
+    def test_missing_fields_in_older_file_default_cleanly(self, settings_path: Path) -> None:
+        settings_path.write_text('{"port": 6000}', encoding="utf-8")
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.class_list_path == ""
+        assert settings.class_list_column_mapping == {}

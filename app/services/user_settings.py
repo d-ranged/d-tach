@@ -14,6 +14,10 @@ DEFAULT_PORT: Final[int] = 5555
 MIN_PORT: Final[int] = 1024
 MAX_PORT: Final[int] = 65535
 
+DEFAULT_KNOWN_VALUE_ENTITY_TYPE: Final[str] = "PERSON"
+KNOWN_VALUE_SOURCES: Final[tuple[str, ...]] = ("manual", "class_list")
+DEFAULT_KNOWN_VALUE_SOURCE: Final[str] = "manual"
+
 _DEFAULTS: Final[dict] = {
     "hashing_enabled": False,
     "hashing_secret": "",
@@ -33,6 +37,8 @@ _DEFAULTS: Final[dict] = {
     "output_mode": "prefix",
     "pass_through_extensions": "",
     "known_values": [],
+    "class_list_path": "",
+    "class_list_column_mapping": {},
     "restore_input_path": "",
     "restore_keyref_path": "",
     "enabled_languages": ["en"],
@@ -185,13 +191,44 @@ class UserSettings:
         self._data["pass_through_extensions"] = ", ".join(value)
 
     @property
-    def known_values(self) -> list[str]:
-        """Persistent list of strings always anonymized regardless of NER detection."""
-        return list(self._data.get("known_values", []))
+    def known_values(self) -> list[dict]:
+        """Persistent typed values always anonymized regardless of NER detection.
+
+        Each entry is a dict: {"value": str, "entity_type": str, "source": "manual" | "class_list"}.
+        """
+        return [dict(v) for v in self._data.get("known_values", [])]
 
     @known_values.setter
-    def known_values(self, value: list[str]) -> None:
-        self._data["known_values"] = [str(v) for v in value]
+    def known_values(self, value: list[dict]) -> None:
+        self._data["known_values"] = [UserSettings._normalize_known_value(v) for v in value]
+
+    @staticmethod
+    def _normalize_known_value(entry: dict) -> dict:
+        """Coerce one known-value entry to the canonical {value, entity_type, source} shape."""
+        value = str(entry.get("value", "")).strip()
+        entity_type = str(entry.get("entity_type") or DEFAULT_KNOWN_VALUE_ENTITY_TYPE)
+        source = entry.get("source")
+        if source not in KNOWN_VALUE_SOURCES:
+            source = DEFAULT_KNOWN_VALUE_SOURCE
+        return {"value": value, "entity_type": entity_type, "source": source}
+
+    @property
+    def class_list_path(self) -> str:
+        """Path of the last-imported class list file, remembered for Re-sync."""
+        return self._data.get("class_list_path", "")
+
+    @class_list_path.setter
+    def class_list_path(self, value: str) -> None:
+        self._data["class_list_path"] = str(value)
+
+    @property
+    def class_list_column_mapping(self) -> dict[str, str]:
+        """Remembered header -> entity_type mapping for the class list, used by Re-sync."""
+        return dict(self._data.get("class_list_column_mapping", {}))
+
+    @class_list_column_mapping.setter
+    def class_list_column_mapping(self, value: dict[str, str]) -> None:
+        self._data["class_list_column_mapping"] = {str(k): str(v) for k, v in value.items()}
 
     @property
     def restore_input_path(self) -> str:
@@ -278,6 +315,7 @@ class UserSettings:
         """Return a fresh copy of the default settings dict."""
         d = dict(_DEFAULTS)
         d["pattern_config"] = dict(_DEFAULTS["pattern_config"])
+        d["class_list_column_mapping"] = dict(_DEFAULTS["class_list_column_mapping"])
         return d
 
 
@@ -322,7 +360,24 @@ class UserSettings:
         if isinstance(raw.get("pass_through_extensions"), str):
             merged["pass_through_extensions"] = raw["pass_through_extensions"]
         if isinstance(raw.get("known_values"), list):
-            merged["known_values"] = [str(v) for v in raw["known_values"] if isinstance(v, str) and v.strip()]
+            migrated: list[dict] = []
+            for v in raw["known_values"]:
+                if isinstance(v, str) and v.strip():
+                    # Pre-Step-4 format: plain strings, always PERSON, manually added.
+                    migrated.append({
+                        "value": v.strip(),
+                        "entity_type": DEFAULT_KNOWN_VALUE_ENTITY_TYPE,
+                        "source": DEFAULT_KNOWN_VALUE_SOURCE,
+                    })
+                elif isinstance(v, dict) and str(v.get("value", "")).strip():
+                    migrated.append(UserSettings._normalize_known_value(v))
+            merged["known_values"] = migrated
+        if isinstance(raw.get("class_list_path"), str):
+            merged["class_list_path"] = raw["class_list_path"]
+        if isinstance(raw.get("class_list_column_mapping"), dict):
+            merged["class_list_column_mapping"] = {
+                str(k): str(v) for k, v in raw["class_list_column_mapping"].items()
+            }
         if isinstance(raw.get("restore_input_path"), str):
             merged["restore_input_path"] = raw["restore_input_path"]
         if isinstance(raw.get("restore_keyref_path"), str):

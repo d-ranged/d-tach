@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from flask import Blueprint, current_app, jsonify, render_template, request
 
 from app.services.user_settings import MAX_PORT, MIN_PORT
@@ -61,17 +63,23 @@ def update_port():
 
 @bp.route("/settings/known-values", methods=["GET"])
 def get_known_values():
-    """Return the current known values list."""
-    return jsonify({"values": current_app.user_settings.known_values})
+    """Return the current known values list plus the remembered class list state."""
+    settings = current_app.user_settings
+    return jsonify({
+        "values": settings.known_values,
+        "class_list_path": settings.class_list_path,
+        "class_list_column_mapping": settings.class_list_column_mapping,
+    })
 
 
 @bp.route("/settings/known-values", methods=["POST"])
 def add_known_value():
-    """Append a value to the known values list.
+    """Append a manually-entered value to the known values list.
 
     Body: {"value": "Name to always anonymize"}
-    Silently ignores duplicates (case-insensitive comparison).
-    Returns the updated list.
+    Silently ignores duplicates (case-insensitive comparison against every
+    existing entry regardless of source). Always tagged entity_type PERSON,
+    source manual. Returns the updated list.
     """
     data = request.get_json(force=True, silent=True) or {}
     value = str(data.get("value", "")).strip()
@@ -80,8 +88,8 @@ def add_known_value():
 
     settings = current_app.user_settings
     current = settings.known_values
-    if not any(v.lower() == value.lower() for v in current):
-        current.append(value)
+    if not any(v["value"].lower() == value.lower() for v in current):
+        current.append({"value": value, "entity_type": "PERSON", "source": "manual"})
         settings.known_values = current
         settings.save()
 
@@ -90,7 +98,7 @@ def add_known_value():
 
 @bp.route("/settings/known-values", methods=["DELETE"])
 def remove_known_value():
-    """Remove a value from the known values list (case-insensitive).
+    """Remove a value from the known values list (case-insensitive), any source.
 
     Body: {"value": "Name to remove"}
     Returns the updated list.
@@ -99,11 +107,93 @@ def remove_known_value():
     value = str(data.get("value", "")).strip()
 
     settings = current_app.user_settings
-    updated = [v for v in settings.known_values if v.lower() != value.lower()]
+    updated = [v for v in settings.known_values if v["value"].lower() != value.lower()]
     settings.known_values = updated
     settings.save()
 
     return jsonify({"values": settings.known_values})
+
+
+@bp.route("/settings/known-values/class-list/columns", methods=["POST"])
+def class_list_columns():
+    """Read the header row of a class list Excel file.
+
+    Body: {"file_path": "C:/roster.xlsx"}
+    Returns {"columns": [str, ...]} or {"error": "..."}.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    file_path, error = _validate_xlsx_path(data.get("file_path", ""))
+    if error:
+        return jsonify({"error": error}), 400
+
+    try:
+        columns = current_app.class_list_importer.read_columns(file_path)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read columns: {exc}"}), 400
+
+    return jsonify({"columns": columns})
+
+
+@bp.route("/settings/known-values/class-list/import", methods=["POST"])
+def class_list_import():
+    """Import known values from a class list using a column mapping.
+
+    Body: {"file_path": "C:/roster.xlsx", "column_mapping": {"Name": "PERSON"}}
+    Merges new values into the existing known values list (deduped
+    case-insensitively across all sources), remembers the file path and
+    mapping for Re-sync, and returns import counts.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    file_path, error = _validate_xlsx_path(data.get("file_path", ""))
+    if error:
+        return jsonify({"error": error}), 400
+
+    column_mapping = data.get("column_mapping")
+    if not isinstance(column_mapping, dict) or not column_mapping:
+        return jsonify({"error": "column_mapping must be a non-empty object."}), 400
+
+    settings = current_app.user_settings
+    try:
+        updated_values, result = current_app.class_list_importer.import_from_file(
+            file_path, column_mapping, settings.known_values
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Import failed: {exc}"}), 400
+
+    settings.known_values = updated_values
+    settings.class_list_path = str(file_path)
+    settings.class_list_column_mapping = column_mapping
+    settings.save()
+
+    return jsonify({
+        "added": result.added,
+        "already_present": result.already_present,
+        "total_known_values": result.total_known_values,
+    })
+
+
+@bp.route("/settings/known-values/class-list/clear", methods=["DELETE"])
+def class_list_clear():
+    """Remove every class-list-sourced known value; manual entries are untouched."""
+    settings = current_app.user_settings
+    settings.known_values = [v for v in settings.known_values if v["source"] != "class_list"]
+    settings.save()
+    return jsonify({"values": settings.known_values})
+
+
+def _validate_xlsx_path(file_path_str: str) -> tuple[Path, str]:
+    """Validate a class-list file path; return (path, "") or (Path(), error message)."""
+    file_path_str = str(file_path_str).strip()
+    if not file_path_str:
+        return Path(), "No file path provided."
+    file_path = Path(file_path_str)
+    if file_path.suffix.lower() != ".xlsx":
+        return Path(), "Class list must be an .xlsx file."
+    if not file_path.exists():
+        return Path(), f"File not found: {file_path_str}"
+    if not file_path.is_file():
+        return Path(), f"Path is not a file: {file_path_str}"
+    return file_path, ""
 
 
 @bp.route("/settings/languages/install", methods=["POST"])

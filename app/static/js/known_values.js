@@ -7,7 +7,20 @@
 
     if (!input || !addBtn || !tagsContainer) return;
 
-    const EMPTY_HTML = '<span class="muted">No known names yet — add names that are consistently missed by the anonymizer.</span>';
+    const EMPTY_HTML = '<span class="muted">No known values yet — add names that are consistently missed by the anonymizer, or import a class list below.</span>';
+
+    const ENTITY_LABELS = {
+        PERSON: "Person name",
+        NUMERIC_ID: "Numeric ID",
+        EMAIL_ADDRESS: "Email",
+    };
+    const SOURCE_LABELS = {
+        manual: "Manual",
+        class_list: "Class list",
+    };
+
+    // Reassigned below when the class list import UI is present on this page.
+    let renderClassListState = function () {};
 
     function escapeHtml(str) {
         const div = document.createElement("div");
@@ -21,13 +34,16 @@
             return;
         }
         tagsContainer.innerHTML = "";
-        values.forEach(function (value) {
+        values.forEach(function (entry) {
             const tag = document.createElement("span");
             tag.className = "known-name-tag";
-            tag.innerHTML = escapeHtml(value) +
+            const typeLabel = ENTITY_LABELS[entry.entity_type] || entry.entity_type;
+            const sourceLabel = SOURCE_LABELS[entry.source] || entry.source;
+            tag.innerHTML = escapeHtml(entry.value) +
+                ' <span class="known-name-type" title="' + escapeHtml(sourceLabel) + '">' + escapeHtml(typeLabel) + '</span>' +
                 ' <button class="known-name-remove" title="Remove ×">×</button>';
             tag.querySelector(".known-name-remove").addEventListener("click", function () {
-                removeValue(value);
+                removeValue(entry.value);
             });
             tagsContainer.appendChild(tag);
         });
@@ -38,6 +54,7 @@
             const resp = await fetch("/settings/known-values");
             const data = await resp.json();
             renderTags(data.values || []);
+            renderClassListState(data.class_list_path || "", data.class_list_column_mapping || {});
         } catch (_) {
             tagsContainer.innerHTML = EMPTY_HTML;
         }
@@ -73,6 +90,205 @@
     input.addEventListener("keydown", function (e) {
         if (e.key === "Enter") { e.preventDefault(); addValue(input.value); }
     });
+
+    // ------------------------------------------------------------------
+    // Class list import
+    // ------------------------------------------------------------------
+
+    const pathInput = document.getElementById("class-list-path");
+    const browseBtn = document.getElementById("class-list-browse-btn");
+    const columnsContainer = document.getElementById("class-list-columns");
+    const importBtn = document.getElementById("class-list-import-btn");
+    const resyncBtn = document.getElementById("class-list-resync-btn");
+    const clearBtn = document.getElementById("class-list-clear-btn");
+    const statusEl = document.getElementById("class-list-status");
+    const errorEl = document.getElementById("class-list-error");
+
+    const hasClassListUi = pathInput && browseBtn && columnsContainer &&
+        importBtn && resyncBtn && clearBtn && statusEl && errorEl;
+
+    if (hasClassListUi) {
+        let rememberedMapping = {};
+
+        const showError = function (message) {
+            errorEl.textContent = message;
+            errorEl.hidden = false;
+            statusEl.hidden = true;
+        };
+
+        const showStatus = function (message) {
+            statusEl.textContent = message;
+            statusEl.hidden = false;
+            errorEl.hidden = true;
+        };
+
+        const clearMessages = function () {
+            errorEl.hidden = true;
+            statusEl.hidden = true;
+        };
+
+        const guessEntityType = function (header) {
+            const lower = header.toLowerCase();
+            if (lower.includes("email")) return "EMAIL_ADDRESS";
+            if (lower.includes("number") || lower.includes("id") || lower.includes("nr")) return "NUMERIC_ID";
+            if (lower.includes("name")) return "PERSON";
+            return "";
+        };
+
+        const renderColumnPickers = function (columns) {
+            columnsContainer.innerHTML = "";
+            columns.forEach(function (header) {
+                const row = document.createElement("div");
+                row.className = "class-list-column-row";
+                row.dataset.header = header;
+
+                const label = document.createElement("span");
+                label.className = "class-list-column-label";
+                label.textContent = header;
+
+                const select = document.createElement("select");
+                select.className = "class-list-column-select digit-input";
+                [
+                    ["", "Ignore"],
+                    ["PERSON", "Person name"],
+                    ["NUMERIC_ID", "Numeric ID"],
+                    ["EMAIL_ADDRESS", "Email"],
+                ].forEach(function (pair) {
+                    const opt = document.createElement("option");
+                    opt.value = pair[0];
+                    opt.textContent = pair[1];
+                    select.appendChild(opt);
+                });
+                select.value = guessEntityType(header);
+
+                row.appendChild(label);
+                row.appendChild(select);
+                columnsContainer.appendChild(row);
+            });
+            columnsContainer.hidden = columns.length === 0;
+            importBtn.hidden = columns.length === 0;
+        };
+
+        const currentColumnMapping = function () {
+            const mapping = {};
+            columnsContainer.querySelectorAll(".class-list-column-row").forEach(function (row) {
+                const value = row.querySelector(".class-list-column-select").value;
+                if (value) mapping[row.dataset.header] = value;
+            });
+            return mapping;
+        };
+
+        renderClassListState = function (path, mapping) {
+            pathInput.value = path || "";
+            rememberedMapping = mapping || {};
+            const hasRemembered = !!path && Object.keys(rememberedMapping).length > 0;
+            resyncBtn.hidden = !hasRemembered;
+            clearBtn.hidden = !hasRemembered;
+            columnsContainer.hidden = true;
+            columnsContainer.innerHTML = "";
+            importBtn.hidden = true;
+        };
+
+        const loadColumns = async function (filePath) {
+            clearMessages();
+            if (!filePath.trim()) {
+                showError("Enter or browse to a class list file first.");
+                return;
+            }
+            try {
+                const resp = await fetch("/settings/known-values/class-list/columns", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ file_path: filePath.trim() }),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                renderColumnPickers(data.columns || []);
+                if (!data.columns || data.columns.length === 0) {
+                    showError("No column headers found in row 1 of that file.");
+                }
+            } catch (_) {
+                showError("Could not read that file.");
+            }
+        };
+
+        const runImport = async function (filePath, mapping) {
+            clearMessages();
+            if (!Object.keys(mapping).length) {
+                showError("Choose a type for at least one column before importing.");
+                return;
+            }
+            try {
+                const resp = await fetch("/settings/known-values/class-list/import", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ file_path: filePath, column_mapping: mapping }),
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                await loadValues();
+                showStatus(
+                    "Added " + data.added + ", already present " + data.already_present +
+                    " — " + data.total_known_values + " known values total."
+                );
+            } catch (_) {
+                showError("Import failed.");
+            }
+        };
+
+        const clearClassListValues = async function () {
+            clearMessages();
+            try {
+                const resp = await fetch("/settings/known-values/class-list/clear", { method: "DELETE" });
+                const data = await resp.json();
+                renderTags(data.values || []);
+                showStatus("Class list values removed.");
+            } catch (_) {
+                showError("Could not clear class list values.");
+            }
+        };
+
+        browseBtn.addEventListener("click", async function () {
+            try {
+                const resp = await fetch("/browse/file");
+                const data = await resp.json();
+                if (data.tkinter_unavailable) {
+                    showError("File browsing is unavailable on this system — paste the path instead.");
+                    return;
+                }
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                if (data.path) {
+                    pathInput.value = data.path;
+                    await loadColumns(data.path);
+                }
+            } catch (_) {
+                showError("Could not open file browser.");
+            }
+        });
+
+        pathInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") { e.preventDefault(); loadColumns(pathInput.value); }
+        });
+
+        importBtn.addEventListener("click", function () {
+            runImport(pathInput.value.trim(), currentColumnMapping());
+        });
+
+        resyncBtn.addEventListener("click", function () {
+            runImport(pathInput.value.trim(), rememberedMapping);
+        });
+
+        clearBtn.addEventListener("click", clearClassListValues);
+    }
 
     loadValues();
 })();

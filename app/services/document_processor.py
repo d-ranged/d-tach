@@ -255,6 +255,53 @@ class DocumentProcessor:
         missing = [orig_name for norm_name, orig_name in requested.items() if norm_name not in found]
         return exact_replacements, missing
 
+    def read_xlsx_headers(self, path: Path) -> list[str]:
+        """Return the non-blank string header values in row 1 of the active sheet.
+
+        Used to populate the class list import column picker. Only the active
+        sheet is read — a class list is assumed to be a single-sheet roster.
+        """
+        wb = load_workbook(str(path))
+        sheet = wb.active
+        return [
+            cell.value.strip()
+            for cell in sheet[1]
+            if isinstance(cell.value, str) and cell.value.strip()
+        ]
+
+    def read_xlsx_columns(self, path: Path, headers: list[str]) -> dict[str, list[str]]:
+        """Return {header: [cell values]} for the given headers in the active sheet.
+
+        Header matching is case-insensitive against row 1. Values are the raw
+        stripped string form of each non-formula, non-blank cell below the
+        header, in row order. Only the active sheet is read.
+        """
+        wb = load_workbook(str(path))
+        sheet = wb.active
+
+        header_map: dict[str, int] = {}
+        for cell in sheet[1]:
+            if isinstance(cell.value, str) and cell.value.strip():
+                header_map[cell.value.strip().lower()] = cell.column
+
+        result: dict[str, list[str]] = {}
+        for header in headers:
+            norm = header.strip().lower()
+            values: list[str] = []
+            col_idx = header_map.get(norm)
+            if col_idx is not None:
+                for row in sheet.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
+                    cell = row[0]
+                    if cell.value is None:
+                        continue
+                    if isinstance(cell.value, str) and cell.value.startswith("="):
+                        continue
+                    value_str = str(cell.value).strip()
+                    if value_str:
+                        values.append(value_str)
+            result[header] = values
+        return result
+
     def save_xlsx_copy(self, wb: Workbook, dest_path: Path) -> None:
         """Save an unmodified copy of the workbook to dest_path."""
         wb.save(str(dest_path))

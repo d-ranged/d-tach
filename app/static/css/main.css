@@ -877,3 +877,31 @@ details[open] .advanced-settings-toggle::before {
 .known-name-remove:hover {
     color: #c0392b;
 }
+
+.known-name-type {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* ---- Class list import ---- */
+
+.class-list-columns {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.class-list-column-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.class-list-column-label {
+    font-size: 0.82rem;
+    color: var(--color-text);
+    min-width: 180px;
+}

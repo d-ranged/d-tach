@@ -15,7 +15,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 1 | System tray app + configurable port | ✅ Complete |
 | 2 | Language management — on-demand download, first-launch selection | ✅ Complete (not human-tested) |
 | 3 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
-| 4 | Class list import — bulk-populate known values from a roster file | ⬜ Not started |
+| 4 | Class list import — bulk-populate known values from a roster file | ✅ Complete |
 | 5 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ⬜ Not started |
 | 6 | Acceptance Testing — real-work run: ADM retake grading through AI Mode | ⬜ Not started |
 
@@ -437,10 +437,10 @@ Add a placeholder-recognition guard in `anonymize()`, after the existing
 
 ---
 
-## Step 4 — Class List Import
+## <completed>Step 4 — Class List Import</completed>
 
 **Codeberg issue to create first:**
-`feature: import known values in bulk from a class list (Excel)`
+`d-ranged/d-tach#66`
 
 ### Background
 
