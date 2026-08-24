@@ -35,6 +35,9 @@ _DEFAULTS: Final[dict] = {
     "known_values": [],
     "restore_input_path": "",
     "restore_keyref_path": "",
+    "enabled_languages": ["en"],
+    "loading_strategy": "eager",
+    "language_setup_complete": False,
 }
 
 
@@ -208,6 +211,35 @@ class UserSettings:
     def restore_keyref_path(self, value: str) -> None:
         self._data["restore_keyref_path"] = str(value)
 
+    @property
+    def enabled_languages(self) -> list[str]:
+        """Language codes the user has enabled for detection/loading."""
+        return list(self._data.get("enabled_languages", ["en"]))
+
+    @enabled_languages.setter
+    def enabled_languages(self, value: list[str]) -> None:
+        self._data["enabled_languages"] = [str(v) for v in value]
+
+    @property
+    def loading_strategy(self) -> str:
+        """How language models are loaded: 'eager' (all at startup) or 'lazy' (on demand)."""
+        return self._data.get("loading_strategy", "eager")
+
+    @loading_strategy.setter
+    def loading_strategy(self, value: str) -> None:
+        if value not in ("eager", "lazy"):
+            raise ValueError(f"loading_strategy must be 'eager' or 'lazy', got {value!r}.")
+        self._data["loading_strategy"] = value
+
+    @property
+    def language_setup_complete(self) -> bool:
+        """Whether the first-launch language-selection screen has been completed."""
+        return self._data.get("language_setup_complete", False)
+
+    @language_setup_complete.setter
+    def language_setup_complete(self, value: bool) -> None:
+        self._data["language_setup_complete"] = bool(value)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -295,4 +327,23 @@ class UserSettings:
             merged["restore_input_path"] = raw["restore_input_path"]
         if isinstance(raw.get("restore_keyref_path"), str):
             merged["restore_keyref_path"] = raw["restore_keyref_path"]
+
+        # Language management fields (issue #62): a settings file written before
+        # this field existed belongs to an existing install that already relied
+        # on both en+nl being loaded — grandfather it in as fully set up, rather
+        # than surprising an upgrading user with the first-launch setup screen
+        # or dropping Dutch support they were already using.
+        is_pre_language_management = "language_setup_complete" not in raw
+        if isinstance(raw.get("enabled_languages"), list):
+            langs = [str(v) for v in raw["enabled_languages"] if isinstance(v, str) and v.strip()]
+            merged["enabled_languages"] = langs or merged["enabled_languages"]
+        elif is_pre_language_management:
+            merged["enabled_languages"] = ["en", "nl"]
+        if raw.get("loading_strategy") in ("eager", "lazy"):
+            merged["loading_strategy"] = raw["loading_strategy"]
+        if isinstance(raw.get("language_setup_complete"), bool):
+            merged["language_setup_complete"] = raw["language_setup_complete"]
+        elif is_pre_language_management:
+            merged["language_setup_complete"] = True
+
         return merged

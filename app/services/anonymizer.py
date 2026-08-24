@@ -3,6 +3,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Final, Optional
 
+import spacy
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
@@ -10,12 +11,9 @@ from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
 
-_NLP_CONFIGURATION: Final[dict] = {
-    "nlp_engine_name": "spacy",
-    "models": [
-        {"lang_code": "en", "model_name": "en_core_web_md"},
-        {"lang_code": "nl", "model_name": "nl_core_news_md"},
-    ],
+_MODEL_BY_LANGUAGE: Final[dict[str, str]] = {
+    "en": "en_core_web_md",
+    "nl": "nl_core_news_md",
 }
 
 ENTITIES: Final[list[str]] = [
@@ -142,17 +140,60 @@ def build_known_value_recognizers(
 
 
 class Anonymizer:
-    """Detects and replaces PII in text using Presidio with English and Dutch spaCy models."""
+    """Detects and replaces PII in text using Presidio, one spaCy model per language.
 
-    def __init__(self) -> None:
-        """Load spaCy models and configure the Presidio analyzer engine."""
-        provider = NlpEngineProvider(nlp_configuration=_NLP_CONFIGURATION)
+    Each supported language gets its own AnalyzerEngine, built lazily so RAM
+    is only spent on languages actually in use (see LanguageRegistry / the
+    'eager' vs 'lazy' loading strategy in UserSettings).
+    """
+
+    def __init__(self, languages: Optional[list[str]] = None) -> None:
+        """Load the given languages now (default: all supported languages).
+
+        Pass an empty list to start with nothing loaded (pure lazy mode) or a
+        specific subset to load only those. Raises RuntimeError if a requested
+        language's spaCy model is not installed — this never triggers an
+        implicit download.
+        """
+        self._analyzers: dict[str, AnalyzerEngine] = {}
+        target_languages = languages if languages is not None else list(_MODEL_BY_LANGUAGE.keys())
+        for code in target_languages:
+            self._load_language(code)
+
+    def _load_language(self, language: str) -> None:
+        """Build and cache the AnalyzerEngine for one language, if not already loaded."""
+        if language in self._analyzers:
+            return
+
+        model_name = _MODEL_BY_LANGUAGE.get(language)
+        if model_name is None:
+            raise ValueError(f"Unsupported language: {language!r}")
+
+        if not spacy.util.is_package(model_name):
+            raise RuntimeError(
+                f"The {language!r} language model ({model_name}) is not installed. "
+                "Install it in Settings > Languages."
+            )
+
+        configuration = {
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": language, "model_name": model_name}],
+        }
+        provider = NlpEngineProvider(nlp_configuration=configuration)
         nlp_engine = provider.create_engine()
-        self._analyzer = AnalyzerEngine(
-            nlp_engine=nlp_engine,
-            supported_languages=["en", "nl"],
-        )
-        self._analyzer.registry.add_recognizer(DutchBsnRecognizer())
+        analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=[language])
+        if language == "nl":
+            analyzer.registry.add_recognizer(DutchBsnRecognizer())
+        self._analyzers[language] = analyzer
+
+    def ensure_loaded(self, language: str) -> None:
+        """Load the given language's model into RAM now, if not already loaded."""
+        self._load_language(language)
+
+    @property
+    def loaded_languages(self) -> list[str]:
+        """Codes of every language currently loaded into RAM."""
+        return list(self._analyzers.keys())
 
     def anonymize(
         self,
@@ -177,10 +218,16 @@ class Anonymizer:
         if not text or not text.strip():
             return AnonymizationResult(anonymized_text=text)
 
+        analyzer = self._analyzers.get(language)
+        if analyzer is None:
+            raise ValueError(
+                f"Language {language!r} is not loaded. Call ensure_loaded() first."
+            )
+
         active_entities = entities if entities is not None else ENTITIES
 
         try:
-            results = self._analyzer.analyze(
+            results = analyzer.analyze(
                 text=text,
                 language=language,
                 entities=active_entities,

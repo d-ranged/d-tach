@@ -44,3 +44,198 @@
         if (e.key === "Enter") { e.preventDefault(); savePort(); }
     });
 })();
+
+(function () {
+    const strategySelect = document.getElementById("loading-strategy-select");
+    const restartNotice = document.getElementById("loading-strategy-restart-notice");
+    const errorText = document.getElementById("loading-strategy-error");
+    const languageError = document.getElementById("language-error");
+    const languageNotice = document.getElementById("language-notice");
+    const languageList = document.getElementById("language-list");
+
+    if (strategySelect) {
+        strategySelect.addEventListener("change", async function () {
+            restartNotice.hidden = true;
+            errorText.hidden = true;
+            try {
+                const resp = await fetch("/settings/languages/loading-strategy", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ strategy: strategySelect.value }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    errorText.textContent = data.error || "Could not save loading strategy.";
+                    errorText.hidden = false;
+                    return;
+                }
+                restartNotice.hidden = false;
+            } catch (_) {
+                errorText.textContent = "Could not reach the server.";
+                errorText.hidden = false;
+            }
+        });
+    }
+
+    function showLanguageError(message) {
+        if (!languageError) return;
+        languageError.textContent = message;
+        languageError.hidden = false;
+    }
+
+    function showLanguageNotice(message) {
+        if (!languageNotice) return;
+        languageNotice.textContent = message;
+        languageNotice.hidden = false;
+    }
+
+    function markRowInstalled(row) {
+        const name = row.dataset.languageName;
+        const status = row.querySelector(".language-status");
+        if (status) status.textContent = "Installed";
+        const toggle = row.querySelector(".language-enabled-toggle");
+        if (toggle) toggle.disabled = false;
+        const installBtn = row.querySelector(".language-install-btn");
+        if (installBtn) {
+            const removeBtn = document.createElement("button");
+            removeBtn.className = "btn btn-secondary btn-sm language-remove-btn";
+            removeBtn.textContent = "Remove";
+            installBtn.replaceWith(removeBtn);
+        }
+        const progress = row.querySelector(".language-progress");
+        if (progress) progress.hidden = true;
+        showLanguageNotice(name + " installed. Restart d-tach to enable it.");
+    }
+
+    function markRowRemoved(row) {
+        const name = row.dataset.languageName;
+        const size = row.dataset.downloadSizeMb;
+        const status = row.querySelector(".language-status");
+        if (status) status.textContent = "Not installed (" + size + " MB)";
+        const toggle = row.querySelector(".language-enabled-toggle");
+        if (toggle) {
+            toggle.checked = false;
+            toggle.disabled = true;
+        }
+        const removeBtn = row.querySelector(".language-remove-btn");
+        if (removeBtn) {
+            const installBtn = document.createElement("button");
+            installBtn.className = "btn btn-primary btn-sm language-install-btn";
+            installBtn.textContent = "Install";
+            installBtn.disabled = false;
+            removeBtn.replaceWith(installBtn);
+        }
+        showLanguageNotice(name + " removed. Restart d-tach to apply.");
+    }
+
+    async function pollInstallStatus(code, row) {
+        const progress = row.querySelector(".language-progress");
+        const installBtn = row.querySelector(".language-install-btn");
+        if (progress) {
+            progress.hidden = false;
+            progress.textContent = "Downloading…";
+        }
+        if (installBtn) installBtn.disabled = true;
+
+        const poll = async () => {
+            try {
+                const resp = await fetch("/settings/languages/install-status?code=" + encodeURIComponent(code));
+                const data = await resp.json();
+                if (data.state === "downloading") {
+                    setTimeout(poll, 1500);
+                    return;
+                }
+                if (data.state === "error") {
+                    if (progress) { progress.hidden = true; }
+                    if (installBtn) installBtn.disabled = false;
+                    showLanguageError(data.message || ("Failed to install " + code + "."));
+                    return;
+                }
+                markRowInstalled(row);
+            } catch (_) {
+                if (progress) { progress.hidden = true; }
+                if (installBtn) installBtn.disabled = false;
+                showLanguageError("Could not reach the server.");
+            }
+        };
+        poll();
+    }
+
+    if (languageList) {
+        languageList.addEventListener("click", async function (e) {
+            const installBtn = e.target.closest(".language-install-btn");
+            const removeBtn = e.target.closest(".language-remove-btn");
+            if (!installBtn && !removeBtn) return;
+
+            const row = e.target.closest("[data-language-code]");
+            const code = row.dataset.languageCode;
+            if (languageError) languageError.hidden = true;
+            if (languageNotice) languageNotice.hidden = true;
+
+            if (installBtn) {
+                try {
+                    const resp = await fetch("/settings/languages/install", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ code: code }),
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || data.error) {
+                        showLanguageError(data.error || "Could not start install.");
+                        return;
+                    }
+                    pollInstallStatus(code, row);
+                } catch (_) {
+                    showLanguageError("Could not reach the server.");
+                }
+                return;
+            }
+
+            removeBtn.disabled = true;
+            try {
+                const resp = await fetch("/settings/languages/remove", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ code: code }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    showLanguageError(data.error || "Could not remove language.");
+                    removeBtn.disabled = false;
+                    return;
+                }
+                markRowRemoved(row);
+            } catch (_) {
+                showLanguageError("Could not reach the server.");
+                removeBtn.disabled = false;
+            }
+        });
+
+        languageList.addEventListener("change", async function (e) {
+            const toggle = e.target.closest(".language-enabled-toggle");
+            if (!toggle) return;
+
+            const row = toggle.closest("[data-language-code]");
+            const code = row.dataset.languageCode;
+            if (languageError) languageError.hidden = true;
+            if (languageNotice) languageNotice.hidden = true;
+            try {
+                const resp = await fetch("/settings/languages/enabled", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ code: code, enabled: toggle.checked }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    showLanguageError(data.error || "Could not update language.");
+                    toggle.checked = !toggle.checked;
+                    return;
+                }
+                showLanguageNotice("Restart d-tach to apply language changes.");
+            } catch (_) {
+                showLanguageError("Could not reach the server.");
+                toggle.checked = !toggle.checked;
+            }
+        });
+    }
+})();

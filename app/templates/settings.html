@@ -27,6 +27,53 @@
     <p class="muted" id="port-restart-notice" hidden>Restart d-tach to apply the new port.</p>
     <p class="error-text" id="port-error" hidden></p>
 </section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Languages</h2>
+    <p class="advanced-hint">
+        Install, remove, and enable language models. Only enabled languages can
+        be used for detection. Changes here take effect after restart.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="advanced-label">Loading strategy</label>
+        <select id="loading-strategy-select" class="digit-input">
+            <option value="eager" {% if loading_strategy == "eager" %}selected{% endif %}>Eager — load all enabled languages at startup</option>
+            <option value="lazy" {% if loading_strategy == "lazy" %}selected{% endif %}>Lazy — load each language only when first needed</option>
+        </select>
+    </div>
+    <p class="advanced-hint">
+        Eager uses more RAM up front but avoids a short delay the first time a
+        language is used. Lazy keeps RAM usage low until a language is actually needed.
+    </p>
+    <p class="muted" id="loading-strategy-restart-notice" hidden>Restart d-tach to apply the new loading strategy.</p>
+    <p class="error-text" id="loading-strategy-error" hidden></p>
+
+    <div id="language-list">
+        {% for lang in languages %}
+        <div class="advanced-setting-row" data-language-code="{{ lang.code }}" data-language-name="{{ lang.name }}" data-download-size-mb="{{ lang.download_size_mb }}">
+            <span class="advanced-label">{{ lang.name }}</span>
+            <span class="muted language-status">
+                {% if lang.installed %}Installed{% else %}Not installed ({{ lang.download_size_mb }} MB){% endif %}
+                {% if lang.loaded %} · Loaded{% endif %}
+            </span>
+            <label class="toggle">
+                <input type="checkbox" class="language-enabled-toggle" {% if lang.enabled %}checked{% endif %} {% if not lang.installed %}disabled{% endif %}>
+                <span class="toggle-track"></span>
+                <span class="setting-label">Load on startup</span>
+            </label>
+            {% if lang.installed %}
+            <button class="btn btn-secondary btn-sm language-remove-btn">Remove</button>
+            {% else %}
+            <button class="btn btn-primary btn-sm language-install-btn">Install</button>
+            {% endif %}
+            <span class="muted language-progress" hidden></span>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="muted" id="language-notice" hidden></p>
+    <p class="error-text" id="language-error" hidden></p>
+</section>
 {% endblock %}
 
 {% block scripts %}

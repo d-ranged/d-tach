@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Language Setup{% endblock %}
+
+{% block content %}
+<section class="doc-section">
+    <h2 class="section-heading">Choose your languages</h2>
+    <p class="advanced-hint">
+        d-tach needs at least one language model to detect personal data. Pick
+        the languages you work with — each one is downloaded now, before the
+        main app opens. You can install, remove, or add more later in
+        Settings &gt; Languages.
+    </p>
+
+    <label class="advanced-label">Language of documents to process</label>
+    <p class="muted">
+        This is the language d-tach analyses your documents in — not the
+        application interface, which is English-only.
+    </p>
+
+    <div id="setup-language-list">
+        {% for lang in languages %}
+        <div class="advanced-setting-row" data-language-code="{{ lang.code }}">
+            <label class="toggle">
+                <input
+                    type="checkbox"
+                    class="setup-language-checkbox"
+                    {% if lang.code == "en" %}checked disabled{% endif %}
+                >
+                <span class="toggle-track"></span>
+                <span class="setting-label">{{ lang.name }}</span>
+            </label>
+            <span class="muted">{{ lang.download_size_mb }} MB</span>
+            <span class="muted setup-language-status" hidden></span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p class="muted">English is required and pre-selected.</p>
+    <p class="error-text" id="setup-error" hidden></p>
+
+    <button class="btn btn-primary" id="setup-continue-btn">Download and continue</button>
+
+    <div class="progress-bar-wrap" id="setup-progress-wrap" hidden>
+        <div class="progress-bar" id="setup-progress-bar"></div>
+    </div>
+    <p class="muted" id="setup-progress-text" hidden></p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/language_setup.js') }}"></script>
+{% endblock %}

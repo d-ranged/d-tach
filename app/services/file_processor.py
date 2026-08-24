@@ -74,6 +74,7 @@ class ProcessingSettings:
     output_mode: str = "prefix"  # "prefix" | "subfolder"
     known_values: list[str] = field(default_factory=list)
     pass_through_extensions: list[str] = field(default_factory=list)
+    loading_strategy: str = "eager"  # "eager" | "lazy"
 
 
 @dataclass
@@ -136,6 +137,7 @@ class FileProcessor:
 
         ext = path.suffix.lower()
         try:
+            self._language_detector.ensure_loaded(settings.language, settings.loading_strategy)
             if ext == ".docx":
                 return self._process_docx(path, settings, output_path_override)
             if ext == ".md":
