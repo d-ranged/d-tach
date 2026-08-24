@@ -139,26 +139,30 @@ def build_numeric_id_recognizer(
 
 
 def build_known_value_recognizers(
-    known_values: list[str], language: str
+    known_values: list[dict], language: str
 ) -> list[PatternRecognizer]:
     """Return one high-confidence PatternRecognizer per known value.
 
+    Each known_values entry is a dict {"value": str, "entity_type": str, ...}.
     Each recognizer matches its value case-insensitively as a whole word and
-    assigns entity type PERSON with confidence 0.99. Recognizers are prepended
-    before NER so known values are always caught regardless of model detection.
+    assigns its entry's entity_type (default PERSON) with confidence 0.99.
+    Recognizers are prepended before NER so known values are always caught
+    regardless of model detection.
     """
     recognizers: list[PatternRecognizer] = []
-    for value in known_values:
-        if not value.strip():
+    for entry in known_values:
+        value = str(entry.get("value", "")).strip()
+        if not value:
             continue
+        entity_type = str(entry.get("entity_type") or "PERSON")
         pattern = Pattern(
             name=f"KNOWN_{re.sub(r'[^A-Z0-9]', '_', value.upper())[:30]}",
-            regex=re.escape(value.strip()),
+            regex=re.escape(value),
             score=0.99,
         )
         recognizers.append(
             PatternRecognizer(
-                supported_entity="PERSON",
+                supported_entity=entity_type,
                 patterns=[pattern],
                 supported_language=language,
                 context=None,

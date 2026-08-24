@@ -50,6 +50,13 @@ def create_app() -> Flask:
         file_processor=app.file_processor,
     )
 
+    from app.services.class_list_importer import ClassListImporter
+    from app.services.document_processor import DocumentProcessor
+
+    app.class_list_importer = ClassListImporter(  # type: ignore[attr-defined]
+        document_processor=DocumentProcessor(),
+    )
+
     from app.routes.text_routes import bp as text_bp
     from app.routes.document_routes import bp as document_bp
     from app.routes.browse_routes import bp as browse_bp

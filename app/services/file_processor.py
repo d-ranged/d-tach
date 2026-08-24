@@ -34,6 +34,7 @@ def _build_entity_list(
     numeric_id_enabled: bool = False,
     anonymize_urls: bool = False,
     anonymize_locations: bool = False,
+    known_values: Optional[list[dict]] = None,
 ) -> list[str]:
     """Return the entity list to pass to the Anonymizer.
 
@@ -43,6 +44,12 @@ def _build_entity_list(
     URL is excluded unless opted in — its recognizer overlaps with EMAIL_ADDRESS,
     causing double-detection and garbled output when both fire on the same span.
     NUMERIC_ID is included only when numeric ID detection is enabled.
+
+    known_values entity types are always unioned in regardless of the toggles
+    above — Presidio drops any ad-hoc recognizer result whose entity type is
+    not in this list, so a class-list-imported NUMERIC_ID known value must
+    stay detectable even when the separate digit-count Numeric ID toggle is
+    off (its format may not match that toggle's configured digit count).
     """
     from app.services.anonymizer import ENTITIES
     result = list(ENTITIES) if anonymize_dates else [e for e in ENTITIES if e != "DATE_TIME"]
@@ -52,6 +59,10 @@ def _build_entity_list(
         result.append(NUMERIC_ID_ENTITY)
     if anonymize_urls:
         result.append(URL_ENTITY)
+    for entry in known_values or []:
+        entity_type = entry.get("entity_type") or "PERSON"
+        if entity_type not in result:
+            result.append(entity_type)
     return result
 
 
@@ -72,7 +83,7 @@ class ProcessingSettings:
     excel_generic_enabled: bool = True
     excel_column_names: list[str] = field(default_factory=list)
     output_mode: str = "prefix"  # "prefix" | "subfolder"
-    known_values: list[str] = field(default_factory=list)
+    known_values: list[dict] = field(default_factory=list)
     pass_through_extensions: list[str] = field(default_factory=list)
     loading_strategy: str = "eager"  # "eager" | "lazy"
 
@@ -209,7 +220,7 @@ class FileProcessor:
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations)
+        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
@@ -265,7 +276,7 @@ class FileProcessor:
             )
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations)
+        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
@@ -337,7 +348,7 @@ class FileProcessor:
         ner_entities: list = []
         if settings.excel_generic_enabled and text.strip():
             language = settings.language
-            entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations)
+            entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
             ad_hoc = self._build_ad_hoc_recognizers(settings, language)
             ner_result = self._anonymizer.anonymize(
                 text, language, entities=entities, ad_hoc_recognizers=ad_hoc
@@ -404,7 +415,7 @@ class FileProcessor:
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations)
+        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
 
@@ -522,7 +533,7 @@ class FileProcessor:
         ad_hoc = self._build_ad_hoc_recognizers(settings, language)
         anon_result = self._anonymizer.anonymize(
             readable, language,
-            entities=_build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations),
+            entities=_build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values),
             ad_hoc_recognizers=ad_hoc,
         )
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
