@@ -4,7 +4,14 @@ import pytest
 
 from presidio_analyzer import Pattern, PatternRecognizer
 
-from app.services.anonymizer import Anonymizer, AnonymizationResult, DutchBsnRecognizer, ENTITIES, URL_ENTITY
+from app.services.anonymizer import (
+    Anonymizer,
+    AnonymizationResult,
+    DutchBsnRecognizer,
+    ENTITIES,
+    URL_ENTITY,
+    build_known_value_recognizers,
+)
 from app.services.language_detector import LanguageDetector, LanguageNotLoadedError
 
 
@@ -245,6 +252,63 @@ class TestPlaceholderGuard:
         result = anonymizer.anonymize(text, "en", ad_hoc_recognizers=[force_person])
         assert "Cr-A2T5 HY23" not in result.anonymized_text
         assert any(e.entity_type == "PERSON" for e in result.entities)
+
+
+# ---------------------------------------------------------------------------
+# build_known_value_recognizers (issue #66 — class list import)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildKnownValueRecognizers:
+    def test_defaults_to_person_entity(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [{"value": "Craig Bradley"}], "en"
+        )
+        assert len(recognizers) == 1
+        assert recognizers[0].supported_entities == ["PERSON"]
+
+    def test_uses_entrys_own_entity_type(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [{"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}], "en"
+        )
+        assert recognizers[0].supported_entities == ["NUMERIC_ID"]
+
+    def test_blank_value_is_skipped(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [{"value": "   "}, {"value": "Real Name"}], "en"
+        )
+        assert len(recognizers) == 1
+
+    def test_mixed_entity_types_produce_independent_recognizers(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "Craig Bradley", "entity_type": "PERSON"},
+                {"value": "123456", "entity_type": "NUMERIC_ID"},
+                {"value": "craig@example.com", "entity_type": "EMAIL_ADDRESS"},
+            ],
+            "en",
+        )
+        types = {r.supported_entities[0] for r in recognizers}
+        assert types == {"PERSON", "NUMERIC_ID", "EMAIL_ADDRESS"}
+
+    def test_numeric_id_known_value_detected_even_without_toggle(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        """A class-list NUMERIC_ID known value must anonymize as NUMERIC_ID_N.
+
+        This must work even though the caller passes only NUMERIC_ID in the
+        entities list explicitly here — file_processor._build_entity_list is
+        responsible for unioning it in automatically outside of this test.
+        """
+        recognizers = build_known_value_recognizers(
+            [{"value": "998877", "entity_type": "NUMERIC_ID", "source": "class_list"}], "en"
+        )
+        text = "Student number 998877 was submitted late."
+        result = anonymizer.anonymize(
+            text, "en", entities=ENTITIES + ["NUMERIC_ID"], ad_hoc_recognizers=recognizers
+        )
+        assert "[NUMERIC_ID_1]" in result.anonymized_text
+        assert "998877" not in result.anonymized_text
 
 
 # ---------------------------------------------------------------------------

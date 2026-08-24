@@ -517,3 +517,78 @@ class TestExtractColumnReplacementsWithHashing:
             )
             assert "[STNUM_1]" in replacements.values()
             assert "[STNUM_2]" in replacements.values()
+
+
+# ---------------------------------------------------------------------------
+# Class list header/column reading (issue #66)
+# ---------------------------------------------------------------------------
+
+
+class TestReadXlsxHeaders:
+    def test_returns_string_headers_in_order(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        make_xlsx(xlsx_path, {"A1": "Name", "B1": "Student number", "C1": "Email"})
+        headers = processor.read_xlsx_headers(xlsx_path)
+        assert headers == ["Name", "Student number", "Email"]
+
+    def test_blank_and_non_string_headers_excluded(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        make_xlsx(xlsx_path, {"A1": "Name", "B1": "  ", "C1": 42})
+        headers = processor.read_xlsx_headers(xlsx_path)
+        assert headers == ["Name"]
+
+    def test_only_active_sheet_is_read(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Name"
+        other = wb.create_sheet("Other")
+        other["A1"] = "Ignored"
+        wb.save(str(xlsx_path))
+        headers = processor.read_xlsx_headers(xlsx_path)
+        assert headers == ["Name"]
+
+
+class TestReadXlsxColumns:
+    def test_returns_values_per_header_case_insensitive(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Name"
+        ws["A2"] = "Craig Bradley"
+        ws["A3"] = "Nick Surname"
+        wb.save(str(xlsx_path))
+        columns = processor.read_xlsx_columns(xlsx_path, ["name"])
+        assert columns == {"name": ["Craig Bradley", "Nick Surname"]}
+
+    def test_missing_header_returns_empty_list(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        make_xlsx(xlsx_path, {"A1": "Name", "A2": "Craig"})
+        columns = processor.read_xlsx_columns(xlsx_path, ["Email"])
+        assert columns == {"Email": []}
+
+    def test_blank_and_formula_cells_skipped(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Name"
+        ws["A2"] = "Craig"
+        ws["A3"] = None
+        ws["A4"] = "=A2"
+        ws["A5"] = "  "
+        ws["A6"] = "Nick"
+        wb.save(str(xlsx_path))
+        columns = processor.read_xlsx_columns(xlsx_path, ["Name"])
+        assert columns == {"Name": ["Craig", "Nick"]}
+
+    def test_numeric_cell_values_are_stringified(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        xlsx_path = tmp_path / "roster.xlsx"
+        wb = Workbook()
+        ws = wb.active
+        ws["A1"] = "Student number"
+        ws["A2"] = 1234567
+        wb.save(str(xlsx_path))
+        columns = processor.read_xlsx_columns(xlsx_path, ["Student number"])
+        assert columns == {"Student number": ["1234567"]}

@@ -8,7 +8,7 @@ from docx import Document
 from openpyxl import Workbook, load_workbook
 
 from app.services.anonymizer import Anonymizer
-from app.services.file_processor import FileProcessor, ProcessingSettings
+from app.services.file_processor import FileProcessor, ProcessingSettings, _build_entity_list
 from app.services.language_detector import LanguageDetector
 
 
@@ -593,3 +593,56 @@ class TestLanguageNotLoadedPropagation:
             "Dutch detected but Dutch model is not enabled. "
             "Enable it in Settings > Languages and restart d-tach."
         )
+
+
+class TestBuildEntityListKnownValues:
+    """known_values entity types must be unioned in regardless of other toggles (issue #66).
+
+    Without this, Presidio silently drops any ad-hoc recognizer result whose
+    entity type is not in the requested entity list, so a class-list-imported
+    NUMERIC_ID known value would vanish whenever the separate digit-count
+    Numeric ID toggle happened to be off.
+    """
+
+    def test_numeric_id_known_value_added_even_when_toggle_off(self) -> None:
+        result = _build_entity_list(
+            anonymize_dates=False,
+            numeric_id_enabled=False,
+            known_values=[{"value": "1234567", "entity_type": "NUMERIC_ID", "source": "class_list"}],
+        )
+        assert "NUMERIC_ID" in result
+
+    def test_no_duplicate_when_toggle_already_added_it(self) -> None:
+        result = _build_entity_list(
+            anonymize_dates=False,
+            numeric_id_enabled=True,
+            known_values=[{"value": "1234567", "entity_type": "NUMERIC_ID", "source": "class_list"}],
+        )
+        assert result.count("NUMERIC_ID") == 1
+
+    def test_missing_entity_type_defaults_to_person_and_is_not_duplicated(self) -> None:
+        result = _build_entity_list(
+            anonymize_dates=False,
+            known_values=[{"value": "Craig Bradley"}],
+        )
+        assert result.count("PERSON") == 1
+
+    def test_no_known_values_leaves_list_unaffected(self) -> None:
+        with_none = _build_entity_list(anonymize_dates=False, known_values=None)
+        with_empty = _build_entity_list(anonymize_dates=False, known_values=[])
+        assert with_none == with_empty
+
+    def test_end_to_end_numeric_id_known_value_replaced_without_toggle(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "note.md"
+        source.write_text("Student number 1234567 is enrolled.", encoding="utf-8")
+        settings = ProcessingSettings(
+            numeric_id_enabled=False,
+            known_values=[{"value": "1234567", "entity_type": "NUMERIC_ID", "source": "class_list"}],
+        )
+        result = file_processor.process(source, settings)
+        assert result.status == "anonymized"
+        output_text = result.output_path.read_text(encoding="utf-8")
+        assert "1234567" not in output_text
+        assert "[NUMERIC_ID_1]" in output_text
