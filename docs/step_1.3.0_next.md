@@ -44,7 +44,7 @@ therefore a packaging/installer release that becomes feasible only after v1.3.0 
 
 ---
 
-## Step 1 — System Tray App + Configurable Port
+## <Completed> Step 1 — System Tray App + Configurable Port COMPLETED </completed>
 
 
 
@@ -233,8 +233,8 @@ registration — scope it together rather than as a separate issue.
 
 ## Step 2 — Language Management
 
-**Codeberg issue to create first:**
-`feature: language management — on-demand model download and first-launch selection`
+**Codeberg issue:**
+`d-ranged/d-tach#62`
 
 ### Why this is in v1.3.0 and not later
 
