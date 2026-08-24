@@ -34,6 +34,12 @@ def settings_page():
         max_port=MAX_PORT,
         languages=languages_view,
         loading_strategy=settings.loading_strategy,
+        ai_mode_enabled=settings.ai_mode_enabled,
+        ai_api_token=settings.ai_api_token,
+        ai_session_timeout_minutes=settings.ai_session_timeout_minutes,
+        ai_inline_text_max_chars=settings.ai_inline_text_max_chars,
+        ai_temp_dir=settings.ai_temp_dir,
+        ai_instructions=_build_ai_instructions(settings.port, settings.ai_api_token),
     )
 
 
@@ -303,3 +309,88 @@ def update_loading_strategy():
     settings.save()
 
     return jsonify({"loading_strategy": settings.loading_strategy})
+
+
+@bp.route("/settings/ai-mode", methods=["POST"])
+def set_ai_mode():
+    """Enable or disable AI Mode. Enabling for the first time lazily generates a token.
+
+    Body: {"enabled": true}
+    Returns {"enabled": bool, "token": str}.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    enabled = bool(data.get("enabled", False))
+
+    settings = current_app.user_settings
+    settings.ai_mode_enabled = enabled
+    settings.save()
+    current_app.ai_session_store.set_timeout_minutes(settings.ai_session_timeout_minutes)
+
+    return jsonify({"enabled": settings.ai_mode_enabled, "token": settings.ai_api_token})
+
+
+@bp.route("/settings/ai-mode/regenerate-token", methods=["POST"])
+def regenerate_ai_token():
+    """Generate a new AI Mode API token, invalidating the previous one."""
+    settings = current_app.user_settings
+    token = settings.regenerate_ai_api_token()
+    settings.save()
+    return jsonify({"token": token})
+
+
+@bp.route("/settings/ai-mode/config", methods=["POST"])
+def update_ai_mode_config():
+    """Update AI Mode's session timeout, temp folder, and inline text limit.
+
+    Body: {"session_timeout_minutes": 60, "temp_dir": "C:/temp/d-tach-ai", "inline_text_max_chars": 50000}
+    Each field is optional; only the fields provided are validated and applied.
+    The temp folder is validated writable before being saved.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    settings = current_app.user_settings
+
+    if "session_timeout_minutes" in data:
+        try:
+            settings.ai_session_timeout_minutes = int(data["session_timeout_minutes"])
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+        current_app.ai_session_store.set_timeout_minutes(settings.ai_session_timeout_minutes)
+
+    if "inline_text_max_chars" in data:
+        try:
+            settings.ai_inline_text_max_chars = int(data["inline_text_max_chars"])
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    if "temp_dir" in data:
+        temp_dir = Path(str(data["temp_dir"]).strip())
+        try:
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            probe = temp_dir / ".d-tach-write-test"
+            probe.write_text("", encoding="utf-8")
+            probe.unlink()
+        except OSError as exc:
+            return jsonify({"error": f"Temp folder is not writable: {exc}"}), 400
+        settings.ai_temp_dir = str(temp_dir)
+
+    settings.save()
+    return jsonify({
+        "ai_session_timeout_minutes": settings.ai_session_timeout_minutes,
+        "ai_inline_text_max_chars": settings.ai_inline_text_max_chars,
+        "ai_temp_dir": settings.ai_temp_dir,
+    })
+
+
+def _build_ai_instructions(port: int, token: str) -> str:
+    """Return the baseline AI-agent operating instructions for AI Mode, with port/token filled in."""
+    return (
+        f"AI Mode is enabled on d-tach (http://localhost:{port}). Before pointing me at a "
+        "folder, run Document Mode's 'Rename names only' pass on it once so every path is "
+        "already name-anonymized. From then on: normal directory listing of that folder is "
+        "safe, but never read a file's contents directly — always call POST /ai/extract "
+        "with the file path first and work only with the returned anonymized_text. Refer to "
+        "the subject of each file only by its placeholder/hash, never a name you weren't given. "
+        "When producing final output that needs real values restored, call POST /ai/restore "
+        "with an output_path so the restored text is written straight to disk — never ask "
+        f"for it inline. Include header X-D-Tach-Token: {token} on every request."
+    )
