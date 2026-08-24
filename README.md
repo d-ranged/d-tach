@@ -28,9 +28,12 @@ Paste text or select a document and d-tach replaces personal details — names, 
 
 You choose:
 - **Text mode** — paste text directly and copy the anonymized result.
-- **Document mode** — select a single file or an entire folder; anonymized copies are saved in the same location with an `ANON_` prefix (or `CHECKED_` if no personal data was found).
+- **Document mode** — select a single file or an entire folder; anonymized copies are saved in the same location with an `ANON_` prefix (or `CHECKED_` if no personal data was found). You can also rename file and folder names only, leaving every file's contents untouched.
+- **AI mode** — let an AI assistant work with your documents without ever seeing a real name. See below.
 
 A key reference file can be generated alongside the output so the anonymization can be reversed if needed.
+
+You can also give d-tach a list of names it must always catch — typed in one at a time, or imported in bulk from a class list or roster spreadsheet. Detection is never perfect on its own, and this is how you close the gap for the people you know will appear.
 
 ### What it does not do
 
@@ -75,7 +78,7 @@ On first run, the launcher checks your Python version, installs all dependencies
 
 **Text mode**
 1. Paste your text into the left panel.
-2. Select the language (EN or NL).
+2. Select the language. English and Dutch are available; you choose which to download the first time you run d-tach, and can add or remove languages later in Settings.
 3. Adjust settings as needed — hashing, date anonymization, student number detection.
 4. Click **Anonymize**. The result appears on the right.
 5. Click **Copy** to copy it to the clipboard.
@@ -85,12 +88,67 @@ On first run, the launcher checks your Python version, installs all dependencies
 2. Adjust settings as needed.
 3. Click **Process**. Anonymized copies are saved to the same folder as the originals.
 
+To anonymize only the names of files and folders — leaving what is inside them exactly as it is — tick **Rename names only**. Nothing is copied and no new folder is created; the names change where they stand. This is useful when a download from another system has put real names into the folder names themselves.
+
 **Settings**
 
-The Settings tab lets you change the port d-tach listens on (default `5555`) —
-useful if another application already uses that port, or your institution's
-firewall blocks it. Changing the port requires restarting d-tach (quit and
-reopen from the tray icon) to take effect.
+**Port.** Change the port d-tach listens on (default `5555`) — useful if another
+application already uses that port, or your institution's firewall blocks it.
+Changing the port requires restarting d-tach (quit and reopen from the tray icon)
+to take effect.
+
+**Languages.** Install or remove language models, and choose which ones load when
+d-tach starts. Models are downloaded only when you ask for them, so you are not
+carrying the memory cost of a language you never use. A model you have installed
+but not set to load on startup is loaded the first time a document needs it.
+
+**Known values.** The list of names and numbers d-tach must always anonymize,
+whether or not the language model recognises them. Add them one at a time, or
+click **Import from class list** to point at an `.xlsx` roster: d-tach reads the
+header row, you say which column is a name and which is an ID number, and every
+row is added in one go. If the roster gains rows later, **Re-sync** re-reads the
+same file and adds only what is new. Imported entries can be cleared on their own
+without touching anything you typed in yourself.
+
+**AI mode.** Off by default. See below before turning it on.
+
+### AI mode
+
+Working with an AI assistant on sensitive documents normally means a manual round
+trip: anonymize the file, paste the result into the conversation, get feedback back
+that refers to `PERSON_1`, then match every placeholder to a real name by hand. AI
+mode removes that last step. The assistant talks to d-tach directly, and d-tach
+does the anonymizing and the restoring on your machine.
+
+The trust boundary does not move: **anonymization still happens locally, before any
+text reaches a cloud model.** What changes is who does the copying.
+
+How it works in practice:
+
+1. Put the real files in one folder, exactly as you downloaded them, and run
+   Document mode's **Rename names only** over it once. From then on the folder and
+   file names are safe to look at.
+2. Turn on AI mode in Settings. d-tach generates a token, and shows a block of
+   instructions written for the assistant — copy it into the assistant's system
+   prompt or project instructions.
+3. The assistant lists the folder itself, but never opens a file. For each one it
+   wants to read, it asks d-tach, and gets back the anonymized text only.
+4. When the assistant has produced something that needs the real names back — a
+   report, a marked-up document, a summary — d-tach substitutes them in and writes
+   the file straight to disk. The assistant never receives the restored text; it
+   writes a file it cannot read.
+5. If the assistant spots a real name that slipped through, it tells d-tach, and
+   that name is caught for every file after it.
+
+Points worth knowing before you turn it on:
+
+- AI mode is off until you switch it on, and the local API does not respond at all
+  while it is off.
+- Every request needs the token from Settings. Keep it out of anything you share.
+- Images and scanned PDF pages have no text to extract. d-tach says so rather than
+  passing them through silently — those need your own eyes.
+- The key reference file is yours. It is the only thing that maps an anonymized
+  name back to a real one, and the assistant is never given it.
 
 ### Send clipboard text to d-tach with a keyboard shortcut (optional)
 
@@ -210,7 +268,7 @@ pytest
 ```
 d-tach/
 ├── app/
-│   ├── routes/          # Flask blueprints (text, document, browse, settings, restore)
+│   ├── routes/          # Flask blueprints (text, document, browse, settings, restore, ai)
 │   ├── services/        # Business logic (Anonymizer, FileProcessor, etc.)
 │   ├── static/          # CSS and JavaScript
 │   └── templates/       # HTML templates

@@ -14,15 +14,15 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 |---|---|---|
 | 1 | System tray app + configurable port | ✅ Complete |
 | 2 | Language management — on-demand download, first-launch selection | ✅ Complete (not human-tested) |
-| 3 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
+| 3 | Fix double-anonymization of already-anonymized text | ✅ Complete |
 | 4 | Class list import — bulk-populate known values from a roster file | ✅ Complete |
 | 5 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ✅ Complete |
-| 6 | Acceptance Testing — real-work run: ADM retake grading through AI Mode | ⬜ Not started |
+| 6 | Acceptance Testing — real-work run through the finished feature set | ⬜ Not started |
 
 Acceptance testing moved from position 3 to position 6 (24-8-2026). It is no longer a
-self-administered feature checklist run against test data — it is a real grading round
-done through the finished feature set. That only works once every step is in, so it goes
-last. See Step 6 for the reasoning and the timing risk that comes with it.
+self-administered feature checklist run against test data — it is a real piece of the
+tester's own work, done end to end through the finished feature set. That only works once
+every step is in, so it goes last. See Step 6.
 
 ---
 
@@ -726,7 +726,7 @@ New section in the existing Settings UI:
   operating instructions for any AI agent using this mode, written once and shipped with
   the product. This is a real deliverable, not placeholder wording — it is the entire
   onboarding path for AI Mode, because there is no other way for an agent to learn the
-  rules. Write it use-case-neutral (no grading, no marking, no Craig-specific wording) so
+  rules. Write it use-case-neutral (no wording tied to any one use case or user) so
   it drops straight into a system prompt or a `CLAUDE.md` for any kind of work. Step 6's
   acceptance run pastes this exact block verbatim and appends test-only additions to it —
   if the block has to be edited to make that run work, the block is wrong and gets fixed
@@ -809,112 +809,106 @@ temp dir).
 
 ---
 
-## Step 6 — Acceptance Testing: ADM Retake Grading Run
+## Step 6 — Acceptance Testing
 
 **Codeberg issue to create first:**
-`test: acceptance testing — v1.3.0 end-to-end via ADM retake grading round`
+`test: acceptance testing — v1.3.0 end-to-end on real data`
 
-**Goal:** accept v1.3.0 by doing real work with it. The test vehicle is the ADM retake
-grading round — same rubric and same per-student output as `adm/grading_26` — but run end
-to end through AI Mode against the real, un-anonymized download folder rather than a
-hand-prepared anonymized copy.
+**Goal:** accept v1.3.0 by using it for a real piece of work, end to end, rather than by
+running a checklist against material prepared for the test.
 
-### Why this replaces a self-administered checklist
+### Why a real-work run rather than a self-administered checklist
 
-The original Step 3 was a feature checklist Craig ran against himself, on data he already
-knew, immediately after building the features. That catches crashes and little else. The
-failure modes that actually decide whether v1.3.0 is safe — a name the models miss, a
-placeholder that doesn't round-trip, a roster row imported wrong, a real value reaching a
-cloud model — only surface on data neither the tool nor the assistant has seen before.
+The original Step 3 was a feature checklist the developer ran against himself, on data he
+already knew, immediately after building the features. That catches crashes and little
+else. The failure modes that actually decide whether this release is safe — a name the
+models miss, a placeholder that doesn't round-trip, a roster row imported wrong, a real
+value reaching a cloud model — only surface on data neither the tool nor the assistant has
+seen before.
 
-A real grading round exercises every v1.3.0 feature at once and attaches a hard pass/fail
-signal to the release: **if a real student name reaches the AI assistant's context at any
-point, v1.3.0 does not ship.** The grading has to be done regardless, so the test costs
-nothing beyond setup and keeping a defect log.
+A real-work run exercises every v1.3.0 feature at once and attaches a hard pass/fail signal
+to the release:
 
-It is last on purpose. It tests Steps 1–5 as one system rather than one at a time, which
-means all five have to be merged before it can start.
+> **If a real identifying value reaches the AI assistant's context at any point, v1.3.0
+> does not ship.**
 
-### Timing dependency — read before scheduling
+It is last on purpose. It tests Steps 1–5 as one system rather than one at a time, so all
+five have to be merged before it can start.
 
-🟡 The ADM retake submission deadline was **23 August 2026**, so the submissions already
-exist and grading is the next thing due. Steps 3–5 have to land before the grading round
-starts. If they don't, there are two options, and it is worth choosing deliberately rather
-than arriving at one by drift:
+### Choosing the work
 
-- **Grade the old way** (manual copy into an anonymized folder, per `adm/grading_26`) and
-  move the real-work acceptance test to the next natural grading round. v1.3.0 then ships
-  on the appendix checklist alone, with a correspondingly weaker confidence claim.
-- **Hold the grading** a few days until Steps 3–5 are in. Only viable if the retake results
-  aren't due immediately.
+The run needs a task with four properties. Anything meeting them will do:
 
-Falling back to the checklist is a legitimate outcome, not a failure — it just means the
-release notes shouldn't claim AI Mode has been proven on real data.
+- **A folder of real documents containing real personal data** — not synthetic test files,
+  and not data the assistant has been shown before
+- **A known roster** of the people appearing in that data, exportable as `.xlsx`, so the
+  class list import has something real to bulk-load
+- **A real output** that has to carry real values back out again — something the tester
+  genuinely needs written to disk with names restored, so `/ai/restore` is under real load
+  rather than being demonstrated
+- **A tester who can independently verify** each restored output against the source of
+  truth, because that verification is the actual test
+
+🟡 The specifics of the run — which dataset, which task, which output format, the
+per-subject process — are deliberately **not recorded in this repository.** They describe
+real people's data and the tester's own working process, neither of which belongs in public
+source. They live in a private working document alongside the data. This repo records what
+must be tested and what counts as a pass; it does not record whose data was used to do it.
 
 ### Pre-test setup
 
-1. **Confirm the build.** `git pull main`, `pip install -r requirements.txt`, `pytest` —
-   must pass clean before any real data is touched. Launch via `tray.py`; confirm the tray
-   icon appears and the configured port is the one in use.
-2. **Import the roster.** Export the full ADM retake roster (student number, first name,
-   last name) to `.xlsx`. Settings → Known Values → Import from class list; map the columns
-   (student number → Numeric ID, first/last name → Person name); import. Check the returned
-   added / already-present counts against the roster's row count — a mismatch is a defect to
-   log, not a rounding difference to shrug at. This is the step that turns every student
-   into a guaranteed catch rather than an NER coin-flip.
-3. **Download submissions as-is.** Pull the retake submissions from BrightSpace into one
-   working folder, unmodified. Folder names will contain real names at this point — expected,
+1. **Start the app the way a user would.** Run `launch.bat` (Windows) or `launch.sh`
+   (macOS/Linux) — not a dev entry point, and no manual dependency install. If the launcher
+   can't get a working app onto the screen unaided, that is the first defect of the run and
+   goes in the log before anything else happens. Confirm the tray icon appears and the
+   configured port is the one in use.
+2. **Import the roster.** Export the roster (identifier column, name columns) to `.xlsx`.
+   Settings → Known Values → Import from class list; map the columns (identifier → Numeric
+   ID, names → Person name); import. Check the returned added / already-present counts
+   against the file's row count — a mismatch is a defect to log, not a rounding difference
+   to shrug at. This is the step that turns every subject into a guaranteed catch rather
+   than an NER coin-flip.
+3. **Put the real files in one folder, unmodified.** Downloaded exactly as they come from
+   the source system. Names will appear in file and folder names at this point — expected,
    and exactly what the next step exists for.
 4. **Rename-only pass.** Run Document Mode's "Rename names only" over that folder once, with
    KEYREF export enabled. File contents stay real and untouched on disk; only paths change.
-   The KEYREF is Craig's only route from a renamed folder back to a real student, and is
+   The KEYREF is the tester's only route from a renamed folder back to a real subject, and is
    never shown to the assistant.
-5. **Verify the tree yourself.** List the working folder and read every path. No real name,
-   no student number, no email in any file or folder name. If one survives, add it to known
+5. **Verify the tree by hand.** List the working folder and read every path. No name, no
+   identifier, no email address in any file or folder name. If one survives, add it to known
    values and re-run the pass before going further. This check is the gate, and the assistant
    cannot perform it — it would have to see the names to do so.
 6. **Enable AI Mode.** Settings → AI Mode → enable; generate the token; note the port. Copy
    the AI agent instructions block.
 
-### How the grading round differs from `adm/grading_26`
+### What the run has to exercise
 
-The rubric, the marking guide, the per-student output format and the `BSP_*` folder flow are
-all unchanged — see `PROCESS.md` and `MARKING_GUIDE.md` in that folder. What changes is where
-content comes from and where output goes:
+Whatever the task is, the run only counts as an acceptance test if all of this happens
+naturally in the course of it:
 
-| Old workflow (v1.2.0) | This run (v1.3.0 AI Mode) |
+| Feature | What the run must do with it |
 |---|---|
-| Craig manually copies each student's files into a separate anonymized folder tree | One folder, real files, only the paths renamed — no second tree to keep in sync |
-| Assistant reads files directly out of the anonymized tree | Assistant never opens a file; every read is `POST /ai/extract` on the anonymized path |
-| Assistant writes the markbook in placeholders; Craig re-matches names by hand from KEYREF | Assistant composes in placeholders; `POST /ai/restore` with `output_path` writes the real-named markbook straight to disk |
-| A missed name is noticed once, then forgotten | A missed name is sent to `POST /ai/flag-term` and caught for every student after it |
+| Class list import | Bulk-load the roster; at least one subject anonymized by a known-values entry rather than by NER |
+| Rename-only pass | One real folder tree, renamed in place, contents untouched, no second tree created |
+| `/ai/extract` | Every single file read goes through it — the assistant never opens a file in the tree directly |
+| `/ai/restore` with `output_path` | Every real-valued output written straight to disk; the assistant composes only in placeholders and never receives the restored text |
+| `/ai/flag-term` | Any value the assistant suspects slipped through gets flagged mid-run and caught for every subject after it |
+| Placeholder guard (Step 3) | Text that is already anonymized passes through extraction unchanged, under real load |
+| Tray / port / languages | The app stays up as a background process for the whole run, no restarts except where a settings change legitimately requires one |
 
-Craig watching the screen recording and the dashboard, then dictating findings into chat, is
-unchanged and stays entirely outside d-tach — no video or dashboard content goes through the
-API.
-
-**Validation alternates direction, student by student**, so neither order gets a free pass:
-
-- *Assistant-first:* the assistant produces the rubric table, per-criterion comments and a
-  short list of key items for Craig to check against the real submission. Craig validates.
-- *Craig-first:* Craig dictates his key findings first; the assistant then checks them against
-  the extracted text and states plainly where it agrees, where it disagrees, and where the
-  extracted text can't settle it either way.
-
-The second direction matters more than it looks. It is the only way to catch the assistant
-simply agreeing with whatever it was told — something a one-directional run cannot tell apart
-from genuine agreement.
-
-**Markbook output.** The assistant composes the entire markbook using only placeholders, then
-calls `POST /ai/restore` with `output_path` set to the student's real-named markbook file.
-d-tach substitutes the real values on the way to disk and returns only a status. The assistant
-writes a file it is not able to read — that asymmetry is the property under test, and the
-finished file should read exactly as though it had been written with real names all along.
+**Verification alternates direction, subject by subject.** Assistant-first: it produces its
+output and a short list of items for the tester to check against the real source. Tester-first:
+the tester states their own findings and the assistant checks them against the extracted text,
+saying plainly where it agrees, where it disagrees, and where the extracted text can't settle
+it. The second direction matters more than it looks — it is the only way to catch the
+assistant simply agreeing with whatever it was told, which a one-directional run cannot tell
+apart from genuine agreement.
 
 ### Assistant instructions for the run
 
 The AI Mode settings panel's generic instructions block (Step 5) is the base, and ships with
-the product. For this run only, Craig pastes that block plus the additions below. Keep the two
+the product. For an acceptance run, paste that block plus the additions below. Keep the two
 visibly separate — anything that turns out to be needed permanently belongs in the shipped
 block instead.
 
@@ -924,14 +918,14 @@ block instead.
 > (`[PERSON_1]`, `[NUMERIC_ID_2]`, `[Cr-A2T5 HY23]`, and so on) and the first two lines of the
 > anonymized text verbatim. I want to see what d-tach actually handed you, not a summary of it.
 >
-> If you think a real name, student number, email address or other identifying value has
-> survived into text you were given, do three things and then carry on: quote the exact span,
-> say what makes you think it is real rather than a placeholder, and call `POST /ai/flag-term`
-> with that value. Do not stop the run, do not ask me first, and do not refuse to grade that
-> student — a suspected leak is a finding to record, not a reason to halt. I would rather have
-> a graded student and a flag than neither.
+> If you think a real name, identifier, email address or other identifying value has survived
+> into text you were given, do three things and then carry on: quote the exact span, say what
+> makes you think it is real rather than a placeholder, and call `POST /ai/flag-term` with that
+> value. Do not stop the run, do not ask me first, and do not refuse to process that file — a
+> suspected leak is a finding to record, not a reason to halt. I would rather have a finished
+> item and a flag than neither.
 >
-> Never write a real name into chat, into a file, or into a markbook. If you believe you have
+> Never write a real value into chat, into a file, or into any output. If you believe you have
 > worked out a real value, refer to it by its placeholder and tell me how you came to know it —
 > that inference path is itself a finding.
 >
@@ -940,44 +934,44 @@ block instead.
 > ones I had already told you were false alarms — an over-cautious flag is useful signal about
 > detection tuning, and I want the rate, not just the hits.
 
-Craig's side: confirm or reject each flag as it comes in, and record which it was. A high
+The tester's side: confirm or reject each flag as it comes in, and record which it was. A high
 false-positive rate is a finding about the Step 3 placeholder guard being too loose in the other
 direction. A real leak is a finding about detection, and about whether the roster import in
-setup step 2 actually covered that student.
+setup step 2 actually covered that subject.
 
 ### Defect log
 
-Keep one running list during the round rather than writing it up afterwards — the details that
+Keep one running list during the run rather than writing it up afterwards — the details that
 matter are gone by the end. Per entry: which step or feature, what happened, what was expected,
-and whether it blocked the grading or was worked around. This log is the release evidence.
+and whether it blocked the work or was worked around. This log is the release evidence.
 Anything in it marked as a blocker is a v1.3.0 fix, not a v1.4.0 backlog item.
 
 ### ✅ Complete when
 
-- The full retake round is graded through AI Mode start to finish, without falling back to the
-  manual copy-into-an-anonymized-folder workflow for any student
-- No real student name, number or email reached the assistant's context at any point — confirmed
-  against both the assistant's end-of-run concerns list and Craig's own read of the chat transcript
-- Every markbook written via `/ai/restore` with `output_path` contains the correct real values
-  matched to the right student — spot-checked against BrightSpace for at least three students; any
+- A complete real task is done through AI Mode start to finish, without falling back to the
+  old manual copy-into-an-anonymized-folder workflow for any item
+- No real name, identifier or email address reached the assistant's context at any point —
+  confirmed against both the assistant's end-of-run concerns list and the tester's own read of
+  the chat transcript
+- Every output written via `/ai/restore` with `output_path` contains the correct real values
+  matched to the right subject — independently spot-checked for at least three subjects; any
   mismatch is a blocker, not a note
 - Roster import earned its place: at least one case identified where a known-values entry, not
   NER, is what caught a name
 - Placeholders round-tripped cleanly under real load — no nested brackets anywhere, no literal
-  placeholder text left in any finished markbook (Step 3, proven on real data)
-- Every `/ai/flag-term` call is resolved as either a real miss or a false positive, and the ratio
-  is recorded
-- Tray, port and language management held up across the round: the app stayed running as a
-  background process for the duration, with no restart needed except where a settings change
-  legitimately required one
+  placeholder text left in any finished output (Step 3, proven on real data)
+- Every `/ai/flag-term` call is resolved as either a real miss or a false positive, and the
+  ratio is recorded
+- Tray, port and language management held up for the duration of the run
 - The defect log has no unresolved blockers
-- `pytest` passes on main after any fixes made during the round
+- `pytest` passes on main after any fixes made during the run
 
 ### Appendix — feature checklist
 
-Run this as a quick sweep before the grading round starts, and as the fallback acceptance route
-if the round slips past the release window. It covers per-feature cases the grading round doesn't
-naturally reach.
+Run this as a quick sweep before the real-work run starts, and as the fallback acceptance route
+if no suitable real task is available inside the release window. It covers per-feature cases a
+real run doesn't naturally reach. Falling back to this alone is a legitimate outcome — it just
+means the release notes shouldn't claim AI Mode has been proven on real data.
 
 | Check | Expected |
 |---|---|
