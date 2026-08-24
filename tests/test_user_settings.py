@@ -68,3 +68,72 @@ class TestTrayStartupPromptPersistence:
 
         reloaded = UserSettings(settings_path=settings_path)
         assert reloaded.tray_startup_prompt_shown is True
+
+
+class TestLanguageManagementDefaults:
+    def test_fresh_install_has_setup_incomplete(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.language_setup_complete is False
+
+    def test_fresh_install_enables_only_english(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.enabled_languages == ["en"]
+
+    def test_fresh_install_defaults_to_eager_loading(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.loading_strategy == "eager"
+
+
+class TestLanguageManagementSetters:
+    def test_enabled_languages_round_trip(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.enabled_languages = ["en", "nl"]
+        settings.save()
+
+        reloaded = UserSettings(settings_path=settings_path)
+        assert reloaded.enabled_languages == ["en", "nl"]
+
+    def test_loading_strategy_round_trip(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.loading_strategy = "lazy"
+        settings.save()
+
+        reloaded = UserSettings(settings_path=settings_path)
+        assert reloaded.loading_strategy == "lazy"
+
+    def test_invalid_loading_strategy_raises(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        with pytest.raises(ValueError):
+            settings.loading_strategy = "sometimes"
+
+    def test_language_setup_complete_round_trip(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.language_setup_complete = True
+        settings.save()
+
+        reloaded = UserSettings(settings_path=settings_path)
+        assert reloaded.language_setup_complete is True
+
+
+class TestLanguageManagementMigration:
+    """A settings file written before issue #62 must be grandfathered in.
+
+    Such a file already relied on both en+nl being loaded at startup, so it
+    should not be surprised by the first-launch setup screen or lose Dutch.
+    """
+
+    def test_pre_existing_file_is_grandfathered_as_setup_complete(self, settings_path: Path) -> None:
+        settings_path.write_text('{"port": 6000}', encoding="utf-8")
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.language_setup_complete is True
+
+    def test_pre_existing_file_is_grandfathered_with_both_languages(self, settings_path: Path) -> None:
+        settings_path.write_text('{"port": 6000}', encoding="utf-8")
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.enabled_languages == ["en", "nl"]
+
+    def test_file_with_language_setup_complete_is_not_grandfathered(self, settings_path: Path) -> None:
+        settings_path.write_text('{"language_setup_complete": false}', encoding="utf-8")
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.language_setup_complete is False
+        assert settings.enabled_languages == ["en"]

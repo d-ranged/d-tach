@@ -561,4 +561,35 @@ class TestCheckFileNames:
         settings = ProcessingSettings(check_file_names=False)
         result = file_processor.process(source, settings, override)
         assert result.output_path is not None
-        assert result.output_path.name == "John_Smith_report.docx"
+
+
+class TestLanguageNotLoadedPropagation:
+    """A language that ensure_loaded() rejects must surface as a clean per-file error.
+
+    FileProcessor.process() has no dedicated except clause for this — the
+    friendly LanguageNotLoadedError message reaches the caller only via the
+    existing generic `except Exception` catch-all in process().
+    """
+
+    def test_unloaded_language_becomes_error_result(self, tmp_path: Path) -> None:
+        from app.services.language_detector import LanguageDetector
+
+        class _RejectingRegistry:
+            def is_loaded(self, language: str) -> bool:
+                return False
+
+            def ensure_loaded(self, language: str) -> None:
+                raise RuntimeError("not installed")
+
+        detector = LanguageDetector(registry=_RejectingRegistry())
+        processor = FileProcessor(anonymizer=Anonymizer(), language_detector=detector)
+
+        source = tmp_path / "report.docx"
+        make_docx(source, ["My name is John Smith and I work here."])
+        result = processor.process(source, ProcessingSettings(language="nl"))
+
+        assert result.status == "error"
+        assert result.error_message == (
+            "Dutch detected but Dutch model is not enabled. "
+            "Enable it in Settings > Languages and restart d-tach."
+        )

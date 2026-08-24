@@ -3,7 +3,7 @@
 import pytest
 
 from app.services.anonymizer import Anonymizer, AnonymizationResult, DutchBsnRecognizer, ENTITIES, URL_ENTITY
-from app.services.language_detector import LanguageDetector
+from app.services.language_detector import LanguageDetector, LanguageNotLoadedError
 
 
 # ---------------------------------------------------------------------------
@@ -176,3 +176,97 @@ class TestUrlEntityDefault:
         result = anonymizer.anonymize("Visit www.example.com today.", "en", entities=entities_with_url)
         url_entities = [e for e in result.entities if e.entity_type == "URL"]
         assert len(url_entities) > 0
+
+
+# ---------------------------------------------------------------------------
+# Per-language lazy loading (issue #62)
+# ---------------------------------------------------------------------------
+
+
+class TestAnonymizerLanguageLoading:
+    def test_loads_only_requested_languages(self) -> None:
+        instance = Anonymizer(languages=["en"])
+        assert instance.loaded_languages == ["en"]
+
+    def test_no_languages_starts_empty(self) -> None:
+        instance = Anonymizer(languages=[])
+        assert instance.loaded_languages == []
+
+    def test_ensure_loaded_adds_language(self) -> None:
+        instance = Anonymizer(languages=["en"])
+        instance.ensure_loaded("nl")
+        assert "nl" in instance.loaded_languages
+
+    def test_ensure_loaded_is_idempotent(self) -> None:
+        instance = Anonymizer(languages=["en"])
+        instance.ensure_loaded("en")
+        instance.ensure_loaded("en")
+        assert instance.loaded_languages.count("en") == 1
+
+    def test_anonymize_raises_for_unloaded_language(self) -> None:
+        instance = Anonymizer(languages=["en"])
+        with pytest.raises(ValueError):
+            instance.anonymize("Jan de Vries woont in Amsterdam.", "nl")
+
+    def test_anonymize_works_after_ensure_loaded(self) -> None:
+        instance = Anonymizer(languages=["en"])
+        instance.ensure_loaded("nl")
+        result = instance.anonymize("Jan de Vries woont in Amsterdam.", "nl")
+        assert isinstance(result, AnonymizationResult)
+
+
+# ---------------------------------------------------------------------------
+# LanguageDetector.ensure_loaded (issue #62)
+# ---------------------------------------------------------------------------
+
+
+class _StubRegistry:
+    """Minimal stand-in for LanguageRegistry, tracking loaded state in memory."""
+
+    def __init__(self, loaded: list[str] | None = None, raise_on_ensure: bool = False) -> None:
+        self._loaded = set(loaded or [])
+        self._raise_on_ensure = raise_on_ensure
+
+    def is_loaded(self, language: str) -> bool:
+        return language in self._loaded
+
+    def ensure_loaded(self, language: str) -> None:
+        if self._raise_on_ensure:
+            raise RuntimeError("model not installed")
+        self._loaded.add(language)
+
+
+class TestLanguageDetectorEnsureLoaded:
+    def test_no_registry_is_noop(self) -> None:
+        detector = LanguageDetector()
+        detector.ensure_loaded("nl", "eager")
+
+    def test_eager_mode_passes_when_already_loaded(self) -> None:
+        detector = LanguageDetector(registry=_StubRegistry(loaded=["en", "nl"]))
+        detector.ensure_loaded("nl", "eager")
+
+    def test_eager_mode_raises_when_not_loaded(self) -> None:
+        detector = LanguageDetector(registry=_StubRegistry(loaded=["en"]))
+        with pytest.raises(LanguageNotLoadedError):
+            detector.ensure_loaded("nl", "eager")
+
+    def test_lazy_mode_loads_on_demand(self) -> None:
+        registry = _StubRegistry(loaded=["en"])
+        detector = LanguageDetector(registry=registry)
+        detector.ensure_loaded("nl", "lazy")
+        assert registry.is_loaded("nl")
+
+    def test_lazy_mode_raises_friendly_error_when_load_fails(self) -> None:
+        registry = _StubRegistry(loaded=["en"], raise_on_ensure=True)
+        detector = LanguageDetector(registry=registry)
+        with pytest.raises(LanguageNotLoadedError):
+            detector.ensure_loaded("nl", "lazy")
+
+    def test_error_message_matches_required_wording(self) -> None:
+        detector = LanguageDetector(registry=_StubRegistry(loaded=[]))
+        with pytest.raises(LanguageNotLoadedError) as exc_info:
+            detector.ensure_loaded("nl", "eager")
+        assert str(exc_info.value) == (
+            "Dutch detected but Dutch model is not enabled. "
+            "Enable it in Settings > Languages and restart d-tach."
+        )

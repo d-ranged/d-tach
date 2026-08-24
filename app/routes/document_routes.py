@@ -159,6 +159,7 @@ def process_folder():
             output_mode=output_mode,
             known_values=user_settings.known_values,
             pass_through_extensions=pass_through_extensions,
+            loading_strategy=user_settings.loading_strategy,
         )
 
         all_results = []
@@ -246,6 +247,7 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
 
     from flask import current_app
     known_values = current_app.user_settings.known_values
+    loading_strategy = current_app.user_settings.loading_strategy
 
     return ProcessingSettings(
         hashing_enabled=hashing_enabled,
@@ -261,6 +263,7 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
         excel_generic_enabled=bool(data.get("excel_generic_enabled", True)),
         excel_column_names=excel_column_names,
         known_values=known_values,
+        loading_strategy=loading_strategy,
     ), ""
 
 

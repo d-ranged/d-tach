@@ -11,6 +11,7 @@ from app.services.anonymizer import (
     build_numeric_id_recognizer,
 )
 from app.services.hash_encoder import HashEncoder, UNHASHABLE_ENTITIES
+from app.services.language_detector import LanguageNotLoadedError
 from app.services.pattern_config import PatternConfig
 
 bp = Blueprint("text", __name__)
@@ -111,6 +112,12 @@ def anonymize():
     if numeric_id_enabled:
         config = PatternConfig(digit_count=digit_count)
         ad_hoc.append(build_numeric_id_recognizer(config, language))
+
+    settings = current_app.user_settings
+    try:
+        current_app.language_detector.ensure_loaded(language, settings.loading_strategy)
+    except LanguageNotLoadedError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     result = current_app.anonymizer.anonymize(
         text, language, entities=entities_to_detect, ad_hoc_recognizers=ad_hoc
