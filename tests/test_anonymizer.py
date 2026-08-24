@@ -2,6 +2,8 @@
 
 import pytest
 
+from presidio_analyzer import Pattern, PatternRecognizer
+
 from app.services.anonymizer import Anonymizer, AnonymizationResult, DutchBsnRecognizer, ENTITIES, URL_ENTITY
 from app.services.language_detector import LanguageDetector, LanguageNotLoadedError
 
@@ -176,6 +178,73 @@ class TestUrlEntityDefault:
         result = anonymizer.anonymize("Visit www.example.com today.", "en", entities=entities_with_url)
         url_entities = [e for e in result.entities if e.entity_type == "URL"]
         assert len(url_entities) > 0
+
+
+# ---------------------------------------------------------------------------
+# Placeholder-recognition guard — no double-anonymization (issue #64)
+# ---------------------------------------------------------------------------
+
+
+class TestPlaceholderGuard:
+    def test_second_pass_is_idempotent(self, anonymizer: Anonymizer) -> None:
+        """Running anonymize() on its own output must not change it further."""
+        first = anonymizer.anonymize(
+            "John Smith emailed sarah@example.com about the report.", "en"
+        )
+        second = anonymizer.anonymize(first.anonymized_text, "en")
+        assert second.anonymized_text == first.anonymized_text
+        assert second.entities == []
+
+    def test_sequential_placeholder_not_re_detected(self, anonymizer: Anonymizer) -> None:
+        text = "Please forward this file to [PERSON_1] for review."
+        result = anonymizer.anonymize(text, "en")
+        assert result.anonymized_text == text
+        assert result.entities == []
+
+    def test_hashed_name_placeholder_not_re_tagged_as_person(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        """A hashed placeholder must never be re-tagged as a new PERSON.
+
+        Uses a forced ad-hoc recognizer so the test does not depend on
+        whether the spaCy model happens to mistag this particular string —
+        the guard must hold even when something *would* otherwise match.
+        """
+        force_person = PatternRecognizer(
+            supported_entity="PERSON",
+            patterns=[Pattern("FORCE_PERSON", r"Cr-A2T5 HY23", 0.9)],
+            supported_language="en",
+        )
+        text = "Please review the file for [Cr-A2T5 HY23] and confirm."
+        result = anonymizer.anonymize(text, "en", ad_hoc_recognizers=[force_person])
+        assert result.anonymized_text == text
+        assert result.entities == []
+
+    def test_mixed_real_name_and_existing_placeholder(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        """Mixed input anonymizes only the real name; the existing placeholder stays put."""
+        text = "John Smith reviewed the file submitted by [PERSON_1]."
+        result = anonymizer.anonymize(text, "en")
+        assert "submitted by [PERSON_1]" in result.anonymized_text
+        assert "John Smith" not in result.anonymized_text
+        person_entities = [e for e in result.entities if e.entity_type == "PERSON"]
+        assert len(person_entities) == 1
+        assert person_entities[0].original_text == "John Smith"
+
+    def test_bare_text_matching_placeholder_shape_still_detected(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        """The guard only protects bracket-delimited spans, not bare look-alike text."""
+        force_person = PatternRecognizer(
+            supported_entity="PERSON",
+            patterns=[Pattern("FORCE_PERSON", r"Cr-A2T5 HY23", 0.9)],
+            supported_language="en",
+        )
+        text = "Please review the file for Cr-A2T5 HY23 and confirm."
+        result = anonymizer.anonymize(text, "en", ad_hoc_recognizers=[force_person])
+        assert "Cr-A2T5 HY23" not in result.anonymized_text
+        assert any(e.entity_type == "PERSON" for e in result.entities)
 
 
 # ---------------------------------------------------------------------------

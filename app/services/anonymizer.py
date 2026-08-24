@@ -31,6 +31,34 @@ URL_ENTITY: Final[str] = "URL"
 
 NUMERIC_ID_ENTITY: Final[str] = "NUMERIC_ID"
 
+# Matches d-tach's own placeholder syntax so already-anonymized spans are never
+# re-detected as new PII on a second pass. Covers both placeholder shapes
+# produced by _build_replacements (file_processor.py) / HashEncoder:
+#   Sequential: [PERSON_1], [EMAIL_ADDRESS_3], [NUMERIC_ID_2]
+#   Hashed name: [Cr-A2T5], [Cr-A2T5 HY23]           (HashEncoder.encode_full_name)
+#   Hashed value: [EMAIL_A2B3], [BSN_C4D1], [ID_9F2E]  (HashEncoder.encode_entity)
+_PLACEHOLDER_BODY: Final[str] = (
+    r"(?:[A-Z][A-Z_]*_\d+"                          # sequential
+    r"|[A-Za-z]{1,2}-[A-Z0-9]{4}(?: [A-Z0-9]{4})?"   # hashed name
+    r"|[A-Z]+_[A-Z0-9]{4})"                          # hashed value
+)
+PLACEHOLDER_PATTERN: Final[re.Pattern[str]] = re.compile(rf"\[{_PLACEHOLDER_BODY}\]")
+
+
+def _is_existing_placeholder(text: str, start: int, end: int) -> bool:
+    """True if the detected span at [start:end] is already one of d-tach's placeholders.
+
+    spaCy/Presidio entity spans stop at token boundaries, and square brackets
+    always tokenize separately from the content they enclose — so a detected
+    span such as a PERSON entity never includes its surrounding '[' and ']'.
+    This checks the span together with its immediate neighbouring characters
+    rather than the bare span alone, so a placeholder's inner content (e.g.
+    'Cr-A2T5 HY23') is still recognized as already-anonymized.
+    """
+    if start > 0 and end < len(text) and text[start - 1] == "[" and text[end] == "]":
+        return bool(PLACEHOLDER_PATTERN.fullmatch(text[start - 1:end + 1]))
+    return bool(PLACEHOLDER_PATTERN.fullmatch(text[start:end]))
+
 
 @dataclass
 class DetectedEntity:
@@ -245,6 +273,15 @@ class Anonymizer:
         # keeping them allows them to block legitimate pattern-based detections).
         active_set = set(active_entities)
         results = [r for r in results if r.entity_type in active_set]
+
+        # Drop spans that are already one of d-tach's own placeholders, so
+        # re-running anonymize() on already-anonymized text (or text containing
+        # a mix of real and already-anonymized values) leaves those spans
+        # untouched instead of wrapping or re-tagging them.
+        results = [
+            r for r in results
+            if not _is_existing_placeholder(text, r.start, r.end)
+        ]
 
         results = self._resolve_overlaps(results)
 
