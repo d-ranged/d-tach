@@ -156,6 +156,59 @@ class FolderProcessor:
                     all_replacements.update(r.replacements)
                 self._rename_output_folders(anonymized_root, all_replacements, settings)
 
+    def rename_in_place(
+        self, folder: Path, settings: ProcessingSettings
+    ) -> Generator[tuple[FileResult, int, int], None, None]:
+        """Rename every file and folder name under folder in place, deepest-first.
+
+        No file content is read or rewritten and no anonymized/ output tree is
+        created — only names change. This is the 'Rename names only' action: a
+        prerequisite for pointing AI Mode at a real folder, since without it an
+        agent enumerating the tree would see real names in the paths. Every file
+        is included regardless of extension, since the goal is safe path
+        enumeration rather than content anonymization.
+
+        Usage mirrors process()::
+
+            for result, n, total in processor.rename_in_place(folder, settings):
+                # stream result to UI
+        """
+        files = self._collect_all_files(folder)
+        total = len(files)
+        all_replacements: dict[str, str] = {}
+
+        for index, path in enumerate(files, start=1):
+            try:
+                result = self._file_processor.rename_file(path, settings)
+            except Exception as exc:
+                logger.error("Unexpected error renaming %s: %s", path, exc)
+                result = FileResult(status="error", source_path=path, error_message=str(exc))
+            all_replacements.update(result.replacements)
+            yield result, index, total
+
+        self._rename_directories_in_place(folder, all_replacements, settings)
+
+    @staticmethod
+    def _collect_all_files(folder: Path) -> list[Path]:
+        """Return every file under folder (any extension), sorted deepest-first."""
+        files = [p for p in folder.rglob("*") if p.is_file()]
+        return sorted(files, key=lambda p: (-len(p.parts), str(p)))
+
+    def _rename_directories_in_place(
+        self, folder: Path, all_replacements: dict[str, str], settings: ProcessingSettings,
+    ) -> None:
+        """Rename every subdirectory of folder in place, deepest first. folder itself is untouched."""
+        dirs = sorted(
+            [p for p in folder.rglob("*") if p.is_dir()],
+            key=lambda p: -len(p.parts),
+        )
+        for d in dirs:
+            new_name = self._file_processor.anonymize_filename(
+                d.name, "", all_replacements, settings, settings.language,
+            )
+            if new_name != d.name:
+                d.rename(d.parent / new_name)
+
     def _copy_pass_through(self, path: Path, folder: Path) -> FileResult:
         """Copy a pass-through file verbatim to its mirrored anonymized/ path.
 
