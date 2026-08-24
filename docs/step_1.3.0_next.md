@@ -46,8 +46,10 @@ therefore a packaging/installer release that becomes feasible only after v1.3.0 
 
 ## Step 1 — System Tray App + Configurable Port
 
-**Codeberg issue to create first:**
-`feature: system tray app and configurable port`
+
+
+**Codeberg issue created:**
+`d-ranged/d-tach#60`
 
 ### Port decision
 
