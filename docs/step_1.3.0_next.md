@@ -371,7 +371,7 @@ Currently assumes both EN and NL models are always loaded. After this change:
 
 ---
 
-## Step 3 — Fix Double-Anonymization of Already-Anonymized Text
+## <completed>Step 3 — Fix Double-Anonymization of Already-Anonymized Text</completed>
 
 **Codeberg issue:**
 `d-ranged/d-tach#64`
