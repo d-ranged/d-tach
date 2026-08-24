@@ -643,3 +643,94 @@ class TestPassThroughExtensions:
         output_folder_names = [p.name for p in anonymized_root.iterdir() if p.is_dir()]
         assert "John_Smith" not in output_folder_names
         assert student_dir.exists()  # source untouched
+
+
+# ---------------------------------------------------------------------------
+# rename_in_place ("Rename names only" mode — issue #68)
+# ---------------------------------------------------------------------------
+
+class TestRenameInPlace:
+    def test_renames_file_with_pii_in_stem(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        make_docx(tmp_path / "John_Smith_report.docx", ["Just some notes, nothing sensitive here."])
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        remaining = {p.name for p in tmp_path.iterdir()}
+        assert "John_Smith_report.docx" not in remaining
+        assert len(remaining) == 1
+
+    def test_file_content_is_never_touched(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        original_text = "My name is John Smith and this text should stay exactly as-is."
+        make_docx(tmp_path / "John_Smith.docx", [original_text])
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        renamed = next(tmp_path.iterdir())
+        doc = Document(str(renamed))
+        assert doc.paragraphs[0].text == original_text
+
+    def test_no_anonymized_output_tree_created(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        make_docx(tmp_path / "John_Smith.docx", ["Notes."])
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        assert not (tmp_path / "anonymized").exists()
+
+    def test_clean_filename_left_unchanged(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        make_docx(tmp_path / "quarterly_report.docx", ["Nothing sensitive."])
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        assert (tmp_path / "quarterly_report.docx").exists()
+
+    def test_nested_folder_with_pii_name_is_renamed(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        make_docx(student_dir / "notes.docx", ["Nothing sensitive."])
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        remaining_dirs = [p.name for p in tmp_path.iterdir() if p.is_dir()]
+        assert "John_Smith" not in remaining_dirs
+        assert len(remaining_dirs) == 1
+
+    def test_nested_file_survives_parent_folder_rename(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        student_dir = tmp_path / "John_Smith"
+        student_dir.mkdir()
+        original_text = "Contents that must survive the rename untouched."
+        make_docx(student_dir / "notes.docx", [original_text])
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        renamed_dir = next(p for p in tmp_path.iterdir() if p.is_dir())
+        nested_files = list(renamed_dir.iterdir())
+        assert len(nested_files) == 1
+        doc = Document(str(nested_files[0]))
+        assert doc.paragraphs[0].text == original_text
+
+    def test_any_extension_is_included_not_just_supported_types(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        (tmp_path / "John_Smith.sql").write_text("SELECT 1;")
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+
+        remaining = {p.name for p in tmp_path.iterdir()}
+        assert "John_Smith.sql" not in remaining
+
+    def test_empty_folder_produces_no_results(
+        self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
+    ) -> None:
+        assert list(folder_processor.rename_in_place(tmp_path, settings)) == []
