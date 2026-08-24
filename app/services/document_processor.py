@@ -379,17 +379,24 @@ class DocumentProcessor:
     def save_md_with_replacements(
         self, text: str, dest_path: Path, replacements: dict[str, str]
     ) -> None:
-        """Apply replacements to markdown text and save to dest_path.
+        """Apply replacements to markdown text and save to dest_path."""
+        dest_path.write_text(self.apply_replacements(text, replacements), encoding="utf-8")
+
+    @staticmethod
+    def apply_replacements(text: str, replacements: dict[str, str]) -> str:
+        """Return text with every replacement applied.
 
         Replacements are applied longest-first to avoid replacing a substring
         before the full match (e.g. replacing 'Craig' before 'Craig Bradley').
+        Used both to write anonymized plain-text output and, without writing
+        to disk, to build AI Mode's in-flight anonymized text.
         """
         sorted_replacements = sorted(
             replacements.items(), key=lambda x: len(x[0]), reverse=True
         )
         for original, placeholder in sorted_replacements:
             text = text.replace(original, placeholder)
-        dest_path.write_text(text, encoding="utf-8")
+        return text
 
     def save_md_copy(self, text: str, dest_path: Path) -> None:
         """Save an unmodified copy of the markdown text to dest_path."""
@@ -496,6 +503,21 @@ class DocumentProcessor:
         return len(found)
 
     @staticmethod
+    def restore_string(text: str, replacements: dict[str, str]) -> tuple[str, int]:
+        """Replace all placeholders with originals in text.
+
+        Returns (restored_text, count) where count is the number of unique
+        placeholders found and replaced at least once.
+        """
+        sorted_rep = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
+        found: set[str] = set()
+        for placeholder, original in sorted_rep:
+            if placeholder in text:
+                text = text.replace(placeholder, original)
+                found.add(placeholder)
+        return text, len(found)
+
+    @staticmethod
     def restore_text(
         input_path: Path, output_path: Path, replacements: dict[str, str]
     ) -> int:
@@ -504,11 +526,6 @@ class DocumentProcessor:
         Returns the number of unique placeholders found and replaced.
         """
         text = input_path.read_text(encoding="utf-8")
-        sorted_rep = sorted(replacements.items(), key=lambda x: len(x[0]), reverse=True)
-        found: set[str] = set()
-        for placeholder, original in sorted_rep:
-            if placeholder in text:
-                text = text.replace(placeholder, original)
-                found.add(placeholder)
-        output_path.write_text(text, encoding="utf-8")
-        return len(found)
+        restored, count = DocumentProcessor.restore_string(text, replacements)
+        output_path.write_text(restored, encoding="utf-8")
+        return count

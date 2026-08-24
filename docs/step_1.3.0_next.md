@@ -16,7 +16,7 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 2 | Language management — on-demand download, first-launch selection | ✅ Complete (not human-tested) |
 | 3 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
 | 4 | Class list import — bulk-populate known values from a roster file | ✅ Complete |
-| 5 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ⬜ Not started |
+| 5 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ✅ Complete |
 | 6 | Acceptance Testing — real-work run: ADM retake grading through AI Mode | ⬜ Not started |
 
 Acceptance testing moved from position 3 to position 6 (24-8-2026). It is no longer a
@@ -553,10 +553,10 @@ Excel dependency.
 
 ---
 
-## Step 5 — AI Mode
+## <completed>Step 5 — AI Mode</completed>
 
-**Codeberg issue to create first:**
-`feature: AI mode — local API for AI-assisted anonymize/restore`
+**Codeberg issue:**
+`d-ranged/d-tach#68`
 
 ### Background
 

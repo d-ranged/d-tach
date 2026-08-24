@@ -66,6 +66,47 @@ def _build_entity_list(
     return result
 
 
+def compose_replacements(
+    entities: list[DetectedEntity],
+    encoder: Optional[HashEncoder],
+) -> dict[str, str]:
+    """Return a mapping of original text → replacement placeholder.
+
+    When hashing is enabled all detected PII entities are hash-encoded:
+    - PERSON: name rules (first 2 chars preserved + 4-char hash)
+    - All others except DATE_TIME and NRP: full-value 4-char HMAC hash
+      with a shortened label: [EMAIL_A2B3], [PHONE_C4D1], [BSN_E9F2] etc.
+    - DATE_TIME and NRP: always sequential regardless of hashing setting
+
+    When hashing is disabled all entities use the sequential placeholder
+    produced by the Anonymizer: [PERSON_1], [EMAIL_ADDRESS_1] etc.
+
+    Shared by every FileProcessor detection path (content and filenames)
+    and by AI Mode's /ai/extract, so exactly one implementation exists.
+    """
+    replacements: dict[str, str] = {}
+    for entity in entities:
+        if entity.original_text in replacements:
+            continue
+        if len(entity.original_text) < MIN_ENTITY_TEXT_LENGTH:
+            logger.warning(
+                "Skipping entity %r (type=%s, length=%d) — likely a PDF "
+                "ligature extraction artefact.",
+                entity.original_text,
+                entity.entity_type,
+                len(entity.original_text),
+            )
+            continue
+        if encoder and entity.entity_type == "PERSON":
+            replacements[entity.original_text] = f"[{encoder.encode_full_name(entity.original_text)}]"
+        elif encoder:
+            hashed = encoder.encode_entity(entity.entity_type, entity.original_text)
+            replacements[entity.original_text] = hashed if hashed else entity.placeholder
+        else:
+            replacements[entity.original_text] = entity.placeholder
+    return replacements
+
+
 @dataclass
 class ProcessingSettings:
     """Configuration for a single file processing run."""
@@ -86,6 +127,31 @@ class ProcessingSettings:
     known_values: list[dict] = field(default_factory=list)
     pass_through_extensions: list[str] = field(default_factory=list)
     loading_strategy: str = "eager"  # "eager" | "lazy"
+
+
+@dataclass
+class DetectionResult:
+    """Entities detected in a piece of text and their replacement placeholders."""
+
+    entities: list[DetectedEntity]
+    replacements: dict[str, str]
+
+
+@dataclass
+class ExtractResult:
+    """The outcome of extracting and anonymizing a file's text without writing output.
+
+    Used by AI Mode's /ai/extract — mirrors FileResult but carries anonymized
+    text directly instead of an output file path, since no file is written.
+    """
+
+    status: str  # "extracted" | "clean" | "unreadable" | "error" | "skipped"
+    source_path: Path
+    anonymized_text: str = ""
+    entities: list[DetectedEntity] = field(default_factory=list)
+    replacements: dict[str, str] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    error_message: Optional[str] = None
 
 
 @dataclass
@@ -220,33 +286,28 @@ class FileProcessor:
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
-        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
-        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
+        detection = self._detect(text, settings, language)
 
-        if not result.entities:
+        if not detection.entities:
             output_path = self._output_path(path, "CHECKED_", {}, settings, language, output_path_override)
             self._doc_processor.save_docx_copy(doc, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
-        # Build replacement map: original text → placeholder (with optional hashing)
-        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
-        replacements = self._build_replacements(result.entities, encoder)
-
+        replacements = detection.replacements
         output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
         self._doc_processor.save_docx_with_replacements(doc, output_path, replacements)
 
         keyref_path: Optional[Path] = None
         if settings.key_reference_enabled:
             keyref_path = path.parent / f"KEYREF_{path.stem}.txt"
-            self._write_keyref(keyref_path, path, replacements, result.entities)
+            self._write_keyref(keyref_path, path, replacements, detection.entities)
 
         return FileResult(
             status="anonymized",
             source_path=path,
             output_path=output_path,
             keyref_path=keyref_path,
-            entities_found=len({e.original_text for e in result.entities}),
+            entities_found=len({e.original_text for e in detection.entities}),
             replacements=replacements,
         )
 
@@ -276,11 +337,9 @@ class FileProcessor:
             )
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
-        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
-        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
+        detection = self._detect(text, settings, language)
 
-        if not result.entities:
+        if not detection.entities:
             doc.close()
             output_path = self._output_path(path, "CHECKED_", {}, settings, language, output_path_override)
             clean_doc = fitz.open(str(path))
@@ -288,9 +347,7 @@ class FileProcessor:
             clean_doc.close()
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
-        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
-        replacements = self._build_replacements(result.entities, encoder)
-
+        replacements = detection.replacements
         output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
         self._doc_processor.save_pdf_with_replacements(doc, output_path, replacements)
         doc.close()
@@ -298,14 +355,14 @@ class FileProcessor:
         keyref_path: Optional[Path] = None
         if settings.key_reference_enabled:
             keyref_path = path.parent / f"KEYREF_{path.stem}.txt"
-            self._write_keyref(keyref_path, path, replacements, result.entities)
+            self._write_keyref(keyref_path, path, replacements, detection.entities)
 
         return FileResult(
             status="anonymized",
             source_path=path,
             output_path=output_path,
             keyref_path=keyref_path,
-            entities_found=len({e.original_text for e in result.entities}),
+            entities_found=len({e.original_text for e in detection.entities}),
             replacements=replacements,
         )
 
@@ -347,15 +404,10 @@ class FileProcessor:
         substring_replacements: dict[str, str] = {}
         ner_entities: list = []
         if settings.excel_generic_enabled and text.strip():
-            language = settings.language
-            entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
-            ad_hoc = self._build_ad_hoc_recognizers(settings, language)
-            ner_result = self._anonymizer.anonymize(
-                text, language, entities=entities, ad_hoc_recognizers=ad_hoc
-            )
-            if ner_result.entities:
-                substring_replacements = self._build_replacements(ner_result.entities, encoder)
-                ner_entities = ner_result.entities
+            detection = self._detect(text, settings, settings.language)
+            if detection.entities:
+                substring_replacements = detection.replacements
+                ner_entities = detection.entities
 
         # --- Nothing to replace → clean ---
         if not exact_replacements and not substring_replacements:
@@ -415,34 +467,49 @@ class FileProcessor:
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
         language = settings.language
-        entities = _build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values)
-        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
-        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
+        detection = self._detect(text, settings, language)
 
-        if not result.entities:
+        if not detection.entities:
             output_path = self._output_path(path, "CHECKED_", {}, settings, language, output_path_override)
             self._doc_processor.save_md_copy(text, output_path)
             return FileResult(status="clean", source_path=path, output_path=output_path)
 
-        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
-        replacements = self._build_replacements(result.entities, encoder)
-
+        replacements = detection.replacements
         output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
         self._doc_processor.save_md_with_replacements(text, output_path, replacements)
 
         keyref_path: Optional[Path] = None
         if settings.key_reference_enabled:
             keyref_path = path.parent / f"KEYREF_{path.stem}.txt"
-            self._write_keyref(keyref_path, path, replacements, result.entities)
+            self._write_keyref(keyref_path, path, replacements, detection.entities)
 
         return FileResult(
             status="anonymized",
             source_path=path,
             output_path=output_path,
             keyref_path=keyref_path,
-            entities_found=len({e.original_text for e in result.entities}),
+            entities_found=len({e.original_text for e in detection.entities}),
             replacements=replacements,
         )
+
+    def _detect(
+        self, text: str, settings: ProcessingSettings, language: str
+    ) -> DetectionResult:
+        """Run entity detection and build the replacement map for already-extracted text.
+
+        The shared "detect + build replacements" step behind every _process_*
+        method and AI Mode's extract_anonymized_text, so detection logic exists
+        in exactly one place.
+        """
+        entities = _build_entity_list(
+            settings.anonymize_dates, settings.numeric_id_enabled,
+            settings.anonymize_urls, settings.anonymize_locations, settings.known_values,
+        )
+        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
+        result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
+        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
+        replacements = compose_replacements(result.entities, encoder)
+        return DetectionResult(entities=result.entities, replacements=replacements)
 
     def _build_ad_hoc_recognizers(
         self, settings: ProcessingSettings, language: str
@@ -461,44 +528,6 @@ class FileProcessor:
             recognizers.append(build_numeric_id_recognizer(config, language))
         return recognizers
 
-    def _build_replacements(
-        self,
-        entities: list[DetectedEntity],
-        encoder: Optional[HashEncoder],
-    ) -> dict[str, str]:
-        """Return a mapping of original text → replacement placeholder.
-
-        When hashing is enabled all detected PII entities are hash-encoded:
-        - PERSON: name rules (first 2 chars preserved + 4-char hash)
-        - All others except DATE_TIME and NRP: full-value 4-char HMAC hash
-          with a shortened label: [EMAIL_A2B3], [PHONE_C4D1], [BSN_E9F2] etc.
-        - DATE_TIME and NRP: always sequential regardless of hashing setting
-
-        When hashing is disabled all entities use the sequential placeholder
-        produced by the Anonymizer: [PERSON_1], [EMAIL_ADDRESS_1] etc.
-        """
-        replacements: dict[str, str] = {}
-        for entity in entities:
-            if entity.original_text in replacements:
-                continue
-            if len(entity.original_text) < MIN_ENTITY_TEXT_LENGTH:
-                logger.warning(
-                    "Skipping entity %r (type=%s, length=%d) — likely a PDF "
-                    "ligature extraction artefact.",
-                    entity.original_text,
-                    entity.entity_type,
-                    len(entity.original_text),
-                )
-                continue
-            if encoder and entity.entity_type == "PERSON":
-                replacements[entity.original_text] = f"[{encoder.encode_full_name(entity.original_text)}]"
-            elif encoder:
-                hashed = encoder.encode_entity(entity.entity_type, entity.original_text)
-                replacements[entity.original_text] = hashed if hashed else entity.placeholder
-            else:
-                replacements[entity.original_text] = entity.placeholder
-        return replacements
-
     def anonymize_filename(
         self,
         stem: str,
@@ -512,12 +541,27 @@ class FileProcessor:
         First applies content_replacements (names found in the document body)
         using case-insensitive matching, then runs the anonymizer on whatever
         remains to catch any additional entities.
+        """
+        new_stem, _detected = self._anonymize_stem(stem, content_replacements, settings, language)
+        return new_stem + suffix
 
-        Case-insensitive matching is necessary because filenames often use
-        different capitalisation than the text in the document body (e.g.
-        'nick_surname' in a filename vs 'Nick Surname' detected in the text).
-        The replacement placeholder is always written in its original form
-        (uppercase entity type + counter, or hash-encoded for PERSON).
+    def _anonymize_stem(
+        self,
+        stem: str,
+        content_replacements: dict[str, str],
+        settings: ProcessingSettings,
+        language: str,
+    ) -> tuple[str, dict[str, str]]:
+        """Return (anonymized stem, replacements newly detected directly in the stem).
+
+        Case-insensitive matching against content_replacements is necessary
+        because filenames often use different capitalisation than the text in
+        the document body (e.g. 'nick_surname' in a filename vs 'Nick Surname'
+        detected in the text). The replacement placeholder is always written in
+        its original form (uppercase entity type + counter, or hash-encoded
+        for PERSON). The detected-in-stem replacements are returned separately
+        so callers (e.g. rename-only mode, which has no document content to
+        scan) can build a KEYREF from filename-only detections.
         """
         # Treat underscores and hyphens as spaces for analysis
         readable = re.sub(r"[_\-]+", " ", stem)
@@ -530,14 +574,8 @@ class FileProcessor:
             readable = re.sub(re.escape(original), placeholder, readable, flags=re.IGNORECASE)
 
         # Run anonymizer on whatever remains for any additional entities
-        ad_hoc = self._build_ad_hoc_recognizers(settings, language)
-        anon_result = self._anonymizer.anonymize(
-            readable, language,
-            entities=_build_entity_list(settings.anonymize_dates, settings.numeric_id_enabled, settings.anonymize_urls, settings.anonymize_locations, settings.known_values),
-            ad_hoc_recognizers=ad_hoc,
-        )
-        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
-        remaining = self._build_replacements(anon_result.entities, encoder)
+        detection = self._detect(readable, settings, language)
+        remaining = detection.replacements
 
         for original, placeholder in sorted(
             remaining.items(), key=lambda x: len(x[0]), reverse=True
@@ -545,8 +583,137 @@ class FileProcessor:
             readable = readable.replace(original, placeholder)
 
         # Restore separator style (spaces → underscores in the new stem)
-        new_stem = readable.replace(" ", "_")
-        return new_stem + suffix
+        return readable.replace(" ", "_"), remaining
+
+    def rename_file(self, path: Path, settings: ProcessingSettings) -> FileResult:
+        """Rename a single file's name in place using the same detection as content mode.
+
+        File content is never opened or modified — only path.name changes.
+        Used by the 'Rename names only' action, which anonymizes every path in
+        a tree before an AI agent enumerates it (see FolderProcessor.rename_in_place).
+        """
+        self._language_detector.ensure_loaded(settings.language, settings.loading_strategy)
+        new_stem, replacements = self._anonymize_stem(path.stem, {}, settings, settings.language)
+        new_name = new_stem + path.suffix
+        if new_name == path.name:
+            return FileResult(status="clean", source_path=path, output_path=path)
+
+        new_path = path.parent / new_name
+        try:
+            path.rename(new_path)
+        except OSError as exc:
+            logger.error("Failed to rename %s: %s", path, exc)
+            return FileResult(status="error", source_path=path, error_message=str(exc))
+
+        return FileResult(
+            status="anonymized" if replacements else "clean",
+            source_path=path,
+            output_path=new_path,
+            entities_found=len(replacements),
+            replacements=replacements,
+        )
+
+    # ------------------------------------------------------------------
+    # AI Mode extraction (text out, nothing written to disk)
+    # ------------------------------------------------------------------
+
+    def extract_anonymized_text(self, path: Path, settings: ProcessingSettings) -> ExtractResult:
+        """Extract a file's text and return it anonymized, without writing anything to disk.
+
+        Used by AI Mode's /ai/extract — reuses the same load/detect logic as
+        Document Mode but stops short of writing an output file. The source
+        file on disk is never modified.
+        """
+        ext = path.suffix.lower()
+        if ext not in SUPPORTED_EXTENSIONS:
+            return ExtractResult(
+                status="skipped", source_path=path,
+                error_message=f"Unsupported file type: {path.suffix}",
+            )
+
+        try:
+            self._language_detector.ensure_loaded(settings.language, settings.loading_strategy)
+            if ext == ".xlsx":
+                return self._extract_xlsx(path, settings)
+            if ext == ".pdf":
+                return self._extract_pdf(path, settings)
+            text = self._doc_processor.load_docx(path)[0] if ext == ".docx" else self._doc_processor.load_md(path)
+            return self._extract_plain_text(path, text, settings)
+        except Exception as exc:
+            logger.error("Failed to extract %s: %s", path, exc)
+            return ExtractResult(status="error", source_path=path, error_message=str(exc))
+
+    def _extract_plain_text(self, path: Path, text: str, settings: ProcessingSettings) -> ExtractResult:
+        """Shared extraction path for DOCX and Markdown, which reduce to a single text blob."""
+        if not text.strip():
+            return ExtractResult(status="clean", source_path=path, anonymized_text=text)
+
+        detection = self._detect(text, settings, settings.language)
+        if not detection.entities:
+            return ExtractResult(status="clean", source_path=path, anonymized_text=text)
+
+        anonymized_text = self._doc_processor.apply_replacements(text, detection.replacements)
+        return ExtractResult(
+            status="extracted", source_path=path, anonymized_text=anonymized_text,
+            entities=detection.entities, replacements=detection.replacements,
+        )
+
+    def _extract_pdf(self, path: Path, settings: ProcessingSettings) -> ExtractResult:
+        """Extract PDF text, flagging any page with no extractable text layer.
+
+        pymupdf does not OCR — an image-only page yields empty text and is
+        reported as a warning rather than silently passed through unanonymized.
+        """
+        text, doc = self._doc_processor.load_pdf(path)
+        warnings: list[str] = []
+        for index, page in enumerate(doc, start=1):
+            if not page.get_text().strip():
+                warnings.append(f"Page {index} has no extractable text (may be image-only) — review manually.")
+        doc.close()
+
+        if not text.strip():
+            return ExtractResult(
+                status="unreadable", source_path=path, warnings=warnings,
+                error_message="PDF could not be read — may be image-based or have non-standard encoding.",
+            )
+
+        detection = self._detect(text, settings, settings.language)
+        if not detection.entities:
+            return ExtractResult(status="clean", source_path=path, anonymized_text=text, warnings=warnings)
+
+        anonymized_text = self._doc_processor.apply_replacements(text, detection.replacements)
+        return ExtractResult(
+            status="extracted", source_path=path, anonymized_text=anonymized_text,
+            entities=detection.entities, replacements=detection.replacements, warnings=warnings,
+        )
+
+    def _extract_xlsx(self, path: Path, settings: ProcessingSettings) -> ExtractResult:
+        """Extract Excel text (row-concatenated string cells) with the same two-pass logic as Document Mode."""
+        text, wb = self._doc_processor.load_xlsx(path)
+        encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
+
+        exact_replacements: dict[str, str] = {}
+        if settings.excel_column_names:
+            exact_replacements, _missing = self._doc_processor.extract_column_replacements(
+                wb, settings.excel_column_names, encoder=encoder
+            )
+
+        entities: list[DetectedEntity] = []
+        substring_replacements: dict[str, str] = {}
+        if settings.excel_generic_enabled and text.strip():
+            detection = self._detect(text, settings, settings.language)
+            substring_replacements = detection.replacements
+            entities = detection.entities
+
+        combined = {**substring_replacements, **exact_replacements}
+        if not combined:
+            return ExtractResult(status="clean", source_path=path, anonymized_text=text)
+
+        anonymized_text = self._doc_processor.apply_replacements(text, combined)
+        return ExtractResult(
+            status="extracted", source_path=path, anonymized_text=anonymized_text,
+            entities=entities, replacements=combined,
+        )
 
     # ------------------------------------------------------------------
     # Restore

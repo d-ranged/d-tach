@@ -33,6 +33,8 @@ const browseFolderBtn   = document.getElementById("browse-folder-btn");
 const browseFolderNote  = document.getElementById("browse-folder-note");
 const processFolderBtn  = document.getElementById("process-folder-btn");
 const cancelBtn         = document.getElementById("cancel-btn");
+const renameOnlyToggle      = document.getElementById("rename-only-toggle");
+const folderContentOptions  = document.getElementById("folder-content-options");
 
 // ---- Tabs ----
 const tabFile           = document.getElementById("tab-file");
@@ -221,6 +223,11 @@ processFolderBtn.addEventListener("click", runProcessFolder);
 folderPathInput.addEventListener("keydown", e => { if (e.key === "Enter") runProcessFolder(); });
 cancelBtn.addEventListener("click", cancelFolderProcessing);
 
+renameOnlyToggle.addEventListener("change", () => {
+    folderContentOptions.hidden = renameOnlyToggle.checked;
+    processFolderBtn.textContent = renameOnlyToggle.checked ? "Rename Names Only" : "Process Folder";
+});
+
 function runProcessFolder() {
     const folderPath = folderPathInput.value.trim();
     if (!folderPath) { setProgress("Enter a folder path to process."); return; }
@@ -239,25 +246,33 @@ function runProcessFolder() {
     processFolderBtn.disabled = true;
     cancelBtn.hidden = false;
 
-    const params = new URLSearchParams({
+    const renameOnly = renameOnlyToggle.checked;
+    const commonParams = {
         folder_path: folderPath,
         language: selectedLanguage,
         hashing_enabled: hashingToggle.checked,
         secret: secretInput.value,
         key_reference_enabled: keyrefToggle.checked,
-        check_file_names: namesToggle.checked,
         anonymize_dates: datesToggle.checked,
         anonymize_locations: locationsToggle.checked,
         anonymize_urls: urlsToggle.checked,
         numeric_id_enabled: numericIdToggle.checked,
         digit_count: parseInt(digitCountInput.value, 10) || 7,
-        excel_generic_enabled: excelNerToggle.checked,
-        excel_column_names: excelColumnsInput.value.trim(),
-        output_mode: getOutputMode(),
-        pass_through_extensions: passThroughInput.value.trim(),
-    });
+    };
 
-    activeEventSource = new EventSource(`/document/process-folder?${params}`);
+    const endpoint = renameOnly ? "/document/rename-folder" : "/document/process-folder";
+    const params = renameOnly
+        ? new URLSearchParams(commonParams)
+        : new URLSearchParams({
+            ...commonParams,
+            check_file_names: namesToggle.checked,
+            excel_generic_enabled: excelNerToggle.checked,
+            excel_column_names: excelColumnsInput.value.trim(),
+            output_mode: getOutputMode(),
+            pass_through_extensions: passThroughInput.value.trim(),
+        });
+
+    activeEventSource = new EventSource(`${endpoint}?${params}`);
 
     activeEventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);

@@ -221,6 +221,115 @@ def process_folder():
                     headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
 
+@bp.route("/document/rename-folder", methods=["GET"])
+def rename_folder():
+    """Rename every file and folder name under a folder in place, streaming progress via SSE.
+
+    No file content is read or rewritten — only names change, and no
+    anonymized/ output tree is created. This is the prerequisite step for
+    pointing AI Mode at a real folder: it makes path enumeration safe before
+    any content is read.
+
+    Query parameters (narrower than process-folder — no excel/output_mode/
+    pass_through settings apply to a names-only pass):
+        folder_path, language, hashing_enabled, secret,
+        key_reference_enabled, anonymize_dates, anonymize_locations,
+        anonymize_urls, numeric_id_enabled, digit_count
+
+    Streams the same event shapes as process-folder ("progress", "summary",
+    "error").
+    """
+    args = request.args
+
+    folder_path_str = args.get("folder_path", "").strip()
+    hashing_enabled = args.get("hashing_enabled", "false").lower() == "true"
+    secret = args.get("secret", "")
+    key_reference_enabled = args.get("key_reference_enabled", "false").lower() == "true"
+    anonymize_dates = args.get("anonymize_dates", "false").lower() == "true"
+    anonymize_locations = args.get("anonymize_locations", "false").lower() == "true"
+    anonymize_urls = args.get("anonymize_urls", "false").lower() == "true"
+    numeric_id_enabled = args.get("numeric_id_enabled", "false").lower() == "true"
+    digit_count_raw = args.get("digit_count", "7")
+    try:
+        digit_count = int(digit_count_raw)
+    except (ValueError, TypeError):
+        digit_count = 7
+    language = args.get("language", "en")
+    if language not in _SUPPORTED_LANGUAGES:
+        language = "en"
+
+    # Capture app-level objects now, while the application context is active —
+    # see the identical comment on process-folder above for why.
+    folder_processor = current_app.folder_processor
+    user_settings = current_app.user_settings
+
+    def stream():
+        if not folder_path_str:
+            yield _sse({"type": "error", "message": "No folder path provided."})
+            return
+
+        if hashing_enabled and not secret.strip():
+            yield _sse({"type": "error", "message": "Enter a secret phrase to use hashing."})
+            return
+
+        folder = Path(folder_path_str)
+        if not folder.exists():
+            yield _sse({"type": "error", "message": f"Folder not found: {folder_path_str}"})
+            return
+        if not folder.is_dir():
+            yield _sse({"type": "error", "message": f"Path is not a folder: {folder_path_str}"})
+            return
+
+        processing_settings = ProcessingSettings(
+            hashing_enabled=hashing_enabled,
+            secret=secret,
+            key_reference_enabled=key_reference_enabled,
+            language=language,
+            anonymize_dates=anonymize_dates,
+            anonymize_locations=anonymize_locations,
+            anonymize_urls=anonymize_urls,
+            numeric_id_enabled=numeric_id_enabled,
+            digit_count=digit_count,
+            known_values=user_settings.known_values,
+            loading_strategy=user_settings.loading_strategy,
+        )
+
+        all_results = []
+        for result, n, total in folder_processor.rename_in_place(folder, processing_settings):
+            all_results.append(result)
+            yield _sse({
+                "type": "progress",
+                "n": n,
+                "total": total,
+                "status": result.status,
+                "file_name": result.source_path.name,
+                "entities_found": result.entities_found,
+                "error_message": result.error_message,
+                "warnings": result.warnings,
+            })
+
+        summary = folder_processor.summarise(
+            all_results,
+            folder=folder,
+            key_reference_enabled=key_reference_enabled,
+            output_mode="prefix",
+        )
+        yield _sse({
+            "type": "summary",
+            "total": summary.total,
+            "anonymized": summary.anonymized,
+            "clean": summary.clean,
+            "unreadable": summary.unreadable,
+            "skipped": summary.skipped,
+            "errors": summary.errors,
+            "copied": summary.copied,
+            "keyref_csv_path": str(summary.keyref_csv_path) if summary.keyref_csv_path else None,
+        })
+
+    return Response(stream(), mimetype="text/event-stream",
+                    headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

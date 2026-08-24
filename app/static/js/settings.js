@@ -239,3 +239,146 @@
         });
     }
 })();
+
+(function () {
+    const toggle = document.getElementById("ai-mode-toggle");
+    const body = document.getElementById("ai-mode-body");
+    const tokenDisplay = document.getElementById("ai-token-display");
+    const tokenCopyBtn = document.getElementById("ai-token-copy-btn");
+    const tokenRegenerateBtn = document.getElementById("ai-token-regenerate-btn");
+    const instructionsArea = document.getElementById("ai-instructions");
+    const instructionsCopyBtn = document.getElementById("ai-instructions-copy-btn");
+    const timeoutInput = document.getElementById("ai-timeout-input");
+    const tempDirInput = document.getElementById("ai-temp-dir-input");
+    const tempDirBrowseBtn = document.getElementById("ai-temp-dir-browse-btn");
+    const inlineLimitInput = document.getElementById("ai-inline-limit-input");
+    const configSaveBtn = document.getElementById("ai-config-save-btn");
+    const notice = document.getElementById("ai-mode-notice");
+    const errorText = document.getElementById("ai-mode-error");
+
+    if (!toggle) return;
+
+    function showAiNotice(message) {
+        if (!notice) return;
+        notice.textContent = message;
+        notice.hidden = false;
+    }
+
+    function showAiError(message) {
+        if (!errorText) return;
+        errorText.textContent = message;
+        errorText.hidden = false;
+    }
+
+    function clearAiMessages() {
+        if (notice) notice.hidden = true;
+        if (errorText) errorText.hidden = true;
+    }
+
+    toggle.addEventListener("change", async function () {
+        clearAiMessages();
+        try {
+            const resp = await fetch("/settings/ai-mode", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled: toggle.checked }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                showAiError(data.error || "Could not update AI Mode.");
+                toggle.checked = !toggle.checked;
+                return;
+            }
+            body.hidden = !data.enabled;
+            if (tokenDisplay) tokenDisplay.value = data.token || "";
+        } catch (_) {
+            showAiError("Could not reach the server.");
+            toggle.checked = !toggle.checked;
+        }
+    });
+
+    if (tokenCopyBtn) {
+        tokenCopyBtn.addEventListener("click", async function () {
+            clearAiMessages();
+            try {
+                await navigator.clipboard.writeText(tokenDisplay.value);
+                showAiNotice("Token copied.");
+            } catch (_) {
+                showAiError("Could not copy to clipboard.");
+            }
+        });
+    }
+
+    if (instructionsCopyBtn) {
+        instructionsCopyBtn.addEventListener("click", async function () {
+            clearAiMessages();
+            try {
+                await navigator.clipboard.writeText(instructionsArea.value);
+                showAiNotice("Instructions copied.");
+            } catch (_) {
+                showAiError("Could not copy to clipboard.");
+            }
+        });
+    }
+
+    if (tokenRegenerateBtn) {
+        tokenRegenerateBtn.addEventListener("click", async function () {
+            clearAiMessages();
+            try {
+                const resp = await fetch("/settings/ai-mode/regenerate-token", { method: "POST" });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    showAiError(data.error || "Could not regenerate token.");
+                    return;
+                }
+                tokenDisplay.value = data.token;
+                showAiNotice("Token regenerated. Update any agent using the old token.");
+            } catch (_) {
+                showAiError("Could not reach the server.");
+            }
+        });
+    }
+
+    if (tempDirBrowseBtn) {
+        tempDirBrowseBtn.addEventListener("click", async function () {
+            tempDirBrowseBtn.disabled = true;
+            try {
+                const resp = await fetch("/browse/folder");
+                const data = await resp.json();
+                if (data.path) tempDirInput.value = data.path;
+            } catch (_) {
+                showAiError("Could not open folder browser.");
+            } finally {
+                tempDirBrowseBtn.disabled = false;
+            }
+        });
+    }
+
+    if (configSaveBtn) {
+        configSaveBtn.addEventListener("click", async function () {
+            clearAiMessages();
+            try {
+                const resp = await fetch("/settings/ai-mode/config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_timeout_minutes: parseInt(timeoutInput.value, 10),
+                        temp_dir: tempDirInput.value.trim(),
+                        inline_text_max_chars: parseInt(inlineLimitInput.value, 10),
+                    }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    showAiError(data.error || "Could not save AI Mode settings.");
+                    return;
+                }
+                timeoutInput.value = data.ai_session_timeout_minutes;
+                tempDirInput.value = data.ai_temp_dir;
+                inlineLimitInput.value = data.ai_inline_text_max_chars;
+                showAiNotice("Saved.");
+            } catch (_) {
+                showAiError("Could not reach the server.");
+            }
+        });
+    }
+})();

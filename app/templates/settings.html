@@ -74,6 +74,67 @@
     <p class="muted" id="language-notice" hidden></p>
     <p class="error-text" id="language-error" hidden></p>
 </section>
+
+<section class="doc-section">
+    <h2 class="section-heading">AI Mode</h2>
+    <p class="advanced-hint">
+        Lets a local AI agent request anonymized text from files on this machine
+        and, when producing final output, ask for real values to be restored
+        straight to disk — without the real values ever passing through the
+        agent's own context. Off by default.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" id="ai-mode-toggle" {% if ai_mode_enabled %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Enable AI Mode</span>
+        </label>
+    </div>
+
+    <div id="ai-mode-body" {% if not ai_mode_enabled %}hidden{% endif %}>
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="ai-token-display">Local API token</label>
+            <input type="text" id="ai-token-display" class="folder-path-display" value="{{ ai_api_token }}" readonly>
+            <button class="btn btn-secondary btn-sm" id="ai-token-copy-btn">Copy</button>
+            <button class="btn btn-secondary btn-sm" id="ai-token-regenerate-btn">Regenerate</button>
+        </div>
+        <p class="advanced-hint">Sent by the AI agent as the <code>X-D-Tach-Token</code> header on every request. Regenerating invalidates the previous token immediately.</p>
+
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="ai-instructions">Agent instructions</label>
+        </div>
+        <textarea id="ai-instructions" class="ai-instructions-textarea" rows="6" readonly>{{ ai_instructions }}</textarea>
+        <div class="advanced-setting-row">
+            <button class="btn btn-secondary btn-sm" id="ai-instructions-copy-btn">Copy instructions</button>
+        </div>
+        <p class="advanced-hint">Paste this into the agent's system prompt or <code>CLAUDE.md</code> so it knows the rules for using AI Mode.</p>
+
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="ai-timeout-input">Session timeout (minutes)</label>
+            <input type="number" id="ai-timeout-input" class="digit-input" value="{{ ai_session_timeout_minutes }}" min="1">
+        </div>
+
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="ai-temp-dir-input">Temp folder</label>
+            <input type="text" id="ai-temp-dir-input" class="folder-path-display" value="{{ ai_temp_dir }}">
+            <button class="btn btn-secondary btn-sm" id="ai-temp-dir-browse-btn">Browse&hellip;</button>
+        </div>
+
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="ai-inline-limit-input">Inline text limit (characters)</label>
+            <input type="number" id="ai-inline-limit-input" class="digit-input" value="{{ ai_inline_text_max_chars }}" min="1">
+        </div>
+        <p class="advanced-hint">Larger extractions are written to the temp folder instead of returned directly, to avoid flooding the AI's context window.</p>
+
+        <div class="advanced-setting-row">
+            <button class="btn btn-primary btn-sm" id="ai-config-save-btn">Save</button>
+        </div>
+    </div>
+
+    <p class="muted" id="ai-mode-notice" hidden></p>
+    <p class="error-text" id="ai-mode-error" hidden></p>
+</section>
 {% endblock %}
 
 {% block scripts %}

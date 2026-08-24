@@ -50,11 +50,15 @@ def create_app() -> Flask:
         file_processor=app.file_processor,
     )
 
+    from app.services.ai_session import AISessionStore
     from app.services.class_list_importer import ClassListImporter
     from app.services.document_processor import DocumentProcessor
 
     app.class_list_importer = ClassListImporter(  # type: ignore[attr-defined]
         document_processor=DocumentProcessor(),
+    )
+    app.ai_session_store = AISessionStore(  # type: ignore[attr-defined]
+        timeout_minutes=app.user_settings.ai_session_timeout_minutes,
     )
 
     from app.routes.text_routes import bp as text_bp
@@ -63,6 +67,7 @@ def create_app() -> Flask:
     from app.routes.settings_routes import bp as settings_bp
     from app.routes.restore_routes import bp as restore_bp
     from app.routes.setup_routes import bp as setup_bp
+    from app.routes.ai_routes import bp as ai_bp
 
     app.register_blueprint(text_bp)
     app.register_blueprint(document_bp)
@@ -70,6 +75,7 @@ def create_app() -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(restore_bp)
     app.register_blueprint(setup_bp)
+    app.register_blueprint(ai_bp)
 
     _EXEMPT_ENDPOINTS = {"setup.setup_page", "setup.start_setup_install", "setup.setup_status", "setup.complete_setup", "static"}
 

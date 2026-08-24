@@ -549,6 +549,51 @@ class TestReadXlsxHeaders:
         assert headers == ["Name"]
 
 
+class TestRestoreString:
+    def test_replaces_placeholder_with_original(self, processor: DocumentProcessor) -> None:
+        restored, count = DocumentProcessor.restore_string(
+            "Hello [PERSON_1], welcome.", {"[PERSON_1]": "John Smith"}
+        )
+        assert restored == "Hello John Smith, welcome."
+        assert count == 1
+
+    def test_placeholder_not_present_not_counted(self, processor: DocumentProcessor) -> None:
+        restored, count = DocumentProcessor.restore_string(
+            "No placeholders here.", {"[PERSON_1]": "John Smith"}
+        )
+        assert restored == "No placeholders here."
+        assert count == 0
+
+    def test_repeated_placeholder_counted_once(self, processor: DocumentProcessor) -> None:
+        restored, count = DocumentProcessor.restore_string(
+            "[PERSON_1] met [PERSON_1] again.", {"[PERSON_1]": "John Smith"}
+        )
+        assert restored == "John Smith met John Smith again."
+        assert count == 1
+
+    def test_multiple_placeholders_replaced(self, processor: DocumentProcessor) -> None:
+        restored, count = DocumentProcessor.restore_string(
+            "[PERSON_1] emailed [EMAIL_ADDRESS_1].",
+            {"[PERSON_1]": "John Smith", "[EMAIL_ADDRESS_1]": "john@example.com"},
+        )
+        assert restored == "John Smith emailed john@example.com."
+        assert count == 2
+
+
+class TestRestoreText:
+    def test_restore_text_delegates_to_restore_string(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "anonymized.md"
+        dest = tmp_path / "restored.md"
+        source.write_text("Hello [PERSON_1].", encoding="utf-8")
+
+        count = processor.restore_text(source, dest, {"[PERSON_1]": "John Smith"})
+
+        assert count == 1
+        assert dest.read_text(encoding="utf-8") == "Hello John Smith."
+
+
 class TestReadXlsxColumns:
     def test_returns_values_per_header_case_insensitive(
         self, processor: DocumentProcessor, tmp_path: Path

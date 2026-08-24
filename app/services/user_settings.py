@@ -1,5 +1,7 @@
 import json
 import logging
+import secrets
+import tempfile
 from pathlib import Path
 from typing import Final
 
@@ -17,6 +19,10 @@ MAX_PORT: Final[int] = 65535
 DEFAULT_KNOWN_VALUE_ENTITY_TYPE: Final[str] = "PERSON"
 KNOWN_VALUE_SOURCES: Final[tuple[str, ...]] = ("manual", "class_list")
 DEFAULT_KNOWN_VALUE_SOURCE: Final[str] = "manual"
+
+DEFAULT_AI_TEMP_DIR: Final[str] = str(Path(tempfile.gettempdir()) / "d-tach-ai")
+DEFAULT_AI_SESSION_TIMEOUT_MINUTES: Final[int] = 60
+DEFAULT_AI_INLINE_TEXT_MAX_CHARS: Final[int] = 50000
 
 _DEFAULTS: Final[dict] = {
     "hashing_enabled": False,
@@ -44,6 +50,11 @@ _DEFAULTS: Final[dict] = {
     "enabled_languages": ["en"],
     "loading_strategy": "eager",
     "language_setup_complete": False,
+    "ai_mode_enabled": False,
+    "ai_api_token": "",
+    "ai_session_timeout_minutes": DEFAULT_AI_SESSION_TIMEOUT_MINUTES,
+    "ai_inline_text_max_chars": DEFAULT_AI_INLINE_TEXT_MAX_CHARS,
+    "ai_temp_dir": DEFAULT_AI_TEMP_DIR,
 }
 
 
@@ -277,6 +288,60 @@ class UserSettings:
     def language_setup_complete(self, value: bool) -> None:
         self._data["language_setup_complete"] = bool(value)
 
+    @property
+    def ai_mode_enabled(self) -> bool:
+        """Whether the local AI Mode HTTP API is active. Off by default."""
+        return self._data.get("ai_mode_enabled", False)
+
+    @ai_mode_enabled.setter
+    def ai_mode_enabled(self, value: bool) -> None:
+        self._data["ai_mode_enabled"] = bool(value)
+        if self._data["ai_mode_enabled"] and not self._data.get("ai_api_token"):
+            self._data["ai_api_token"] = secrets.token_urlsafe(32)
+
+    @property
+    def ai_api_token(self) -> str:
+        """The bearer token AI Mode requests must present via the X-D-Tach-Token header."""
+        return self._data.get("ai_api_token", "")
+
+    def regenerate_ai_api_token(self) -> str:
+        """Generate and store a new AI Mode API token, invalidating the previous one, and return it."""
+        self._data["ai_api_token"] = secrets.token_urlsafe(32)
+        return self._data["ai_api_token"]
+
+    @property
+    def ai_session_timeout_minutes(self) -> int:
+        """Idle timeout, in minutes, before an AI Mode session and its temp files expire."""
+        return self._data.get("ai_session_timeout_minutes", DEFAULT_AI_SESSION_TIMEOUT_MINUTES)
+
+    @ai_session_timeout_minutes.setter
+    def ai_session_timeout_minutes(self, value: int) -> None:
+        value = int(value)
+        if value < 1:
+            raise ValueError(f"ai_session_timeout_minutes must be at least 1, got {value!r}.")
+        self._data["ai_session_timeout_minutes"] = value
+
+    @property
+    def ai_inline_text_max_chars(self) -> int:
+        """Character threshold above which extracted/restored text is written to ai_temp_dir instead of inlined."""
+        return self._data.get("ai_inline_text_max_chars", DEFAULT_AI_INLINE_TEXT_MAX_CHARS)
+
+    @ai_inline_text_max_chars.setter
+    def ai_inline_text_max_chars(self, value: int) -> None:
+        value = int(value)
+        if value < 1:
+            raise ValueError(f"ai_inline_text_max_chars must be at least 1, got {value!r}.")
+        self._data["ai_inline_text_max_chars"] = value
+
+    @property
+    def ai_temp_dir(self) -> str:
+        """Directory AI Mode writes large extracted/restored text files to."""
+        return self._data.get("ai_temp_dir") or DEFAULT_AI_TEMP_DIR
+
+    @ai_temp_dir.setter
+    def ai_temp_dir(self, value: str) -> None:
+        self._data["ai_temp_dir"] = str(value)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------
@@ -400,5 +465,16 @@ class UserSettings:
             merged["language_setup_complete"] = raw["language_setup_complete"]
         elif is_pre_language_management:
             merged["language_setup_complete"] = True
+
+        if isinstance(raw.get("ai_mode_enabled"), bool):
+            merged["ai_mode_enabled"] = raw["ai_mode_enabled"]
+        if isinstance(raw.get("ai_api_token"), str):
+            merged["ai_api_token"] = raw["ai_api_token"]
+        if isinstance(raw.get("ai_session_timeout_minutes"), int) and raw["ai_session_timeout_minutes"] >= 1:
+            merged["ai_session_timeout_minutes"] = raw["ai_session_timeout_minutes"]
+        if isinstance(raw.get("ai_inline_text_max_chars"), int) and raw["ai_inline_text_max_chars"] >= 1:
+            merged["ai_inline_text_max_chars"] = raw["ai_inline_text_max_chars"]
+        if isinstance(raw.get("ai_temp_dir"), str) and raw["ai_temp_dir"].strip():
+            merged["ai_temp_dir"] = raw["ai_temp_dir"]
 
         return merged
