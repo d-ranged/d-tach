@@ -177,6 +177,14 @@
     </div>
 
     <div id="panel-folder" class="input-panel" hidden>
+        <div class="advanced-setting-row">
+            <label class="toggle">
+                <input type="checkbox" id="rename-only-toggle">
+                <span class="toggle-track"></span>
+                <span class="setting-label">Rename names only — don't touch file content.</span>
+            </label>
+        </div>
+        <p class="advanced-hint">Renames every file and folder name in the tree in place. No content is read or rewritten, and no <code>anonymized/</code> output folder is created. Use this to make a folder safe to enumerate before pointing AI Mode at it.</p>
         <div class="folder-input-row">
             <input
                 type="text"
@@ -189,27 +197,29 @@
             <button class="btn btn-primary" id="process-folder-btn">Process Folder</button>
             <button class="btn btn-secondary" id="cancel-btn" hidden>Cancel</button>
         </div>
-        <div class="output-mode-row">
-            <label class="output-mode-option">
-                <input type="radio" name="output-mode" value="prefix" {% if output_mode == 'prefix' %}checked{% endif %}>
-                Prefix files
-            </label>
-            <label class="output-mode-option">
-                <input type="radio" name="output-mode" value="subfolder" {% if output_mode == 'subfolder' %}checked{% endif %}>
-                Subfolder (<code>anonymized/</code>)
-            </label>
+        <div id="folder-content-options">
+            <div class="output-mode-row">
+                <label class="output-mode-option">
+                    <input type="radio" name="output-mode" value="prefix" {% if output_mode == 'prefix' %}checked{% endif %}>
+                    Prefix files
+                </label>
+                <label class="output-mode-option">
+                    <input type="radio" name="output-mode" value="subfolder" {% if output_mode == 'subfolder' %}checked{% endif %}>
+                    Subfolder (<code>anonymized/</code>)
+                </label>
+            </div>
+            <div class="advanced-setting-row">
+                <label class="advanced-label" for="pass-through-extensions">Pass-through extensions (no scanning)</label>
+                <input
+                    type="text"
+                    id="pass-through-extensions"
+                    class="excel-columns-input"
+                    placeholder=".sql, .yml, .dbml, .py, .mp4"
+                    value="{{ pass_through_extensions }}"
+                >
+            </div>
+            <p class="advanced-hint">Comma-separated. Files with these extensions are copied as-is into <code>anonymized/</code> without any PII scanning. Off/empty by default.</p>
         </div>
-        <div class="advanced-setting-row">
-            <label class="advanced-label" for="pass-through-extensions">Pass-through extensions (no scanning)</label>
-            <input
-                type="text"
-                id="pass-through-extensions"
-                class="excel-columns-input"
-                placeholder=".sql, .yml, .dbml, .py, .mp4"
-                value="{{ pass_through_extensions }}"
-            >
-        </div>
-        <p class="advanced-hint">Comma-separated. Files with these extensions are copied as-is into <code>anonymized/</code> without any PII scanning. Off/empty by default.</p>
     </div>
 </section>
 
