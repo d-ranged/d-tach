@@ -13,11 +13,16 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | Step | Description | Status |
 |---|---|---|
 | 1 | System tray app + configurable port | ✅ Complete |
-| 2 | Language management — on-demand download, first-launch selection | ⬜ Not started |
-| 3 | Acceptance Testing — all features | ⬜ Not started |
-| 4 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
-| 5 | Class list import — bulk-populate known values from a roster file | ⬜ Not started |
-| 6 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ⬜ Not started |
+| 2 | Language management — on-demand download, first-launch selection | ✅ Complete (not human-tested) |
+| 3 | Fix double-anonymization of already-anonymized text | ⬜ Not started |
+| 4 | Class list import — bulk-populate known values from a roster file | ⬜ Not started |
+| 5 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ⬜ Not started |
+| 6 | Acceptance Testing — real-work run: ADM retake grading through AI Mode | ⬜ Not started |
+
+Acceptance testing moved from position 3 to position 6 (24-8-2026). It is no longer a
+self-administered feature checklist run against test data — it is a real grading round
+done through the finished feature set. That only works once every step is in, so it goes
+last. See Step 6 for the reasoning and the timing risk that comes with it.
 
 ---
 
@@ -231,7 +236,7 @@ registration — scope it together rather than as a separate issue.
 
 ---
 
-## Step 2 — Language Management
+## <completed>Step 2 — Language Management: Completed, un human tested</completed>
 
 **Codeberg issue:**
 `d-ranged/d-tach#62`
@@ -366,53 +371,10 @@ Currently assumes both EN and NL models are always loaded. After this change:
 
 ---
 
-## Step 3 — Acceptance Testing
+## Step 3 — Fix Double-Anonymization of Already-Anonymized Text
 
-**Codeberg issue to create first:**
-`test: acceptance testing — v1.3.0 tray, port, language management`
-
-**Goal:** Manual test run covering all v1.3.0 features after Steps 1 and 2 are merged
-to main.
-
-### Pre-test setup
-
-- `git pull main` — confirm on latest main
-- `pip install -r requirements.txt`
-- Run `pytest` — must pass before starting manual tests
-- Start via `tray.py` — confirm tray icon appears
-
-### Test cases
-
-| Check | Expected |
-|---|---|
-| `tray.py` launch | Server starts; tray icon appears |
-| Tray right-click > Open d-tach | Browser opens at configured port |
-| Tray right-click > Quit | Server stops; process exits |
-| Port change in Settings | Restart notice shown; new port used after restart |
-| Tray icon URL after port change | Opens at new port |
-| First launch (fresh UserSettings) | Language selection screen shown; download completes; app opens |
-| Settings > Languages — install | Progress shown; completion message; model usable after restart |
-| Settings > Languages — remove | Model gone from disk after restart |
-| Load on startup toggle | Only enabled models loaded; disabled model not in RAM |
-| Lazy loading | Only base model in RAM at startup; second language loads on first use |
-| Language not loaded — document processed | Clear error message in UI |
-| Regression — Restore tab | Restore still works correctly |
-| Regression — Document Mode | Anonymization still works correctly |
-| Regression — Text Mode | Text anonymization still works correctly |
-| `pytest` | All tests pass |
-
-### ✅ Complete when
-
-- All test cases above pass
-- No regressions in any existing feature
-- `pytest` passes with no failures on main
-
----
-
-## Step 4 — Fix Double-Anonymization of Already-Anonymized Text
-
-**Codeberg issue to create first:**
-`fix: anonymizer re-wraps already-anonymized placeholders`
+**Codeberg issue:**
+`d-ranged/d-tach#64`
 
 ### Why this must be fixed here, not just logged
 
@@ -475,7 +437,7 @@ Add a placeholder-recognition guard in `anonymize()`, after the existing
 
 ---
 
-## Step 5 — Class List Import
+## Step 4 — Class List Import
 
 **Codeberg issue to create first:**
 `feature: import known values in bulk from a class list (Excel)`
@@ -495,10 +457,10 @@ file once, pick which columns matter, and bulk-populate known values from every 
 making every student in the class a guaranteed-caught known value on the very first
 anonymization pass, not just after a miss is noticed.
 
-This is scoped before AI Mode (Step 6) because AI Mode's safety story depends on
+This is scoped before AI Mode (Step 5) because AI Mode's safety story depends on
 anonymization being as complete as possible *before* any text reaches a cloud model —
 this closes a real, common gap (a full roster of names) ahead of that, the same way
-Step 4 closes the round-trip-integrity gap ahead of it.
+Step 3 closes the round-trip-integrity gap ahead of it.
 
 ### Schema change — typed known values
 
@@ -591,7 +553,7 @@ Excel dependency.
 
 ---
 
-## Step 6 — AI Mode
+## Step 5 — AI Mode
 
 **Codeberg issue to create first:**
 `feature: AI mode — local API for AI-assisted anonymize/restore`
@@ -626,7 +588,10 @@ usable: without it, an agent enumerating the tree to decide what to read next wo
 real names in the paths themselves, which defeats the entire point of anonymizing the
 content.
 
-This step is additive and does not depend on or block Steps 1–3.
+This step does not depend on Steps 1–2 (tray, language management) and could be built
+alongside them. It does depend on Steps 3 and 4 landing first: they close the
+round-trip-integrity gap and the roster gap that AI Mode's safety story rests on.
+Step 6 then tests all of it together on real work.
 
 ### Prerequisite — Filename/Folder-Only Anonymization
 
@@ -757,8 +722,16 @@ New section in the existing Settings UI:
   avoid confirming the route exists) when disabled.
 - **Local API token** — generated once (`secrets.token_urlsafe(32)`), shown with a
   "Regenerate" button, stored in `UserSettings`. Copy-to-clipboard button.
-- **AI agent instructions** — a read-only text block with copy-paste instructions for the
-  AI's system prompt / CLAUDE.md, e.g.:
+- **AI agent instructions** — a read-only, copy-to-clipboard text block: the generic
+  operating instructions for any AI agent using this mode, written once and shipped with
+  the product. This is a real deliverable, not placeholder wording — it is the entire
+  onboarding path for AI Mode, because there is no other way for an agent to learn the
+  rules. Write it use-case-neutral (no grading, no marking, no Craig-specific wording) so
+  it drops straight into a system prompt or a `CLAUDE.md` for any kind of work. Step 6's
+  acceptance run pastes this exact block verbatim and appends test-only additions to it —
+  if the block has to be edited to make that run work, the block is wrong and gets fixed
+  here rather than worked around there. Substitute the live port and token into the text
+  before display. Baseline content:
   > "AI Mode is enabled on d-tach (http://localhost:{port}). Before pointing me at a
   > folder, run Document Mode's 'Rename names only' pass on it once so every path is
   > already name-anonymized. From then on: normal directory listing of that folder is
@@ -802,7 +775,6 @@ temp dir).
 | `user_settings.py` | Add `ai_mode_enabled`, `ai_api_token`, `ai_session_timeout_minutes`, `ai_inline_text_max_chars`, `ai_temp_dir` |
 | Settings UI — AI Mode | Enable toggle, token display/regenerate, instructions block, timeout, temp folder, inline limit |
 | `app/__init__.py` | Register `ai_routes` blueprint |
-| `docs/roadmap.md` | Add double-anonymization bug as a tracked high-priority item |
 
 ### ✅ Complete when
 
@@ -834,6 +806,209 @@ temp dir).
   `restore_string` test in `tests/test_document_processor.py`, and a rename-only test
   confirming file content is untouched
 - All existing tests pass
+
+---
+
+## Step 6 — Acceptance Testing: ADM Retake Grading Run
+
+**Codeberg issue to create first:**
+`test: acceptance testing — v1.3.0 end-to-end via ADM retake grading round`
+
+**Goal:** accept v1.3.0 by doing real work with it. The test vehicle is the ADM retake
+grading round — same rubric and same per-student output as `adm/grading_26` — but run end
+to end through AI Mode against the real, un-anonymized download folder rather than a
+hand-prepared anonymized copy.
+
+### Why this replaces a self-administered checklist
+
+The original Step 3 was a feature checklist Craig ran against himself, on data he already
+knew, immediately after building the features. That catches crashes and little else. The
+failure modes that actually decide whether v1.3.0 is safe — a name the models miss, a
+placeholder that doesn't round-trip, a roster row imported wrong, a real value reaching a
+cloud model — only surface on data neither the tool nor the assistant has seen before.
+
+A real grading round exercises every v1.3.0 feature at once and attaches a hard pass/fail
+signal to the release: **if a real student name reaches the AI assistant's context at any
+point, v1.3.0 does not ship.** The grading has to be done regardless, so the test costs
+nothing beyond setup and keeping a defect log.
+
+It is last on purpose. It tests Steps 1–5 as one system rather than one at a time, which
+means all five have to be merged before it can start.
+
+### Timing dependency — read before scheduling
+
+🟡 The ADM retake submission deadline was **23 August 2026**, so the submissions already
+exist and grading is the next thing due. Steps 3–5 have to land before the grading round
+starts. If they don't, there are two options, and it is worth choosing deliberately rather
+than arriving at one by drift:
+
+- **Grade the old way** (manual copy into an anonymized folder, per `adm/grading_26`) and
+  move the real-work acceptance test to the next natural grading round. v1.3.0 then ships
+  on the appendix checklist alone, with a correspondingly weaker confidence claim.
+- **Hold the grading** a few days until Steps 3–5 are in. Only viable if the retake results
+  aren't due immediately.
+
+Falling back to the checklist is a legitimate outcome, not a failure — it just means the
+release notes shouldn't claim AI Mode has been proven on real data.
+
+### Pre-test setup
+
+1. **Confirm the build.** `git pull main`, `pip install -r requirements.txt`, `pytest` —
+   must pass clean before any real data is touched. Launch via `tray.py`; confirm the tray
+   icon appears and the configured port is the one in use.
+2. **Import the roster.** Export the full ADM retake roster (student number, first name,
+   last name) to `.xlsx`. Settings → Known Values → Import from class list; map the columns
+   (student number → Numeric ID, first/last name → Person name); import. Check the returned
+   added / already-present counts against the roster's row count — a mismatch is a defect to
+   log, not a rounding difference to shrug at. This is the step that turns every student
+   into a guaranteed catch rather than an NER coin-flip.
+3. **Download submissions as-is.** Pull the retake submissions from BrightSpace into one
+   working folder, unmodified. Folder names will contain real names at this point — expected,
+   and exactly what the next step exists for.
+4. **Rename-only pass.** Run Document Mode's "Rename names only" over that folder once, with
+   KEYREF export enabled. File contents stay real and untouched on disk; only paths change.
+   The KEYREF is Craig's only route from a renamed folder back to a real student, and is
+   never shown to the assistant.
+5. **Verify the tree yourself.** List the working folder and read every path. No real name,
+   no student number, no email in any file or folder name. If one survives, add it to known
+   values and re-run the pass before going further. This check is the gate, and the assistant
+   cannot perform it — it would have to see the names to do so.
+6. **Enable AI Mode.** Settings → AI Mode → enable; generate the token; note the port. Copy
+   the AI agent instructions block.
+
+### How the grading round differs from `adm/grading_26`
+
+The rubric, the marking guide, the per-student output format and the `BSP_*` folder flow are
+all unchanged — see `PROCESS.md` and `MARKING_GUIDE.md` in that folder. What changes is where
+content comes from and where output goes:
+
+| Old workflow (v1.2.0) | This run (v1.3.0 AI Mode) |
+|---|---|
+| Craig manually copies each student's files into a separate anonymized folder tree | One folder, real files, only the paths renamed — no second tree to keep in sync |
+| Assistant reads files directly out of the anonymized tree | Assistant never opens a file; every read is `POST /ai/extract` on the anonymized path |
+| Assistant writes the markbook in placeholders; Craig re-matches names by hand from KEYREF | Assistant composes in placeholders; `POST /ai/restore` with `output_path` writes the real-named markbook straight to disk |
+| A missed name is noticed once, then forgotten | A missed name is sent to `POST /ai/flag-term` and caught for every student after it |
+
+Craig watching the screen recording and the dashboard, then dictating findings into chat, is
+unchanged and stays entirely outside d-tach — no video or dashboard content goes through the
+API.
+
+**Validation alternates direction, student by student**, so neither order gets a free pass:
+
+- *Assistant-first:* the assistant produces the rubric table, per-criterion comments and a
+  short list of key items for Craig to check against the real submission. Craig validates.
+- *Craig-first:* Craig dictates his key findings first; the assistant then checks them against
+  the extracted text and states plainly where it agrees, where it disagrees, and where the
+  extracted text can't settle it either way.
+
+The second direction matters more than it looks. It is the only way to catch the assistant
+simply agreeing with whatever it was told — something a one-directional run cannot tell apart
+from genuine agreement.
+
+**Markbook output.** The assistant composes the entire markbook using only placeholders, then
+calls `POST /ai/restore` with `output_path` set to the student's real-named markbook file.
+d-tach substitutes the real values on the way to disk and returns only a status. The assistant
+writes a file it is not able to read — that asymmetry is the property under test, and the
+finished file should read exactly as though it had been written with real names all along.
+
+### Assistant instructions for the run
+
+The AI Mode settings panel's generic instructions block (Step 5) is the base, and ships with
+the product. For this run only, Craig pastes that block plus the additions below. Keep the two
+visibly separate — anything that turns out to be needed permanently belongs in the shipped
+block instead.
+
+> **Acceptance test additions — this run only.**
+>
+> For every file you extract, before you use it: print the placeholder set you were given
+> (`[PERSON_1]`, `[NUMERIC_ID_2]`, `[Cr-A2T5 HY23]`, and so on) and the first two lines of the
+> anonymized text verbatim. I want to see what d-tach actually handed you, not a summary of it.
+>
+> If you think a real name, student number, email address or other identifying value has
+> survived into text you were given, do three things and then carry on: quote the exact span,
+> say what makes you think it is real rather than a placeholder, and call `POST /ai/flag-term`
+> with that value. Do not stop the run, do not ask me first, and do not refuse to grade that
+> student — a suspected leak is a finding to record, not a reason to halt. I would rather have
+> a graded student and a flag than neither.
+>
+> Never write a real name into chat, into a file, or into a markbook. If you believe you have
+> worked out a real value, refer to it by its placeholder and tell me how you came to know it —
+> that inference path is itself a finding.
+>
+> At the end of the run, give me one section listing every concern: the file, the span you saw,
+> why it looked real, and whether you flagged it. Include the ones you were unsure about and the
+> ones I had already told you were false alarms — an over-cautious flag is useful signal about
+> detection tuning, and I want the rate, not just the hits.
+
+Craig's side: confirm or reject each flag as it comes in, and record which it was. A high
+false-positive rate is a finding about the Step 3 placeholder guard being too loose in the other
+direction. A real leak is a finding about detection, and about whether the roster import in
+setup step 2 actually covered that student.
+
+### Defect log
+
+Keep one running list during the round rather than writing it up afterwards — the details that
+matter are gone by the end. Per entry: which step or feature, what happened, what was expected,
+and whether it blocked the grading or was worked around. This log is the release evidence.
+Anything in it marked as a blocker is a v1.3.0 fix, not a v1.4.0 backlog item.
+
+### ✅ Complete when
+
+- The full retake round is graded through AI Mode start to finish, without falling back to the
+  manual copy-into-an-anonymized-folder workflow for any student
+- No real student name, number or email reached the assistant's context at any point — confirmed
+  against both the assistant's end-of-run concerns list and Craig's own read of the chat transcript
+- Every markbook written via `/ai/restore` with `output_path` contains the correct real values
+  matched to the right student — spot-checked against BrightSpace for at least three students; any
+  mismatch is a blocker, not a note
+- Roster import earned its place: at least one case identified where a known-values entry, not
+  NER, is what caught a name
+- Placeholders round-tripped cleanly under real load — no nested brackets anywhere, no literal
+  placeholder text left in any finished markbook (Step 3, proven on real data)
+- Every `/ai/flag-term` call is resolved as either a real miss or a false positive, and the ratio
+  is recorded
+- Tray, port and language management held up across the round: the app stayed running as a
+  background process for the duration, with no restart needed except where a settings change
+  legitimately required one
+- The defect log has no unresolved blockers
+- `pytest` passes on main after any fixes made during the round
+
+### Appendix — feature checklist
+
+Run this as a quick sweep before the grading round starts, and as the fallback acceptance route
+if the round slips past the release window. It covers per-feature cases the grading round doesn't
+naturally reach.
+
+| Check | Expected |
+|---|---|
+| `tray.py` launch | Server starts; tray icon appears |
+| Tray right-click > Open d-tach | Browser opens at configured port |
+| Tray right-click > Quit | Server stops; process exits |
+| Port change in Settings | Restart notice shown; new port used after restart |
+| Tray icon URL after port change | Opens at new port |
+| First launch (fresh UserSettings) | Language selection screen shown; download completes; app opens |
+| Settings > Languages — install | Progress shown; completion message; model usable after restart |
+| Settings > Languages — remove | Model gone from disk after restart |
+| Load on startup toggle | Only enabled models loaded; disabled model not in RAM |
+| Lazy loading | Only base model in RAM at startup; second language loads on first use |
+| Language not loaded — document processed | Clear error message in UI |
+| Regression — Restore tab | Restore still works correctly |
+| Regression — Document Mode | Anonymization still works correctly |
+| Regression — Text Mode | Text anonymization still works correctly |
+| `pytest` | All tests pass |
+| Re-anonymize already-anonymized text | Idempotent — output identical to the first pass, no nested brackets |
+| Hashed placeholder re-run | `[Cr-A2T5 HY23]` never re-tagged as a new PERSON |
+| Class list import | Header row read; column mapping applied; typed entries added; counts correct |
+| Imported Numeric ID entry | Anonymizes as `[NUMERIC_ID_N]`, not `[PERSON_N]` |
+| Class list re-sync | Only new rows added; no duplicates |
+| Clear class list values | Only `source: class_list` entries removed; manual entries remain |
+| Rename-only pass | Paths anonymized in place; file contents byte-for-byte unchanged; no `anonymized/` tree created |
+| `/ai/*` with AI Mode off | 404, not 403 |
+| `/ai/*` with wrong or missing token | Rejected |
+| `/ai/extract` over inline limit | Returns `anonymized_text_path`; `anonymized_text` omitted |
+| `/ai/extract` on image-only PDF page | `warnings` entry returned; no silent pass-through |
+| `/ai/restore` with `output_path` | File written; response carries status and path only, no restored content |
+| `/ai/flag-term` | Value appears in Settings known values and applies on the next extraction |
 
 ---
 
