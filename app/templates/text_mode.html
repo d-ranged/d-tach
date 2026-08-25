@@ -13,66 +13,6 @@
 
     <div class="setting-group">
         <label class="toggle">
-            <input type="checkbox" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Anonymize dates</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Detect URLs</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="locations-toggle" {% if anonymize_locations %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Anonymize locations</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Numeric ID</span>
-        </label>
-        <input
-            type="number"
-            id="digit-count"
-            class="digit-input"
-            value="{{ pattern_config.digit_count }}"
-            min="4"
-            max="12"
-            title="Exact digit count to detect"
-        >
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="hashing-toggle" {% if hashing_enabled %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Enable hashing</span>
-        </label>
-        <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
-            <label for="secret-input" class="secret-label">Secret</label>
-            <input
-                type="password"
-                id="secret-input"
-                class="secret-input"
-                placeholder="Enter a secret phrase"
-                value="{{ hashing_secret }}"
-                autocomplete="off"
-            >
-        </div>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
             <input type="checkbox" id="keyref-toggle">
             <span class="toggle-track"></span>
             <span class="setting-label">Key reference</span>
@@ -80,9 +20,9 @@
     </div>
 </section>
 
-<p class="advanced-hint known-values-pointer">
-    Known values &mdash; names the anonymizer keeps missing, plus anything imported from a
-    class list &mdash; are shared by every mode. Manage them in <a href="/settings">Settings</a>.
+<p class="advanced-hint detection-summary">
+    Detecting {{ detection_summary }}. Change any of this in
+    <a href="/settings">Settings</a> &mdash; it applies to every mode.
 </p>
 
 <section class="panels">

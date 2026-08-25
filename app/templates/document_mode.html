@@ -13,78 +13,6 @@
 
     <div class="setting-group">
         <label class="toggle">
-            <input type="checkbox" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Anonymize dates</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Detect URLs</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="locations-toggle" {% if anonymize_locations %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Anonymize locations</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Numeric ID</span>
-        </label>
-        <input
-            type="number"
-            id="digit-count"
-            class="digit-input"
-            value="{{ pattern_config.digit_count }}"
-            min="4"
-            max="12"
-            title="Exact digit count to detect"
-        >
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="names-toggle">
-            <span class="toggle-track"></span>
-            <span class="setting-label">Check file/folder names</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input
-                type="checkbox"
-                id="hashing-toggle"
-                {% if hashing_enabled %}checked{% endif %}
-            >
-            <span class="toggle-track"></span>
-            <span class="setting-label">Enable hashing</span>
-        </label>
-        <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
-            <label for="secret-input" class="secret-label">Secret</label>
-            <input
-                type="password"
-                id="secret-input"
-                class="secret-input"
-                placeholder="Enter a secret phrase"
-                value="{{ hashing_secret }}"
-                autocomplete="off"
-            >
-        </div>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
             <input type="checkbox" id="keyref-toggle">
             <span class="toggle-track"></span>
             <span class="setting-label">Key reference</span>
@@ -92,34 +20,10 @@
     </div>
 </section>
 
-<details class="advanced-settings" {% if not excel_generic_enabled or excel_column_names %}open{% endif %}>
-    <summary class="advanced-settings-toggle">Advanced settings</summary>
-    <div class="advanced-settings-body">
-        <div class="advanced-section-heading">Excel (.xlsx)</div>
-        <div class="advanced-setting-row">
-            <label class="toggle">
-                <input type="checkbox" id="excel-ner-toggle" {% if excel_generic_enabled %}checked{% endif %}>
-                <span class="toggle-track"></span>
-                <span class="setting-label">Generic anonymization (NER)</span>
-            </label>
-        </div>
-        <div class="advanced-setting-row">
-            <label class="advanced-label" for="excel-columns">Column names to anonymize</label>
-            <input
-                type="text"
-                id="excel-columns"
-                class="excel-columns-input"
-                placeholder="stnum, email, phone"
-                value="{{ excel_column_names }}"
-            >
-        </div>
-        <p class="advanced-hint">Comma-separated. Replaces all values in those columns regardless of type (catches numeric IDs). Requires column headers in row 1. Does not affect DOCX, PDF, or Markdown. If both modes are off, Excel files are skipped.</p>
-    </div>
-</details>
-
-<p class="advanced-hint known-values-pointer">
-    Known values &mdash; names the anonymizer keeps missing, plus anything imported from a
-    class list &mdash; are shared by every mode. Manage them in <a href="/settings">Settings</a>.
+<p class="advanced-hint detection-summary">
+    Detecting {{ detection_summary }}. Output goes to
+    {% if output_mode == 'subfolder' %}an <code>anonymized/</code> subfolder{% else %}prefixed files{% endif %}.
+    Change any of this in <a href="/settings">Settings</a>.
 </p>
 
 <section class="doc-section">
@@ -179,29 +83,6 @@
             <span class="browse-unavailable-note muted" id="browse-folder-note" hidden>Browse unavailable — tkinter not installed</span>
             <button class="btn btn-primary" id="process-folder-btn">Process Folder</button>
             <button class="btn btn-secondary" id="cancel-btn" hidden>Cancel</button>
-        </div>
-        <div id="folder-content-options">
-            <div class="output-mode-row">
-                <label class="output-mode-option">
-                    <input type="radio" name="output-mode" value="prefix" {% if output_mode == 'prefix' %}checked{% endif %}>
-                    Prefix files
-                </label>
-                <label class="output-mode-option">
-                    <input type="radio" name="output-mode" value="subfolder" {% if output_mode == 'subfolder' %}checked{% endif %}>
-                    Subfolder (<code>anonymized/</code>)
-                </label>
-            </div>
-            <div class="advanced-setting-row">
-                <label class="advanced-label" for="pass-through-extensions">Pass-through extensions (no scanning)</label>
-                <input
-                    type="text"
-                    id="pass-through-extensions"
-                    class="excel-columns-input"
-                    placeholder=".sql, .yml, .dbml, .py, .mp4"
-                    value="{{ pass_through_extensions }}"
-                >
-            </div>
-            <p class="advanced-hint">Comma-separated. Files with these extensions are copied as-is into <code>anonymized/</code> without any PII scanning. Off/empty by default.</p>
         </div>
     </div>
 </section>

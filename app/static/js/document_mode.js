@@ -1,20 +1,12 @@
 "use strict";
 
 // ---- Elements ----
-const hashingToggle          = document.getElementById("hashing-toggle");
-const secretField            = document.getElementById("secret-field");
-const secretInput            = document.getElementById("secret-input");
+// Detection, Excel handling, folder output, hashing, and known values are all
+// configured in Settings and read by the server on every run. This page carries
+// only what belongs to a single run: the language to read in, whether to emit a
+// key reference, and the folder-pass options that describe the pass itself.
 const keyrefToggle           = document.getElementById("keyref-toggle");
-const namesToggle            = document.getElementById("names-toggle");
-const datesToggle            = document.getElementById("dates-toggle");
-const numericIdToggle        = document.getElementById("numeric-id-toggle");
-const digitCountInput        = document.getElementById("digit-count");
 const langSelector           = document.getElementById("lang-selector");
-const urlsToggle             = document.getElementById("urls-toggle");
-const locationsToggle        = document.getElementById("locations-toggle");
-const excelNerToggle         = document.getElementById("excel-ner-toggle");
-const excelColumnsInput      = document.getElementById("excel-columns");
-const passThroughInput       = document.getElementById("pass-through-extensions");
 const progressArea      = document.getElementById("progress-area");
 const progressBarWrap   = document.getElementById("progress-bar-wrap");
 const progressBar       = document.getElementById("progress-bar");
@@ -39,7 +31,6 @@ const expandArchivesRow     = document.getElementById("expand-archives-row");
 const expandArchivesHint    = document.getElementById("expand-archives-hint");
 const deleteArchivesToggle  = document.getElementById("delete-archives-toggle");
 const deleteArchivesRow     = document.getElementById("delete-archives-row");
-const folderContentOptions  = document.getElementById("folder-content-options");
 
 // ---- Tabs ----
 const tabFile           = document.getElementById("tab-file");
@@ -49,11 +40,6 @@ const panelFolder       = document.getElementById("panel-folder");
 
 let selectedLanguage = INITIAL_LANGUAGE;
 let activeEventSource = null;
-
-function getOutputMode() {
-    const checked = document.querySelector('input[name="output-mode"]:checked');
-    return checked ? checked.value : "prefix";
-}
 
 // ---------------------------------------------------------------------------
 // tkinter availability check (runs once on page load)
@@ -153,9 +139,6 @@ filePathInput.addEventListener("keydown", e => { if (e.key === "Enter") runProce
 async function runProcessFile() {
     const filePath = filePathInput.value.trim();
     if (!filePath) { setProgress("Enter a file path to process."); return; }
-    if (hashingToggle.checked && !secretInput.value.trim()) {
-        setProgress("Enter a secret phrase to use hashing."); return;
-    }
 
     setProgress("Processing\u2026");
     resetSummary();
@@ -169,18 +152,7 @@ async function runProcessFile() {
             body: JSON.stringify({
                 file_path: filePath,
                 language: selectedLanguage,
-                hashing_enabled: hashingToggle.checked,
-                secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
-                check_file_names: namesToggle.checked,
-                anonymize_dates: datesToggle.checked,
-                anonymize_locations: locationsToggle.checked,
-                anonymize_urls: urlsToggle.checked,
-                numeric_id_enabled: numericIdToggle.checked,
-                digit_count: parseInt(digitCountInput.value, 10) || 7,
-                excel_generic_enabled: excelNerToggle.checked,
-                excel_column_names: excelColumnsInput.value.trim(),
-                output_mode: getOutputMode(),
             }),
         });
         const data = await response.json();
@@ -233,7 +205,6 @@ expandArchivesToggle.addEventListener("change", () => {
 });
 
 renameOnlyToggle.addEventListener("change", () => {
-    folderContentOptions.hidden = renameOnlyToggle.checked;
     processFolderBtn.textContent = renameOnlyToggle.checked ? "Rename Names Only" : "Process Folder";
     expandArchivesRow.hidden = !renameOnlyToggle.checked;
     expandArchivesHint.hidden = !renameOnlyToggle.checked;
@@ -243,9 +214,6 @@ renameOnlyToggle.addEventListener("change", () => {
 function runProcessFolder() {
     const folderPath = folderPathInput.value.trim();
     if (!folderPath) { setProgress("Enter a folder path to process."); return; }
-    if (hashingToggle.checked && !secretInput.value.trim()) {
-        setProgress("Enter a secret phrase to use hashing."); return;
-    }
 
     if (activeEventSource) activeEventSource.close();
 
@@ -262,14 +230,7 @@ function runProcessFolder() {
     const commonParams = {
         folder_path: folderPath,
         language: selectedLanguage,
-        hashing_enabled: hashingToggle.checked,
-        secret: secretInput.value,
         key_reference_enabled: keyrefToggle.checked,
-        anonymize_dates: datesToggle.checked,
-        anonymize_locations: locationsToggle.checked,
-        anonymize_urls: urlsToggle.checked,
-        numeric_id_enabled: numericIdToggle.checked,
-        digit_count: parseInt(digitCountInput.value, 10) || 7,
     };
 
     const endpoint = renameOnly ? "/document/rename-folder" : "/document/process-folder";
@@ -279,14 +240,7 @@ function runProcessFolder() {
             expand_archives: expandArchivesToggle.checked,
             delete_archives_after_expand: deleteArchivesToggle.checked,
         })
-        : new URLSearchParams({
-            ...commonParams,
-            check_file_names: namesToggle.checked,
-            excel_generic_enabled: excelNerToggle.checked,
-            excel_column_names: excelColumnsInput.value.trim(),
-            output_mode: getOutputMode(),
-            pass_through_extensions: passThroughInput.value.trim(),
-        });
+        : new URLSearchParams(commonParams);
 
     activeEventSource = new EventSource(`${endpoint}?${params}`);
 
@@ -426,12 +380,3 @@ function resetLog() {
     progressBarWrap.hidden = true;
     setProgressBar(0);
 }
-
-// ---------------------------------------------------------------------------
-// Toggles
-// ---------------------------------------------------------------------------
-
-hashingToggle.addEventListener("change", () => {
-    secretField.hidden = !hashingToggle.checked;
-    if (!hashingToggle.checked) secretInput.value = "";
-});

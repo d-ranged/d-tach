@@ -920,11 +920,18 @@ details[open] .advanced-settings-toggle::before {
     min-width: 180px;
 }
 
-/* ---- Known values: pointer from the modes, and imported-value search ---- */
+/* ---- Settings pointers: page intro and the per-mode detection summary ---- */
 
-.known-values-pointer {
+.settings-intro {
+    margin: 0 0 1.5rem;
+    max-width: 62ch;
+}
+
+.detection-summary {
     margin: 0 0 1rem;
 }
+
+/* ---- Imported-value search ---- */
 
 #imported-values-results {
     margin-top: 0.6rem;

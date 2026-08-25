@@ -3,6 +3,7 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, jsonify, render_template, request
 
+from app.routes import build_detection_summary
 from app.services.file_processor import ProcessingSettings
 from app.services.folder_processor import normalize_extensions
 
@@ -19,16 +20,8 @@ def document_mode():
         "document_mode.html",
         active_mode="document",
         language=settings.language,
-        hashing_enabled=settings.hashing_enabled,
-        hashing_secret=settings.hashing_secret,
-        anonymize_dates=settings.anonymize_dates,
-        anonymize_locations=settings.anonymize_locations,
-        anonymize_urls=settings.anonymize_urls,
-        pattern_config=settings.pattern_config,
-        excel_generic_enabled=settings.excel_generic_enabled,
-        excel_column_names=", ".join(settings.excel_column_names),
+        detection_summary=build_detection_summary(settings, include_file_names=True),
         output_mode=settings.output_mode,
-        pass_through_extensions=", ".join(settings.pass_through_extensions),
     )
 
 
@@ -36,16 +29,17 @@ def document_mode():
 def process_file():
     """Process a single DOCX or PDF file at the given path.
 
+    Detection settings come from Settings and are shared by every mode; each may
+    still be overridden per request by an API caller, but omitting one inherits
+    the saved value.
+
     Expects JSON body:
         file_path                (str)
-        language                 (str)  — 'en' or 'nl'
-        hashing_enabled          (bool)
-        secret                   (str)
-        key_reference_enabled    (bool)
-        check_file_names         (bool)
-        anonymize_dates          (bool)
-        numeric_id_enabled   (bool)
-        digit_count              (int)
+        language                 (str)  — 'en' or 'nl'; defaults to the saved language
+        key_reference_enabled    (bool) — per-run; not saved
+        hashing_enabled, secret, check_file_names, anonymize_dates,
+        anonymize_locations, anonymize_urls, numeric_id_enabled, digit_count,
+        excel_generic_enabled, excel_column_names — optional overrides
     """
     data = request.get_json(force=True, silent=True) or {}
     processing_settings, error = _build_processing_settings(data)
@@ -63,7 +57,6 @@ def process_file():
         return jsonify({"error": f"Path is not a file: {file_path_str}"}), 400
 
     result = current_app.file_processor.process(file_path, processing_settings)
-    _persist_settings(data)
 
     return jsonify({
         "status": result.status,
@@ -79,10 +72,9 @@ def process_file():
 def process_folder():
     """Process all supported files in a folder, streaming progress via SSE.
 
-    Query parameters mirror the JSON body of process-file:
-        folder_path, language, hashing_enabled, secret,
-        key_reference_enabled, check_file_names, anonymize_dates,
-        numeric_id_enabled, digit_count
+    Query parameters mirror the JSON body of process-file: folder_path plus the
+    per-run choices (language, key_reference_enabled). Every detection setting
+    falls back to the saved Settings value when the parameter is absent.
 
     Streams Server-Sent Events. Each event is a JSON object:
         type: "progress"  — one file completed
@@ -93,29 +85,39 @@ def process_folder():
             message
     """
     args = request.args
+    saved = current_app.user_settings
+    saved_config = saved.pattern_config
 
     folder_path_str = args.get("folder_path", "").strip()
-    hashing_enabled = args.get("hashing_enabled", "false").lower() == "true"
-    secret = args.get("secret", "")
-    key_reference_enabled = args.get("key_reference_enabled", "false").lower() == "true"
-    check_file_names = args.get("check_file_names", "false").lower() == "true"
-    anonymize_dates = args.get("anonymize_dates", "false").lower() == "true"
-    anonymize_locations = args.get("anonymize_locations", "false").lower() == "true"
-    anonymize_urls = args.get("anonymize_urls", "false").lower() == "true"
-    numeric_id_enabled = args.get("numeric_id_enabled", "false").lower() == "true"
-    digit_count_raw = args.get("digit_count", "7")
+    hashing_enabled = _arg_bool(args, "hashing_enabled", saved.hashing_enabled)
+    secret = args.get("secret", saved.hashing_secret)
+    key_reference_enabled = _arg_bool(args, "key_reference_enabled", False)
+    check_file_names = _arg_bool(args, "check_file_names", saved_config.check_file_names)
+    anonymize_dates = _arg_bool(args, "anonymize_dates", saved.anonymize_dates)
+    anonymize_locations = _arg_bool(args, "anonymize_locations", saved.anonymize_locations)
+    anonymize_urls = _arg_bool(args, "anonymize_urls", saved.anonymize_urls)
+    numeric_id_enabled = _arg_bool(args, "numeric_id_enabled", saved_config.numeric_id_enabled)
     try:
-        digit_count = int(digit_count_raw)
+        digit_count = int(args.get("digit_count", saved_config.digit_count))
     except (ValueError, TypeError):
-        digit_count = 7
-    language = args.get("language", "en")
-    excel_generic_enabled = args.get("excel_generic_enabled", "true").lower() == "true"
-    excel_column_names_raw = args.get("excel_column_names", "").strip()
-    excel_column_names = [c.strip() for c in excel_column_names_raw.split(",") if c.strip()]
-    output_mode = args.get("output_mode", "prefix")
+        digit_count = saved_config.digit_count
+    language = args.get("language", saved.language)
+    excel_generic_enabled = _arg_bool(
+        args, "excel_generic_enabled", saved.excel_generic_enabled
+    )
+    if "excel_column_names" in args:
+        excel_column_names = [
+            c.strip() for c in args["excel_column_names"].split(",") if c.strip()
+        ]
+    else:
+        excel_column_names = saved.excel_column_names
+    output_mode = args.get("output_mode", saved.output_mode)
     if output_mode not in ("prefix", "subfolder"):
-        output_mode = "prefix"
-    pass_through_extensions = normalize_extensions(args.get("pass_through_extensions", "").strip())
+        output_mode = saved.output_mode
+    if "pass_through_extensions" in args:
+        pass_through_extensions = normalize_extensions(args["pass_through_extensions"].strip())
+    else:
+        pass_through_extensions = saved.pass_through_extensions
 
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
@@ -197,26 +199,6 @@ def process_folder():
             "keyref_csv_path": str(summary.keyref_csv_path) if summary.keyref_csv_path else None,
         })
 
-        # Persist settings after successful run
-        from app.services.pattern_config import PatternConfig
-        user_settings.language = language
-        user_settings.hashing_enabled = hashing_enabled
-        user_settings.anonymize_dates = anonymize_dates
-        user_settings.anonymize_locations = anonymize_locations
-        user_settings.anonymize_urls = anonymize_urls
-        if hashing_enabled and secret.strip():
-            user_settings.hashing_secret = secret
-        user_settings.pattern_config = PatternConfig(
-            digit_count=digit_count,
-            numeric_id_enabled=numeric_id_enabled,
-            check_file_names=check_file_names,
-        )
-        user_settings.excel_generic_enabled = excel_generic_enabled
-        user_settings.excel_column_names = excel_column_names
-        user_settings.output_mode = output_mode
-        user_settings.pass_through_extensions = pass_through_extensions
-        user_settings.save()
-
     return Response(stream(), mimetype="text/event-stream",
                     headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
@@ -231,32 +213,31 @@ def rename_folder():
     any content is read.
 
     Query parameters (narrower than process-folder — no excel/output_mode/
-    pass_through settings apply to a names-only pass):
-        folder_path, language, hashing_enabled, secret,
-        key_reference_enabled, anonymize_dates, anonymize_locations,
-        anonymize_urls, numeric_id_enabled, digit_count
+    pass_through settings apply to a names-only pass): folder_path, the archive
+    flags, and the per-run choices. Detection settings fall back to Settings.
 
     Streams the same event shapes as process-folder ("progress", "summary",
     "error").
     """
     args = request.args
+    saved = current_app.user_settings
+    saved_config = saved.pattern_config
 
     folder_path_str = args.get("folder_path", "").strip()
-    hashing_enabled = args.get("hashing_enabled", "false").lower() == "true"
-    secret = args.get("secret", "")
-    key_reference_enabled = args.get("key_reference_enabled", "false").lower() == "true"
-    anonymize_dates = args.get("anonymize_dates", "false").lower() == "true"
-    anonymize_locations = args.get("anonymize_locations", "false").lower() == "true"
-    anonymize_urls = args.get("anonymize_urls", "false").lower() == "true"
-    numeric_id_enabled = args.get("numeric_id_enabled", "false").lower() == "true"
-    expand_archives = args.get("expand_archives", "false").lower() == "true"
-    delete_archives = args.get("delete_archives_after_expand", "false").lower() == "true"
-    digit_count_raw = args.get("digit_count", "7")
+    hashing_enabled = _arg_bool(args, "hashing_enabled", saved.hashing_enabled)
+    secret = args.get("secret", saved.hashing_secret)
+    key_reference_enabled = _arg_bool(args, "key_reference_enabled", False)
+    anonymize_dates = _arg_bool(args, "anonymize_dates", saved.anonymize_dates)
+    anonymize_locations = _arg_bool(args, "anonymize_locations", saved.anonymize_locations)
+    anonymize_urls = _arg_bool(args, "anonymize_urls", saved.anonymize_urls)
+    numeric_id_enabled = _arg_bool(args, "numeric_id_enabled", saved_config.numeric_id_enabled)
+    expand_archives = _arg_bool(args, "expand_archives", False)
+    delete_archives = _arg_bool(args, "delete_archives_after_expand", False)
     try:
-        digit_count = int(digit_count_raw)
+        digit_count = int(args.get("digit_count", saved_config.digit_count))
     except (ValueError, TypeError):
-        digit_count = 7
-    language = args.get("language", "en")
+        digit_count = saved_config.digit_count
+    language = args.get("language", saved.language)
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
 
@@ -351,11 +332,31 @@ def rename_folder():
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _arg_bool(args, name: str, default: bool) -> bool:
+    """Read a "true"/"false" query parameter, falling back to a saved default.
+
+    An absent parameter means "use what is configured", not False. The earlier
+    version defaulted every detection flag off, so any caller that omitted one
+    silently ran with that detection disabled.
+    """
+    raw = args.get(name)
+    if raw is None:
+        return default
+    return raw.lower() == "true"
+
+
 def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
-    """Build ProcessingSettings from a request data dict; return (settings, error)."""
-    hashing_enabled = bool(data.get("hashing_enabled", False))
-    secret = data.get("secret", "")
-    language = data.get("language", "en")
+    """Build ProcessingSettings from a request data dict; return (settings, error).
+
+    Detection settings default to the saved Settings values. A request may
+    override any of them for that one run, but never writes back.
+    """
+    saved = current_app.user_settings
+    saved_config = saved.pattern_config
+
+    hashing_enabled = bool(data.get("hashing_enabled", saved.hashing_enabled))
+    secret = data.get("secret", saved.hashing_secret)
+    language = data.get("language", saved.language)
 
     if language not in _SUPPORTED_LANGUAGES:
         language = "en"
@@ -364,63 +365,40 @@ def _build_processing_settings(data: dict) -> tuple[ProcessingSettings, str]:
         return ProcessingSettings(), "Enter a secret phrase to use hashing."
 
     try:
-        digit_count = int(data.get("digit_count", 7))
+        digit_count = int(data.get("digit_count", saved_config.digit_count))
     except (ValueError, TypeError):
-        digit_count = 7
+        digit_count = saved_config.digit_count
 
-    excel_column_names_raw = data.get("excel_column_names", "").strip()
-    excel_column_names = [c.strip() for c in excel_column_names_raw.split(",") if c.strip()]
-
-    from flask import current_app
-    known_values = current_app.user_settings.known_values
-    loading_strategy = current_app.user_settings.loading_strategy
+    if "excel_column_names" in data:
+        raw = str(data["excel_column_names"])
+        excel_column_names = [c.strip() for c in raw.split(",") if c.strip()]
+    else:
+        excel_column_names = saved.excel_column_names
 
     return ProcessingSettings(
         hashing_enabled=hashing_enabled,
         secret=secret,
         key_reference_enabled=bool(data.get("key_reference_enabled", False)),
-        check_file_names=bool(data.get("check_file_names", False)),
+        check_file_names=bool(
+            data.get("check_file_names", saved_config.check_file_names)
+        ),
         language=language,
-        anonymize_dates=bool(data.get("anonymize_dates", False)),
-        anonymize_locations=bool(data.get("anonymize_locations", False)),
-        anonymize_urls=bool(data.get("anonymize_urls", False)),
-        numeric_id_enabled=bool(data.get("numeric_id_enabled", False)),
+        anonymize_dates=bool(data.get("anonymize_dates", saved.anonymize_dates)),
+        anonymize_locations=bool(
+            data.get("anonymize_locations", saved.anonymize_locations)
+        ),
+        anonymize_urls=bool(data.get("anonymize_urls", saved.anonymize_urls)),
+        numeric_id_enabled=bool(
+            data.get("numeric_id_enabled", saved_config.numeric_id_enabled)
+        ),
         digit_count=digit_count,
-        excel_generic_enabled=bool(data.get("excel_generic_enabled", True)),
+        excel_generic_enabled=bool(
+            data.get("excel_generic_enabled", saved.excel_generic_enabled)
+        ),
         excel_column_names=excel_column_names,
-        known_values=known_values,
-        loading_strategy=loading_strategy,
+        known_values=saved.known_values,
+        loading_strategy=saved.loading_strategy,
     ), ""
-
-
-def _persist_settings(data: dict) -> None:
-    """Save language, hashing, date, and pattern settings from a request to UserSettings."""
-    from app.services.pattern_config import PatternConfig
-    user_settings = current_app.user_settings
-    language = data.get("language", "en")
-    if language in _SUPPORTED_LANGUAGES:
-        user_settings.language = language
-    user_settings.hashing_enabled = bool(data.get("hashing_enabled", False))
-    user_settings.anonymize_dates = bool(data.get("anonymize_dates", False))
-    user_settings.anonymize_locations = bool(data.get("anonymize_locations", False))
-    user_settings.anonymize_urls = bool(data.get("anonymize_urls", False))
-    secret = data.get("secret", "")
-    if data.get("hashing_enabled") and secret.strip():
-        user_settings.hashing_secret = secret
-    try:
-        digit_count = int(data.get("digit_count", 7))
-    except (ValueError, TypeError):
-        digit_count = 7
-    numeric_id_enabled = bool(data.get("numeric_id_enabled", False))
-    user_settings.pattern_config = PatternConfig(
-        digit_count=digit_count,
-        numeric_id_enabled=numeric_id_enabled,
-        check_file_names=bool(data.get("check_file_names", False)),
-    )
-    user_settings.excel_generic_enabled = bool(data.get("excel_generic_enabled", True))
-    excel_col_raw = data.get("excel_column_names", "").strip()
-    user_settings.excel_column_names = [c.strip() for c in excel_col_raw.split(",") if c.strip()]
-    user_settings.save()
 
 
 def _sse(data: dict) -> str:

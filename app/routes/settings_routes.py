@@ -2,6 +2,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+from app.services.folder_processor import normalize_extensions
 from app.services.user_settings import MAX_PORT, MIN_PORT
 
 bp = Blueprint("settings", __name__)
@@ -34,6 +35,17 @@ def settings_page():
         max_port=MAX_PORT,
         languages=languages_view,
         loading_strategy=settings.loading_strategy,
+        hashing_enabled=settings.hashing_enabled,
+        hashing_secret=settings.hashing_secret,
+        default_language=settings.language,
+        anonymize_dates=settings.anonymize_dates,
+        anonymize_locations=settings.anonymize_locations,
+        anonymize_urls=settings.anonymize_urls,
+        pattern_config=settings.pattern_config,
+        excel_generic_enabled=settings.excel_generic_enabled,
+        excel_column_names=", ".join(settings.excel_column_names),
+        output_mode=settings.output_mode,
+        pass_through_extensions=", ".join(settings.pass_through_extensions),
         ai_mode_enabled=settings.ai_mode_enabled,
         ai_api_token=settings.ai_api_token,
         ai_session_timeout_minutes=settings.ai_session_timeout_minutes,
@@ -309,6 +321,151 @@ def update_loading_strategy():
     settings.save()
 
     return jsonify({"loading_strategy": settings.loading_strategy})
+
+
+@bp.route("/settings/hashing", methods=["POST"])
+def set_hashing():
+    """Enable or disable hashed placeholders and store the secret.
+
+    Hashing is a single global choice rather than a per-mode one. The secret is
+    what makes a placeholder stable: the same value under the same secret always
+    encodes to the same token, so a subject keeps one identity across documents,
+    across modes and across sessions. Setting it per mode would have broken that
+    the moment two modes disagreed.
+
+    Body: {"enabled": true, "secret": "..."}
+    Returns {"enabled": bool, "secret": str} or {"error": str} with 400.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    enabled = bool(data.get("enabled", False))
+    settings = current_app.user_settings
+    secret = str(data.get("secret", settings.hashing_secret))
+
+    if enabled and not secret.strip():
+        return jsonify({"error": "Enter a secret phrase to use hashing."}), 400
+
+    settings.hashing_enabled = enabled
+    # Kept even when hashing is switched off, so turning it back on later
+    # reproduces the same placeholders rather than a fresh, unrelated set.
+    if secret.strip():
+        settings.hashing_secret = secret
+    settings.save()
+
+    return jsonify({
+        "enabled": settings.hashing_enabled,
+        "secret": settings.hashing_secret,
+    })
+
+
+@bp.route("/settings/detection", methods=["POST"])
+def set_detection():
+    """Update what counts as PII: dates, locations, URLs, numeric IDs, file names.
+
+    These describe the user's definition of an identifying value, which cannot
+    sensibly differ between pasting text, processing a folder, and serving an AI
+    agent. They are therefore stored once here and read by every mode, rather
+    than being posted with each run.
+
+    Body: any subset of {"anonymize_dates": bool, "anonymize_locations": bool,
+    "anonymize_urls": bool, "numeric_id_enabled": bool, "digit_count": int,
+    "check_file_names": bool}
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    settings = current_app.user_settings
+    config = settings.pattern_config
+
+    if "anonymize_dates" in data:
+        settings.anonymize_dates = bool(data["anonymize_dates"])
+    if "anonymize_locations" in data:
+        settings.anonymize_locations = bool(data["anonymize_locations"])
+    if "anonymize_urls" in data:
+        settings.anonymize_urls = bool(data["anonymize_urls"])
+    if "numeric_id_enabled" in data:
+        config.numeric_id_enabled = bool(data["numeric_id_enabled"])
+    if "check_file_names" in data:
+        config.check_file_names = bool(data["check_file_names"])
+    if "digit_count" in data:
+        try:
+            config.digit_count = int(data["digit_count"])
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    settings.pattern_config = config
+    settings.save()
+
+    return jsonify({
+        "anonymize_dates": settings.anonymize_dates,
+        "anonymize_locations": settings.anonymize_locations,
+        "anonymize_urls": settings.anonymize_urls,
+        "numeric_id_enabled": settings.pattern_config.numeric_id_enabled,
+        "digit_count": settings.pattern_config.digit_count,
+        "check_file_names": settings.pattern_config.check_file_names,
+    })
+
+
+@bp.route("/settings/excel", methods=["POST"])
+def set_excel():
+    """Update Excel handling: generic NER on string cells, and by-column overrides.
+
+    Body: any subset of {"excel_generic_enabled": bool, "excel_column_names": "a, b"}
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    settings = current_app.user_settings
+
+    if "excel_generic_enabled" in data:
+        settings.excel_generic_enabled = bool(data["excel_generic_enabled"])
+    if "excel_column_names" in data:
+        raw = str(data["excel_column_names"])
+        settings.excel_column_names = [c.strip() for c in raw.split(",") if c.strip()]
+
+    settings.save()
+    return jsonify({
+        "excel_generic_enabled": settings.excel_generic_enabled,
+        "excel_column_names": ", ".join(settings.excel_column_names),
+    })
+
+
+@bp.route("/settings/folder-output", methods=["POST"])
+def set_folder_output():
+    """Update where folder-mode output goes and which extensions bypass scanning.
+
+    Body: any subset of {"output_mode": "prefix"|"subfolder",
+    "pass_through_extensions": ".sql, .mp4"}
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    settings = current_app.user_settings
+
+    if "output_mode" in data:
+        try:
+            settings.output_mode = str(data["output_mode"])
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+    if "pass_through_extensions" in data:
+        settings.pass_through_extensions = normalize_extensions(
+            str(data["pass_through_extensions"])
+        )
+
+    settings.save()
+    return jsonify({
+        "output_mode": settings.output_mode,
+        "pass_through_extensions": ", ".join(settings.pass_through_extensions),
+    })
+
+
+@bp.route("/settings/default-language", methods=["POST"])
+def set_default_language():
+    """Set the language each mode starts on. Modes may still override per run.
+
+    Body: {"language": "en"|"nl"}
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    settings = current_app.user_settings
+    try:
+        settings.language = str(data.get("language", ""))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    settings.save()
+    return jsonify({"language": settings.language})
 
 
 @bp.route("/settings/ai-mode", methods=["POST"])

@@ -2,6 +2,7 @@ import re
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+from app.routes import build_detection_summary
 from app.services.anonymizer import (
     ENTITIES,
     LOCATION_ENTITY,
@@ -63,15 +64,22 @@ def text_mode():
 def anonymize():
     """Anonymize submitted text and return the result as JSON.
 
+    Every detection setting is stored in Settings and shared by all modes, so a
+    request only needs to carry the text and the per-run choices. Each field is
+    still accepted per-request for API callers, but omitting one now inherits
+    the saved value rather than silently disabling that detection.
+
     Expects JSON body:
         text                     (str)  — the text to anonymize
-        language                 (str)  — 'en' or 'nl', user-selected
-        hashing_enabled          (bool)
-        secret                   (str)  — required when hashing_enabled is true
-        key_reference_enabled    (bool)
-        anonymize_dates          (bool) — include DATE_TIME entities; default false
-        numeric_id_enabled   (bool) — detect student numbers; default false
-        digit_count              (int)  — exact digit count for student numbers
+        language                 (str)  — 'en' or 'nl'; defaults to the saved language
+        key_reference_enabled    (bool) — per-run; not saved
+        hashing_enabled          (bool) — optional override of the saved setting
+        secret                   (str)  — optional override of the saved secret
+        anonymize_dates          (bool) — optional override
+        anonymize_locations      (bool) — optional override
+        anonymize_urls           (bool) — optional override
+        numeric_id_enabled       (bool) — optional override
+        digit_count              (int)  — optional override
 
     Returns JSON:
         anonymized_text   (str)
@@ -80,19 +88,26 @@ def anonymize():
         error             (str)  — present only on validation error
     """
     data = request.get_json(force=True, silent=True) or {}
+    settings = current_app.user_settings
+    saved_config = settings.pattern_config
+
     text: str = data.get("text", "")
-    language: str = data.get("language", "en")
-    hashing_enabled: bool = bool(data.get("hashing_enabled", False))
-    secret: str = data.get("secret", "")
+    language: str = data.get("language", settings.language)
+    hashing_enabled: bool = bool(data.get("hashing_enabled", settings.hashing_enabled))
+    secret: str = data.get("secret", settings.hashing_secret)
     key_reference_enabled: bool = bool(data.get("key_reference_enabled", False))
-    anonymize_dates: bool = bool(data.get("anonymize_dates", False))
-    anonymize_locations: bool = bool(data.get("anonymize_locations", False))
-    anonymize_urls: bool = bool(data.get("anonymize_urls", False))
-    numeric_id_enabled: bool = bool(data.get("numeric_id_enabled", False))
+    anonymize_dates: bool = bool(data.get("anonymize_dates", settings.anonymize_dates))
+    anonymize_locations: bool = bool(
+        data.get("anonymize_locations", settings.anonymize_locations)
+    )
+    anonymize_urls: bool = bool(data.get("anonymize_urls", settings.anonymize_urls))
+    numeric_id_enabled: bool = bool(
+        data.get("numeric_id_enabled", saved_config.numeric_id_enabled)
+    )
     try:
-        digit_count = int(data.get("digit_count", 7))
+        digit_count = int(data.get("digit_count", saved_config.digit_count))
     except (ValueError, TypeError):
-        digit_count = 7
+        digit_count = saved_config.digit_count
 
     if not text.strip():
         return jsonify({"anonymized_text": "", "entities": [], "key_reference": []})
@@ -106,14 +121,13 @@ def anonymize():
     entities_to_detect = _build_entity_list(anonymize_dates, numeric_id_enabled, anonymize_urls, anonymize_locations)
 
     ad_hoc: list = []
-    known_values = current_app.user_settings.known_values
+    known_values = settings.known_values
     if known_values:
         ad_hoc.extend(build_known_value_recognizers(known_values, language))
     if numeric_id_enabled:
         config = PatternConfig(digit_count=digit_count)
         ad_hoc.append(build_numeric_id_recognizer(config, language))
 
-    settings = current_app.user_settings
     try:
         current_app.language_detector.ensure_loaded(language, settings.loading_strategy)
     except LanguageNotLoadedError as exc:
@@ -155,21 +169,9 @@ def anonymize():
             "placeholder": placeholder,
         })
 
-    # Persist settings
-    settings = current_app.user_settings
-    settings.language = language
-    settings.hashing_enabled = hashing_enabled
-    settings.anonymize_dates = anonymize_dates
-    settings.anonymize_locations = anonymize_locations
-    settings.anonymize_urls = anonymize_urls
-    if hashing_enabled and secret.strip():
-        settings.hashing_secret = secret
-    settings.pattern_config = PatternConfig(
-        digit_count=digit_count,
-        numeric_id_enabled=numeric_id_enabled,
-    )
-    settings.save()
-
+    # Nothing is persisted here. Settings is the only writer: a run reads the
+    # saved configuration and leaves it exactly as it found it, so one request
+    # can never change what a later run in another mode does.
     key_reference = []
     if key_reference_enabled:
         seen: set[tuple[str, str]] = set()
@@ -193,11 +195,6 @@ def _render_text_mode(prefill_text: str = ""):
         "text_mode.html",
         active_mode="text",
         language=settings.language,
-        hashing_enabled=settings.hashing_enabled,
-        hashing_secret=settings.hashing_secret,
-        anonymize_dates=settings.anonymize_dates,
-        anonymize_locations=settings.anonymize_locations,
-        anonymize_urls=settings.anonymize_urls,
-        pattern_config=settings.pattern_config,
+        detection_summary=build_detection_summary(settings),
         prefill_text=prefill_text,
     )

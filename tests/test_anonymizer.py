@@ -1,5 +1,6 @@
 """Tests for LanguageDetector and Anonymizer service classes."""
 
+import re
 import pytest
 
 from presidio_analyzer import Pattern, PatternRecognizer
@@ -531,3 +532,61 @@ class TestKnownValuesAreGroupedPerEntityType:
 
         assert len(recognizers) == 2
         assert {r.supported_entities[0] for r in recognizers} == {"PERSON", "NUMERIC_ID"}
+
+
+class TestOverlappingDetectionsDoNotCorruptOutput:
+    """Overlapping spans must produce one placeholder, not two interleaved ones.
+
+    Regression guard: with a surname-only known values list, NER reports the
+    full name and the known value reports the surname inside it. Both spans
+    were replaced, so "Din Bakker submitted" came out as "[PERSON_1]N_2]
+    submitted" — output no restore pass can map back.
+    """
+
+    def test_known_value_inside_an_ner_span_produces_one_placeholder(self) -> None:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Bakker", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Din Bakker submitted the report late.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert result.anonymized_text == "[PERSON_1] submitted the report late."
+
+    def test_no_malformed_placeholder_survives_in_the_output(self) -> None:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Bakker", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "I spoke to Bakker about it, and Din Bakker agreed.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        # Every "]" must close a "[" that opened a well-formed placeholder.
+        assert re.fullmatch(
+            r"[^\[\]]*(?:\[[A-Z_]+_\d+\][^\[\]]*)*", result.anonymized_text
+        ), result.anonymized_text
+        assert "Bakker" not in result.anonymized_text
+
+    def test_the_wider_span_wins_over_the_higher_scoring_narrow_one(self) -> None:
+        """A known value scores 0.99 and NER ~0.85, so score alone would shrink
+        the span down to the surname and leave the first name in the clear."""
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Bakker", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Din Bakker submitted the report late.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert "Din" not in result.anonymized_text

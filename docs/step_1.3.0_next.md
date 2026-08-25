@@ -960,6 +960,9 @@ was tested, and on whose data, stays out of this repository.
 | 4 | Pre-test 2 — known values | Known values were reachable only from the Text and Document panels, not from Settings as the setup steps describe | No | Fixed |
 | 5 | Pre-test 2 — known values | A roster-scale import built one recognizer per value and rendered one tag per value, making both matching and the settings page scale badly | No | Fixed |
 | 6 | Pre-test 4 — rename-only pass | Archives were left packed, so their member names never reached the rename and the step 5 gate could pass a tree that still held real names | Yes | Fixed |
+| 7 | Pre-test 4 — rename-only pass | Two detections covering overlapping spans were both replaced, producing malformed placeholders that no restore pass could map back to a real value | Yes | Fixed |
+| 8 | Pre-test 6 — settings | Hashing was configured per mode rather than in Settings, so the same subject could encode to different placeholders depending on which mode reached them | No | Fixed |
+| 9 | Pre-test 6 — settings | Detection, Excel and folder-output settings lived on the mode pages and were written back by each run, so one run could silently change what a later run in another mode did | Yes | Fixed |
 
 ### ✅ Complete when
 
@@ -1025,6 +1028,14 @@ means the release notes shouldn't claim AI Mode has been proven on real data.
 | `/ai/extract` on image-only PDF page | `warnings` entry returned; no silent pass-through |
 | `/ai/restore` with `output_path` | File written; response carries status and path only, no restored content |
 | `/ai/flag-term` | Value appears in Settings known values and applies on the next extraction |
+| Overlapping detections in one span | A single placeholder is emitted, never a malformed one built from two overlapping replacements |
+| Settings is the only writer | A Text or Document run leaves `user_settings.json` byte-for-byte unchanged |
+| Settings > Detection | Dates, URLs, locations, numeric ID and file-name checking save immediately and apply in Text, Document and AI mode alike |
+| Settings > Hashing | Secret set once; the same value encodes to the same placeholder in every mode and after a restart |
+| Settings > Excel | Generic NER and column overrides save immediately and apply to a Document Mode run |
+| Settings > Folder output | Output mode and pass-through extensions save immediately and apply to a Document Mode folder run |
+| Settings > Default language | Each mode opens on the saved language; a per-run switch does not change the default |
+| Mode-page detection summary | Text and Document mode describe what will be detected and link to Settings, with nothing editable in two places |
 
 ---
 

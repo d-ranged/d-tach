@@ -346,20 +346,36 @@ class Anonymizer:
 
     @staticmethod
     def _resolve_overlaps(results: list) -> list:
-        """Remove lower-confidence duplicates when NUMERIC_ID overlaps another entity.
+        """Keep one detection per overlapping span, preferring the widest.
 
-        When numeric ID detection is active with a digit count matching a phone
-        number length, Presidio fires both NUMERIC_ID and PHONE_NUMBER on the
-        same span. This resolver keeps only the higher-confidence detection for
-        any overlapping spans — but only when NUMERIC_ID is actually present in
-        results, so it has no effect on normal processing without numeric ID enabled.
+        Two recognizers routinely fire on overlapping spans:
+
+        - A known value and NER on the same name. A surname-only roster makes
+          this the normal case rather than the exception: NER reports "Din
+          Bakker" while the known value reports "Bakker".
+        - NUMERIC_ID and PHONE_NUMBER, when the configured digit count matches
+          a phone number length.
+
+        Left unresolved, both spans get replaced and the output is corrupted —
+        "Din Bakker" came out as "[PERSON_1]N_2]", which no restore pass can
+        map back.
+
+        The widest span wins, with confidence as the tie-break. Preferring the
+        wider span rather than the higher score matters: a known value scores
+        0.99 and NER around 0.85, so scoring first would let a surname-only
+        roster shrink every full name down to its surname and leave the first
+        name standing in text NER had already covered. Anonymizing more than
+        strictly needed is the safe direction to err in; anonymizing less is not.
         """
-        if not any(r.entity_type == NUMERIC_ID_ENTITY for r in results):
-            return results
-
-        sorted_by_conf = sorted(results, key=lambda r: r.score, reverse=True)
+        ordered = sorted(
+            results,
+            # Start position last, purely so the result is deterministic when
+            # two spans are the same width and score.
+            key=lambda r: (r.end - r.start, r.score, -r.start),
+            reverse=True,
+        )
         accepted: list = []
-        for result in sorted_by_conf:
+        for result in ordered:
             if not any(r.start < result.end and result.start < r.end for r in accepted):
                 accepted.append(result)
         return accepted
