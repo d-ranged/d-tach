@@ -34,6 +34,11 @@ const browseFolderNote  = document.getElementById("browse-folder-note");
 const processFolderBtn  = document.getElementById("process-folder-btn");
 const cancelBtn         = document.getElementById("cancel-btn");
 const renameOnlyToggle      = document.getElementById("rename-only-toggle");
+const expandArchivesToggle  = document.getElementById("expand-archives-toggle");
+const expandArchivesRow     = document.getElementById("expand-archives-row");
+const expandArchivesHint    = document.getElementById("expand-archives-hint");
+const deleteArchivesToggle  = document.getElementById("delete-archives-toggle");
+const deleteArchivesRow     = document.getElementById("delete-archives-row");
 const folderContentOptions  = document.getElementById("folder-content-options");
 
 // ---- Tabs ----
@@ -223,9 +228,16 @@ processFolderBtn.addEventListener("click", runProcessFolder);
 folderPathInput.addEventListener("keydown", e => { if (e.key === "Enter") runProcessFolder(); });
 cancelBtn.addEventListener("click", cancelFolderProcessing);
 
+expandArchivesToggle.addEventListener("change", () => {
+    deleteArchivesRow.hidden = !expandArchivesToggle.checked;
+});
+
 renameOnlyToggle.addEventListener("change", () => {
     folderContentOptions.hidden = renameOnlyToggle.checked;
     processFolderBtn.textContent = renameOnlyToggle.checked ? "Rename Names Only" : "Process Folder";
+    expandArchivesRow.hidden = !renameOnlyToggle.checked;
+    expandArchivesHint.hidden = !renameOnlyToggle.checked;
+    deleteArchivesRow.hidden = !renameOnlyToggle.checked || !expandArchivesToggle.checked;
 });
 
 function runProcessFolder() {
@@ -262,7 +274,11 @@ function runProcessFolder() {
 
     const endpoint = renameOnly ? "/document/rename-folder" : "/document/process-folder";
     const params = renameOnly
-        ? new URLSearchParams(commonParams)
+        ? new URLSearchParams({
+            ...commonParams,
+            expand_archives: expandArchivesToggle.checked,
+            delete_archives_after_expand: deleteArchivesToggle.checked,
+        })
         : new URLSearchParams({
             ...commonParams,
             check_file_names: namesToggle.checked,
@@ -281,6 +297,20 @@ function runProcessFolder() {
             setProgress(data.message, true);
             finishFolderProcessing();
             return;
+        }
+
+        if (data.type === "archive") {
+            const label = data.status === "expanded"
+                ? `Expanded ${data.file_name} → ${data.destination} (${data.member_count} files)`
+                : `Could not expand ${data.file_name}: ${data.error_message}`;
+            setProgress(label);
+            appendLogEntry({
+                status: data.status === "expanded" ? "anonymized" : "error",
+                file_name: data.file_name,
+                entities_found: data.member_count,
+                error_message: data.error_message,
+                warnings: [],
+            });
         }
 
         if (data.type === "progress") {

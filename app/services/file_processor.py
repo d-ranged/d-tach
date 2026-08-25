@@ -127,6 +127,8 @@ class ProcessingSettings:
     known_values: list[dict] = field(default_factory=list)
     pass_through_extensions: list[str] = field(default_factory=list)
     loading_strategy: str = "eager"  # "eager" | "lazy"
+    expand_archives: bool = False
+    delete_archives_after_expand: bool = False
 
 
 @dataclass

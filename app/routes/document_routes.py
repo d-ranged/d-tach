@@ -249,6 +249,8 @@ def rename_folder():
     anonymize_locations = args.get("anonymize_locations", "false").lower() == "true"
     anonymize_urls = args.get("anonymize_urls", "false").lower() == "true"
     numeric_id_enabled = args.get("numeric_id_enabled", "false").lower() == "true"
+    expand_archives = args.get("expand_archives", "false").lower() == "true"
+    delete_archives = args.get("delete_archives_after_expand", "false").lower() == "true"
     digit_count_raw = args.get("digit_count", "7")
     try:
         digit_count = int(digit_count_raw)
@@ -292,7 +294,22 @@ def rename_folder():
             digit_count=digit_count,
             known_values=user_settings.known_values,
             loading_strategy=user_settings.loading_strategy,
+            expand_archives=expand_archives,
+            delete_archives_after_expand=delete_archives,
         )
+
+        # Archives are expanded first so that files which only existed inside one
+        # are renamed and enumerable like everything else in the tree.
+        for archive in folder_processor.expand_archives(folder, processing_settings):
+            yield _sse({
+                "type": "archive",
+                "status": archive.status,
+                "file_name": archive.source_path.name,
+                "destination": archive.destination.name if archive.destination else "",
+                "member_count": archive.member_count,
+                "deleted_source": archive.deleted_source,
+                "error_message": archive.error_message,
+            })
 
         all_results = []
         for result, n, total in folder_processor.rename_in_place(folder, processing_settings):

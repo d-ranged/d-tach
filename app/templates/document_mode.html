@@ -185,6 +185,21 @@
             </label>
         </div>
         <p class="advanced-hint">Renames every file and folder name in the tree in place. No content is read or rewritten, and no <code>anonymized/</code> output folder is created. Use this to make a folder safe to enumerate before pointing AI Mode at it.</p>
+        <div class="advanced-setting-row" id="expand-archives-row" hidden>
+            <label class="toggle">
+                <input type="checkbox" id="expand-archives-toggle">
+                <span class="toggle-track"></span>
+                <span class="setting-label">Expand archives first — unzip before renaming.</span>
+            </label>
+        </div>
+        <p class="advanced-hint" id="expand-archives-hint" hidden>Extracts every <code>.zip</code> and <code>.tar</code> under the folder into a folder beside it, including archives nested inside other archives, then renames the results along with everything else. Without this a zipped subfolder keeps its real contents and nothing enumerating the tree can tell what it is not seeing.</p>
+        <div class="advanced-setting-row" id="delete-archives-row" hidden>
+            <label class="toggle">
+                <input type="checkbox" id="delete-archives-toggle">
+                <span class="toggle-track"></span>
+                <span class="setting-label">Delete each archive once expanded.</span>
+            </label>
+        </div>
         <div class="folder-input-row">
             <input
                 type="text"
