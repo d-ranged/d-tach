@@ -474,3 +474,60 @@ class TestKnownValuesMatchWholeWordsOnly:
         )
 
         assert "Din" not in result.anonymized_text
+
+
+class TestKnownValuesAreGroupedPerEntityType:
+    """A large class list must not become one recognizer per value.
+
+    A roster of 500 students with a name column and a number column produces
+    over a thousand known values. One recognizer each means Presidio makes a
+    thousand separate passes over every document processed.
+    """
+
+    def test_many_values_of_one_type_share_a_single_recognizer(self) -> None:
+        values = [{"value": f"Student {n}", "entity_type": "PERSON"} for n in range(500)]
+
+        recognizers = build_known_value_recognizers(values, "en")
+
+        assert len(recognizers) == 1
+
+    def test_values_differing_only_in_case_are_deduplicated(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "Craig Bradley", "entity_type": "PERSON"},
+                {"value": "craig bradley", "entity_type": "PERSON"},
+            ],
+            "en",
+        )
+
+        assert len(recognizers) == 1
+        assert recognizers[0].patterns[0].regex.count("|") == 0
+
+    def test_longer_value_wins_over_a_shorter_one_that_prefixes_it(self) -> None:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "An", "entity_type": "PERSON"},
+                {"value": "An Nguyen", "entity_type": "PERSON"},
+            ],
+            "en",
+        )
+
+        result = anonymizer.anonymize(
+            "An Nguyen submitted the form.", language="en", ad_hoc_recognizers=recognizers
+        )
+
+        assert "Nguyen" not in result.anonymized_text
+
+    def test_each_entity_type_still_gets_its_own_recognizer(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "Craig Bradley", "entity_type": "PERSON"},
+                {"value": "Ann Other", "entity_type": "PERSON"},
+                {"value": "123456", "entity_type": "NUMERIC_ID"},
+            ],
+            "en",
+        )
+
+        assert len(recognizers) == 2
+        assert {r.supported_entities[0] for r in recognizers} == {"PERSON", "NUMERIC_ID"}

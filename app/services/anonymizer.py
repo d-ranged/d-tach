@@ -141,27 +141,48 @@ def build_numeric_id_recognizer(
 def build_known_value_recognizers(
     known_values: list[dict], language: str
 ) -> list[PatternRecognizer]:
-    """Return one high-confidence PatternRecognizer per known value.
+    """Return one high-confidence PatternRecognizer per entity type.
 
     Each known_values entry is a dict {"value": str, "entity_type": str, ...}.
-    Each recognizer matches its value case-insensitively as a whole word and
-    assigns its entry's entity_type (default PERSON) with confidence 0.99.
-    Recognizers are prepended before NER so known values are always caught
-    regardless of model detection.
+    Values are matched case-insensitively as whole words and assigned their
+    entry's entity_type (default PERSON) with confidence 0.99. Recognizers are
+    prepended before NER so known values are always caught regardless of model
+    detection.
+
+    All values sharing an entity type are combined into a single alternation
+    rather than getting a recognizer each. A class list of 500 students expands
+    to well over a thousand known values, and a thousand recognizers means a
+    thousand separate passes over every document. Grouping keeps that to one
+    pass per entity type.
     """
-    recognizers: list[PatternRecognizer] = []
+    values_by_entity: dict[str, list[str]] = {}
+    seen: set[tuple[str, str]] = set()
     for entry in known_values:
         value = str(entry.get("value", "")).strip()
         if not value:
             continue
         entity_type = str(entry.get("entity_type") or "PERSON")
+        # Matching is case-insensitive, so values differing only in case are
+        # duplicates and would otherwise bloat the alternation.
+        key = (entity_type, value.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        values_by_entity.setdefault(entity_type, []).append(value)
+
+    recognizers: list[PatternRecognizer] = []
+    for entity_type, values in values_by_entity.items():
+        # Longest first: alternation returns the first branch that matches, so
+        # without this "An" would win over "An Nguyen" and leave the surname.
+        values.sort(key=len, reverse=True)
+        alternation = "|".join(re.escape(value) for value in values)
         # Lookarounds rather than word-boundary escapes: they behave correctly
         # even when the value starts or ends with a non-word character. Without
         # them a short known value such as "An" matches inside "Thank", "and"
         # and "standard", corrupting ordinary words throughout the document.
         pattern = Pattern(
-            name=f"KNOWN_{re.sub(r'[^A-Z0-9]', '_', value.upper())[:30]}",
-            regex=rf"(?<!\w){re.escape(value)}(?!\w)",
+            name=f"KNOWN_{entity_type}",
+            regex=rf"(?<!\w)(?:{alternation})(?!\w)",
             score=0.99,
         )
         recognizers.append(

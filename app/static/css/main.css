@@ -919,3 +919,17 @@ details[open] .advanced-settings-toggle::before {
     color: var(--color-text);
     min-width: 180px;
 }
+
+/* ---- Known values: pointer from the modes, and imported-value search ---- */
+
+.known-values-pointer {
+    margin: 0 0 1rem;
+}
+
+#imported-values-results {
+    margin-top: 0.6rem;
+    max-height: 220px;
+    overflow-y: auto;
+    align-items: flex-start;
+    align-content: flex-start;
+}

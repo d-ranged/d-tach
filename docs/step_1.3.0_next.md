@@ -874,7 +874,10 @@ must be tested and what counts as a pass; it does not record whose data was used
 4. **Rename-only pass.** Run Document Mode's "Rename names only" over that folder once, with
    KEYREF export enabled. File contents stay real and untouched on disk; only paths change.
    The KEYREF is the tester's only route from a renamed folder back to a real subject, and is
-   never shown to the assistant.
+   never shown to the assistant. Tick **"Expand archives first"** on the same pass if the
+   folder holds any `.zip` or `.tar`: an archive that stays packed hides both its contents and
+   its member names from the rename, so step 5's check would pass over a tree that still holds
+   real names inside it.
 5. **Verify the tree by hand.** List the working folder and read every path. No name, no
    identifier, no email address in any file or folder name. If one survives, add it to known
    values and re-run the pass before going further. This check is the gate, and the assistant
@@ -946,6 +949,18 @@ matter are gone by the end. Per entry: which step or feature, what happened, wha
 and whether it blocked the work or was worked around. This log is the release evidence.
 Anything in it marked as a blocker is a v1.3.0 fix, not a v1.4.0 backlog item.
 
+**Run in progress — issue #70.** Entries below record the defect and its outcome only. What
+was tested, and on whose data, stays out of this repository.
+
+| # | Step / feature | Defect | Blocker | Status |
+|---|---|---|---|---|
+| 1 | Pre-test 1 — launcher | Launcher completed setup but no app reached the screen; the tray process died before the server thread started | Yes | Fixed |
+| 2 | Pre-test 1 — launcher | First run installed dependencies but did not go on to start the app; a second run was needed | No | Fixed |
+| 3 | Pre-test 2 — known values | A known value matched inside longer ordinary words, corrupting prose and registering false replacements that `/ai/restore` would put back mid-word | Yes | Fixed |
+| 4 | Pre-test 2 — known values | Known values were reachable only from the Text and Document panels, not from Settings as the setup steps describe | No | Fixed |
+| 5 | Pre-test 2 — known values | A roster-scale import built one recognizer per value and rendered one tag per value, making both matching and the settings page scale badly | No | Fixed |
+| 6 | Pre-test 4 — rename-only pass | Archives were left packed, so their member names never reached the rename and the step 5 gate could pass a tree that still held real names | Yes | Fixed |
+
 ### ✅ Complete when
 
 - A complete real task is done through AI Mode start to finish, without falling back to the
@@ -996,7 +1011,14 @@ means the release notes shouldn't claim AI Mode has been proven on real data.
 | Imported Numeric ID entry | Anonymizes as `[NUMERIC_ID_N]`, not `[PERSON_N]` |
 | Class list re-sync | Only new rows added; no duplicates |
 | Clear class list values | Only `source: class_list` entries removed; manual entries remain |
+| Known values in Settings | Manage and import from Settings; the same list applies in Text, Document and AI mode |
+| Roster-scale import | A class-list-sized import stays responsive; imported values reachable by search rather than listed in full |
+| Known value inside a longer word | Never matched — a value like "An" leaves "Thank", "and" and "standard" alone |
 | Rename-only pass | Paths anonymized in place; file contents byte-for-byte unchanged; no `anonymized/` tree created |
+| Expand archives first | Every `.zip`/`.tar` under the folder extracted beside itself, nested archives included, before the rename runs |
+| Expand archives — name collision | An existing folder of the same name is never overwritten; the extraction lands beside it |
+| Expand archives — hostile member path | A member pointing outside its destination is refused, not written |
+| Delete each archive once expanded | Off by default; when on, only archives that expanded cleanly are removed |
 | `/ai/*` with AI Mode off | 404, not 403 |
 | `/ai/*` with wrong or missing token | Rejected |
 | `/ai/extract` over inline limit | Returns `anonymized_text_path`; `anonymized_text` omitted |

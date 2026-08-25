@@ -7,7 +7,12 @@
 
     if (!input || !addBtn || !tagsContainer) return;
 
-    const EMPTY_HTML = '<span class="muted">No known values yet — add names that are consistently missed by the anonymizer, or import a class list below.</span>';
+    const EMPTY_HTML = '<span class="muted">No values added by hand yet &mdash; add names that are consistently missed by the anonymizer, or import a class list below.</span>';
+
+    // A class list of 500 students expands to well over a thousand values.
+    // Rendering a tag each locks the page up, so imported values are shown as a
+    // count and reached through search instead.
+    const MAX_SEARCH_RESULTS = 100;
 
     const ENTITY_LABELS = {
         PERSON: "Person name",
@@ -22,32 +27,110 @@
     // Reassigned below when the class list import UI is present on this page.
     let renderClassListState = function () {};
 
+    let importedValues = [];
+
     function escapeHtml(str) {
         const div = document.createElement("div");
         div.appendChild(document.createTextNode(str));
         return div.innerHTML;
     }
 
+    function buildTag(entry) {
+        const tag = document.createElement("span");
+        tag.className = "known-name-tag";
+        const typeLabel = ENTITY_LABELS[entry.entity_type] || entry.entity_type;
+        const sourceLabel = SOURCE_LABELS[entry.source] || entry.source;
+        tag.innerHTML = escapeHtml(entry.value) +
+            ' <span class="known-name-type" title="' + escapeHtml(sourceLabel) + '">' + escapeHtml(typeLabel) + '</span>' +
+            ' <button class="known-name-remove" title="Remove">&times;</button>';
+        tag.querySelector(".known-name-remove").addEventListener("click", function () {
+            removeValue(entry.value);
+        });
+        return tag;
+    }
+
     function renderTags(values) {
-        if (!values || values.length === 0) {
+        const all = values || [];
+        const manual = all.filter(function (entry) { return entry.source !== "class_list"; });
+        importedValues = all.filter(function (entry) { return entry.source === "class_list"; });
+
+        if (manual.length === 0) {
             tagsContainer.innerHTML = EMPTY_HTML;
+        } else {
+            tagsContainer.innerHTML = "";
+            manual.forEach(function (entry) {
+                tagsContainer.appendChild(buildTag(entry));
+            });
+        }
+
+        renderImportedSummary();
+        renderSearchResults();
+    }
+
+    // ------------------------------------------------------------------
+    // Imported values: summary and search
+    // ------------------------------------------------------------------
+
+    const importedRow = document.getElementById("imported-values-row");
+    const importedSummary = document.getElementById("imported-values-summary");
+    const importedSearch = document.getElementById("imported-values-search");
+    const importedResults = document.getElementById("imported-values-results");
+
+    const hasImportedUi = importedRow && importedSummary && importedSearch && importedResults;
+
+    function renderImportedSummary() {
+        if (!hasImportedUi) return;
+        if (importedValues.length === 0) {
+            importedRow.hidden = true;
+            importedSearch.value = "";
             return;
         }
-        tagsContainer.innerHTML = "";
-        values.forEach(function (entry) {
-            const tag = document.createElement("span");
-            tag.className = "known-name-tag";
-            const typeLabel = ENTITY_LABELS[entry.entity_type] || entry.entity_type;
-            const sourceLabel = SOURCE_LABELS[entry.source] || entry.source;
-            tag.innerHTML = escapeHtml(entry.value) +
-                ' <span class="known-name-type" title="' + escapeHtml(sourceLabel) + '">' + escapeHtml(typeLabel) + '</span>' +
-                ' <button class="known-name-remove" title="Remove ×">×</button>';
-            tag.querySelector(".known-name-remove").addEventListener("click", function () {
-                removeValue(entry.value);
-            });
-            tagsContainer.appendChild(tag);
-        });
+        importedRow.hidden = false;
+        importedSummary.textContent =
+            importedValues.length.toLocaleString() + " values imported from the class list";
     }
+
+    function renderSearchResults() {
+        if (!hasImportedUi) return;
+        const query = importedSearch.value.trim().toLowerCase();
+        if (!query || importedValues.length === 0) {
+            importedResults.hidden = true;
+            importedResults.innerHTML = "";
+            return;
+        }
+
+        const matches = importedValues.filter(function (entry) {
+            return String(entry.value).toLowerCase().indexOf(query) !== -1;
+        });
+
+        importedResults.innerHTML = "";
+        if (matches.length === 0) {
+            importedResults.innerHTML = '<span class="muted">No imported value matches that.</span>';
+            importedResults.hidden = false;
+            return;
+        }
+
+        matches.slice(0, MAX_SEARCH_RESULTS).forEach(function (entry) {
+            importedResults.appendChild(buildTag(entry));
+        });
+        if (matches.length > MAX_SEARCH_RESULTS) {
+            const note = document.createElement("span");
+            note.className = "muted";
+            note.textContent =
+                "Showing the first " + MAX_SEARCH_RESULTS + " of " +
+                matches.length.toLocaleString() + " matches. Narrow the search to see the rest.";
+            importedResults.appendChild(note);
+        }
+        importedResults.hidden = false;
+    }
+
+    if (hasImportedUi) {
+        importedSearch.addEventListener("input", renderSearchResults);
+    }
+
+    // ------------------------------------------------------------------
+    // Add and remove
+    // ------------------------------------------------------------------
 
     async function loadValues() {
         try {

@@ -76,6 +76,62 @@
 </section>
 
 <section class="doc-section">
+    <h2 class="section-heading">Known values</h2>
+    <p class="advanced-hint">
+        Values the anonymizer consistently misses. Every one listed here is
+        replaced in every run, across Text, Document, and AI mode &mdash; which is
+        why they live in Settings rather than in one mode's panel.
+    </p>
+
+    <div class="advanced-setting-row">
+        <input
+            type="text"
+            id="known-name-input"
+            class="excel-columns-input"
+            placeholder="Enter a value to always anonymize"
+        >
+        <button class="btn btn-secondary btn-sm" id="add-known-name-btn">Add</button>
+    </div>
+    <div id="known-names-tags" class="known-names-tags"></div>
+
+    <div class="advanced-section-heading">Import from class list</div>
+    <p class="advanced-hint">
+        Read a roster spreadsheet and add its columns as known values in bulk. A
+        class of 500 with a name column and a number column adds over a thousand
+        values, so imported values are summarised rather than listed &mdash; search
+        below to find and remove a specific one.
+    </p>
+    <div class="advanced-setting-row">
+        <input
+            type="text"
+            id="class-list-path"
+            class="folder-path-display"
+            placeholder="Paste or browse to a class list .xlsx file"
+        >
+        <button class="btn btn-secondary btn-sm" id="class-list-browse-btn">Browse&hellip;</button>
+    </div>
+    <div id="class-list-columns" class="class-list-columns" hidden></div>
+    <div class="advanced-setting-row">
+        <button class="btn btn-primary btn-sm" id="class-list-import-btn" hidden>Import</button>
+        <button class="btn btn-secondary btn-sm" id="class-list-resync-btn" hidden>Re-sync</button>
+        <button class="btn btn-secondary btn-sm" id="class-list-clear-btn" hidden>Clear class list values</button>
+    </div>
+    <p class="muted" id="class-list-status" hidden></p>
+    <p class="error-text" id="class-list-error" hidden></p>
+
+    <div class="advanced-setting-row" id="imported-values-row" hidden>
+        <span class="advanced-label" id="imported-values-summary"></span>
+        <input
+            type="text"
+            id="imported-values-search"
+            class="excel-columns-input"
+            placeholder="Search imported values"
+        >
+    </div>
+    <div id="imported-values-results" class="known-names-tags" hidden></div>
+</section>
+
+<section class="doc-section">
     <h2 class="section-heading">AI Mode</h2>
     <p class="advanced-hint">
         Lets a local AI agent request anonymized text from files on this machine
@@ -139,4 +195,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/known_values.js') }}"></script>
 {% endblock %}
