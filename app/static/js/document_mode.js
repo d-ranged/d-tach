@@ -180,7 +180,7 @@ function renderFileSummary(data) {
         lines.push(`Output: ${data.output_path}`);
     } else if (data.status === "unreadable") {
         lines.push(`\u26A0 PDF unreadable \u2014 ${data.error_message}`);
-        lines.push(`File copied as: ${data.output_path}`);
+        lines.push("Nothing was written — this file is not in the output.");
     } else if (data.status === "skipped") {
         lines.push(`\u26A0 Skipped: ${data.error_message}`);
     } else {
@@ -340,7 +340,7 @@ function renderFolderSummary(data) {
         `  \u2714 Clean (no PII): ${data.clean}`,
     ];
     if (data.copied)      lines.push(`  \u2714 Copied (pass-through): ${data.copied}`);
-    if (data.unreadable) lines.push(`  \u26A0 Unreadable PDF: ${data.unreadable}`);
+    if (data.unreadable) lines.push(`  \u26A0 Unreadable PDF (not written to output): ${data.unreadable}`);
     if (data.skipped)    lines.push(`  \u26A0 Skipped: ${data.skipped}`);
     if (data.errors)     lines.push(`  \u2718 Errors: ${data.errors}`);
     if (data.keyref_csv_path) lines.push(`Key reference: ${data.keyref_csv_path}`);
