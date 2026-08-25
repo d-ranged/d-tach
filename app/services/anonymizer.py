@@ -155,9 +155,13 @@ def build_known_value_recognizers(
         if not value:
             continue
         entity_type = str(entry.get("entity_type") or "PERSON")
+        # Lookarounds rather than word-boundary escapes: they behave correctly
+        # even when the value starts or ends with a non-word character. Without
+        # them a short known value such as "An" matches inside "Thank", "and"
+        # and "standard", corrupting ordinary words throughout the document.
         pattern = Pattern(
             name=f"KNOWN_{re.sub(r'[^A-Z0-9]', '_', value.upper())[:30]}",
-            regex=re.escape(value),
+            regex=rf"(?<!\w){re.escape(value)}(?!\w)",
             score=0.99,
         )
         recognizers.append(

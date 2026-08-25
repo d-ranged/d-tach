@@ -403,3 +403,74 @@ class TestLanguageDetectorEnsureLoaded:
             "Dutch detected but Dutch model is not enabled. "
             "Enable it in Settings > Languages and restart d-tach."
         )
+
+
+class TestKnownValuesMatchWholeWordsOnly:
+    """A known value must never match inside a longer word.
+
+    Regression guard: a class list containing the name "An" turned "Thank you"
+    into "Th[PERSON_1]k you" and "standard" into "st[PERSON_1]dard", corrupting
+    ordinary prose throughout every document processed.
+    """
+
+    def test_short_known_value_does_not_match_inside_words(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "An", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Thank you for the plan and the standard forms.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert result.anonymized_text == "Thank you for the plan and the standard forms."
+
+    def test_the_same_value_is_still_caught_as_a_standalone_word(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "An", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "An attended the meeting.", language="en", ad_hoc_recognizers=recognizers
+        )
+
+        assert "[PERSON_1]" in result.anonymized_text
+        assert "An attended" not in result.anonymized_text
+
+    def test_multi_word_known_value_still_matches(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "An Nguyen", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "An Nguyen submitted the form.", language="en", ad_hoc_recognizers=recognizers
+        )
+
+        assert "[PERSON_1]" in result.anonymized_text
+        assert "Nguyen" not in result.anonymized_text
+
+    def test_punctuation_adjacent_known_value_still_matches(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Din", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Dear Din, please sign. (Din agreed.)",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert "Din" not in result.anonymized_text
