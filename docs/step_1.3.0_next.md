@@ -964,6 +964,7 @@ was tested, and on whose data, stays out of this repository.
 | 8 | Pre-test 6 — settings | Hashing was configured per mode rather than in Settings, so the same subject could encode to different placeholders depending on which mode reached them | No | Fixed |
 | 9 | Pre-test 6 — settings | Detection, Excel and folder-output settings lived on the mode pages and were written back by each run, so one run could silently change what a later run in another mode did | Yes | Fixed |
 | 10 | Test run — folder anonymization | An image-based PDF that could not be read was still written into the `anonymized/` output, where subfolder mode dropped the UNREADABLE_ prefix and left it indistinguishable from anonymized output | Yes | Fixed |
+| 11 | Test run — AI Mode | A possessive form put the apostrophe inside the detected name, so the same person hashed to a different placeholder in `Name's` than in `Name`, and to a third with a typographic apostrophe — breaking the one-subject-one-token guarantee across a folder | Yes | Fixed |
 
 ### ✅ Complete when
 
@@ -1039,6 +1040,7 @@ means the release notes shouldn't claim AI Mode has been proven on real data.
 | Mode-page detection summary | Text and Document mode describe what will be detected and link to Settings, with nothing editable in two places |
 | Image-based PDF in a folder run | Reported as unreadable and written nowhere — the output folder does not contain it under any name |
 | PDF with some image-only pages | Text pages redacted, file written, and the image-only pages named in a warning |
+| Possessive names | `Name`, `Name's` and `Name’s` all encode to the same placeholder, with the apostrophe left in the text |
 
 ---
 

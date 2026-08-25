@@ -3,7 +3,7 @@
 import re
 import pytest
 
-from presidio_analyzer import Pattern, PatternRecognizer
+from presidio_analyzer import Pattern, PatternRecognizer, RecognizerResult
 
 from app.services.anonymizer import (
     Anonymizer,
@@ -590,3 +590,52 @@ class TestOverlappingDetectionsDoNotCorruptOutput:
         )
 
         assert "Din" not in result.anonymized_text
+
+
+class TestPossessiveFormsHashTheSame:
+    """The same person must produce the same value however the name is written.
+
+    spaCy includes the possessive in the PERSON span, so "Vandenberg's" used to
+    be hashed as a different string from "Vandenberg" — and differently again
+    for the typographic apostrophe Word autocorrects to. Three tokens, one
+    person, and no way for a reader of the anonymized folder to tell.
+    """
+
+    def _value(self, anonymizer: Anonymizer, text: str) -> str:
+        result = anonymizer.anonymize(text, language="en")
+        people = [e.original_text for e in result.entities if e.entity_type == "PERSON"]
+        assert people, f"no PERSON detected in {text!r}"
+        return people[0]
+
+    def test_straight_apostrophe_matches_the_bare_name(self, anonymizer) -> None:
+        bare = self._value(anonymizer, "Marcus Vandenberg submitted the report late.")
+
+        assert self._value(anonymizer, "Marcus Vandenberg's report was late.") == bare
+
+    def test_typographic_apostrophe_matches_the_bare_name(self, anonymizer) -> None:
+        bare = self._value(anonymizer, "Marcus Vandenberg submitted the report late.")
+
+        assert self._value(anonymizer, "Marcus Vandenberg’s report was late.") == bare
+
+    def test_apostrophe_stays_in_the_output_text(self, anonymizer) -> None:
+        """Trimming the span must not eat the punctuation the sentence needs."""
+        result = anonymizer.anonymize("Marcus Vandenberg's report was late.", language="en")
+
+        assert "'s report was late." in result.anonymized_text
+        assert "Vandenberg" not in result.anonymized_text
+
+    def test_plural_possessive_keeps_the_s(self, anonymizer) -> None:
+        """"Vandenbergs'" is a different surname form, so only the quote comes off."""
+        result = anonymizer.anonymize("The Vandenbergs' address is on file.", language="en")
+        people = [e.original_text for e in result.entities if e.entity_type == "PERSON"]
+
+        assert people == ["Vandenbergs"]
+        assert "' address is on file." in result.anonymized_text
+
+    def test_a_span_that_is_only_an_apostrophe_is_left_alone(self) -> None:
+        """Guard against trimming a span down to nothing and inverting start/end."""
+        span = RecognizerResult(entity_type="PERSON", start=0, end=1, score=0.85)
+
+        trimmed = Anonymizer._trim_possessive([span], "'")
+
+        assert (trimmed[0].start, trimmed[0].end) == (0, 1)

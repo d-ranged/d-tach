@@ -196,6 +196,13 @@ def build_known_value_recognizers(
     return recognizers
 
 
+
+# Longest first: "'s" must be tried before a bare "'", or the s would be kept.
+# Both the straight and the typographic apostrophe appear in real documents —
+# Word autocorrects to the typographic one, and PDF extraction returns it too.
+_POSSESSIVE_SUFFIXES = ("'s", "\u2019s", "'S", "\u2019S", "'", "\u2019")
+
+
 class Anonymizer:
     """Detects and replaces PII in text using Presidio, one spaCy model per language.
 
@@ -312,6 +319,7 @@ class Anonymizer:
             if not _is_existing_placeholder(text, r.start, r.end)
         ]
 
+        results = self._trim_possessive(results, text)
         results = self._resolve_overlaps(results)
 
         counters: dict[str, int] = {}
@@ -343,6 +351,33 @@ class Anonymizer:
             )
 
         return AnonymizationResult(anonymized_text=anonymized, entities=detected)
+
+    @staticmethod
+    def _trim_possessive(results: list, text: str) -> list:
+        """Shrink a span so a trailing possessive stays in the text, not in the value.
+
+        spaCy hands back "Vandenberg's" as the PERSON span, apostrophe and s
+        included, so the possessive ends up inside the value that gets hashed.
+        The same person then encodes to one token where their name is possessive
+        and another where it is not — and to a third if the apostrophe happens to
+        be typographic rather than straight, since the bytes differ and so does
+        the hash. An agent reading a folder sees three people instead of one.
+
+        Keeping the same subject on one token across every document is the whole
+        point of hashing, so the suffix is trimmed off the span before the value
+        is taken. The apostrophe and s stay in the output text, where they belong:
+        "[Ma-EJIN CX66]'s report", not "[Ma-EJIN MW5H] report".
+
+        Runs before overlap resolution so a possessive NER span and a plain
+        known-value match of the same name compare on equal terms.
+        """
+        for result in results:
+            span = text[result.start:result.end]
+            for suffix in _POSSESSIVE_SUFFIXES:
+                if span.endswith(suffix) and len(span) > len(suffix):
+                    result.end -= len(suffix)
+                    break
+        return results
 
     @staticmethod
     def _resolve_overlaps(results: list) -> list:
