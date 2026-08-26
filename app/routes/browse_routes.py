@@ -1,47 +1,23 @@
 import logging
-import os
-import sys
 
 from flask import Blueprint, jsonify
+
+from app.tcl_support import ensure_tcl_available, tk_dialogs_available
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("browse", __name__)
 
-_TCL_FIXED = False
-
-# Check at import time so browse_status() can respond without attempting a dialog.
-try:
-    import tkinter as _tk_probe  # noqa: F401
-    _TKINTER_AVAILABLE = True
-    del _tk_probe
-except ImportError:
-    _TKINTER_AVAILABLE = False
-
-
-def _ensure_tcl_available() -> None:
-    """Set TCL_LIBRARY for pyenv-win installations where Tcl path isn't auto-detected.
-
-    On a standard Windows Python install this is a no-op.
-    On macOS and Linux tkinter finds Tcl without any env var help, so the
-    platform guard makes this function a no-op on those platforms too.
-    """
-    global _TCL_FIXED
-    if _TCL_FIXED or sys.platform != "win32" or os.environ.get("TCL_LIBRARY"):
-        return
-    python_dir = sys.base_prefix  # base install, not the venv
-    tcl_dir = os.path.join(python_dir, "tcl", "tcl8.6")
-    tk_dir = os.path.join(python_dir, "tcl", "tk8.6")
-    if os.path.isdir(tcl_dir):
-        os.environ["TCL_LIBRARY"] = tcl_dir
-    if os.path.isdir(tk_dir):
-        os.environ["TK_LIBRARY"] = tk_dir
-    _TCL_FIXED = True
+# Checked once at import so browse_status() can answer without opening a dialog.
+# This probes a real Tk root rather than just the import, so a Python install
+# that ships tkinter without usable Tcl data files is reported as unavailable
+# instead of failing at the moment the user clicks Browse.
+_TKINTER_AVAILABLE = tk_dialogs_available()
 
 
 def _open_file_dialog() -> str:
     """Open a native OS file picker and return the selected path, or empty string."""
-    _ensure_tcl_available()
+    ensure_tcl_available()
     import tkinter as tk
     from tkinter import filedialog
 
@@ -65,7 +41,7 @@ def _open_file_dialog() -> str:
 
 def _open_csv_dialog() -> str:
     """Open a native OS file picker filtered to CSV files."""
-    _ensure_tcl_available()
+    ensure_tcl_available()
     import tkinter as tk
     from tkinter import filedialog
 
@@ -85,7 +61,7 @@ def _open_csv_dialog() -> str:
 
 def _open_folder_dialog() -> str:
     """Open a native OS folder picker and return the selected path, or empty string."""
-    _ensure_tcl_available()
+    ensure_tcl_available()
     import tkinter as tk
     from tkinter import filedialog
 

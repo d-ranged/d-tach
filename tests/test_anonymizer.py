@@ -1,8 +1,9 @@
 """Tests for LanguageDetector and Anonymizer service classes."""
 
+import re
 import pytest
 
-from presidio_analyzer import Pattern, PatternRecognizer
+from presidio_analyzer import Pattern, PatternRecognizer, RecognizerResult
 
 from app.services.anonymizer import (
     Anonymizer,
@@ -403,3 +404,238 @@ class TestLanguageDetectorEnsureLoaded:
             "Dutch detected but Dutch model is not enabled. "
             "Enable it in Settings > Languages and restart d-tach."
         )
+
+
+class TestKnownValuesMatchWholeWordsOnly:
+    """A known value must never match inside a longer word.
+
+    Regression guard: a class list containing the name "An" turned "Thank you"
+    into "Th[PERSON_1]k you" and "standard" into "st[PERSON_1]dard", corrupting
+    ordinary prose throughout every document processed.
+    """
+
+    def test_short_known_value_does_not_match_inside_words(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "An", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Thank you for the plan and the standard forms.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert result.anonymized_text == "Thank you for the plan and the standard forms."
+
+    def test_the_same_value_is_still_caught_as_a_standalone_word(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "An", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "An attended the meeting.", language="en", ad_hoc_recognizers=recognizers
+        )
+
+        assert "[PERSON_1]" in result.anonymized_text
+        assert "An attended" not in result.anonymized_text
+
+    def test_multi_word_known_value_still_matches(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "An Nguyen", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "An Nguyen submitted the form.", language="en", ad_hoc_recognizers=recognizers
+        )
+
+        assert "[PERSON_1]" in result.anonymized_text
+        assert "Nguyen" not in result.anonymized_text
+
+    def test_punctuation_adjacent_known_value_still_matches(self) -> None:
+        from app.services.anonymizer import build_known_value_recognizers
+
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Din", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Dear Din, please sign. (Din agreed.)",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert "Din" not in result.anonymized_text
+
+
+class TestKnownValuesAreGroupedPerEntityType:
+    """A large class list must not become one recognizer per value.
+
+    A roster of 500 students with a name column and a number column produces
+    over a thousand known values. One recognizer each means Presidio makes a
+    thousand separate passes over every document processed.
+    """
+
+    def test_many_values_of_one_type_share_a_single_recognizer(self) -> None:
+        values = [{"value": f"Student {n}", "entity_type": "PERSON"} for n in range(500)]
+
+        recognizers = build_known_value_recognizers(values, "en")
+
+        assert len(recognizers) == 1
+
+    def test_values_differing_only_in_case_are_deduplicated(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "Craig Bradley", "entity_type": "PERSON"},
+                {"value": "craig bradley", "entity_type": "PERSON"},
+            ],
+            "en",
+        )
+
+        assert len(recognizers) == 1
+        assert recognizers[0].patterns[0].regex.count("|") == 0
+
+    def test_longer_value_wins_over_a_shorter_one_that_prefixes_it(self) -> None:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "An", "entity_type": "PERSON"},
+                {"value": "An Nguyen", "entity_type": "PERSON"},
+            ],
+            "en",
+        )
+
+        result = anonymizer.anonymize(
+            "An Nguyen submitted the form.", language="en", ad_hoc_recognizers=recognizers
+        )
+
+        assert "Nguyen" not in result.anonymized_text
+
+    def test_each_entity_type_still_gets_its_own_recognizer(self) -> None:
+        recognizers = build_known_value_recognizers(
+            [
+                {"value": "Craig Bradley", "entity_type": "PERSON"},
+                {"value": "Ann Other", "entity_type": "PERSON"},
+                {"value": "123456", "entity_type": "NUMERIC_ID"},
+            ],
+            "en",
+        )
+
+        assert len(recognizers) == 2
+        assert {r.supported_entities[0] for r in recognizers} == {"PERSON", "NUMERIC_ID"}
+
+
+class TestOverlappingDetectionsDoNotCorruptOutput:
+    """Overlapping spans must produce one placeholder, not two interleaved ones.
+
+    Regression guard: with a surname-only known values list, NER reports the
+    full name and the known value reports the surname inside it. Both spans
+    were replaced, so "Din Bakker submitted" came out as "[PERSON_1]N_2]
+    submitted" — output no restore pass can map back.
+    """
+
+    def test_known_value_inside_an_ner_span_produces_one_placeholder(self) -> None:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Bakker", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Din Bakker submitted the report late.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert result.anonymized_text == "[PERSON_1] submitted the report late."
+
+    def test_no_malformed_placeholder_survives_in_the_output(self) -> None:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Bakker", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "I spoke to Bakker about it, and Din Bakker agreed.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        # Every "]" must close a "[" that opened a well-formed placeholder.
+        assert re.fullmatch(
+            r"[^\[\]]*(?:\[[A-Z_]+_\d+\][^\[\]]*)*", result.anonymized_text
+        ), result.anonymized_text
+        assert "Bakker" not in result.anonymized_text
+
+    def test_the_wider_span_wins_over_the_higher_scoring_narrow_one(self) -> None:
+        """A known value scores 0.99 and NER ~0.85, so score alone would shrink
+        the span down to the surname and leave the first name in the clear."""
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(
+            [{"value": "Bakker", "entity_type": "PERSON"}], "en"
+        )
+
+        result = anonymizer.anonymize(
+            "Din Bakker submitted the report late.",
+            language="en",
+            ad_hoc_recognizers=recognizers,
+        )
+
+        assert "Din" not in result.anonymized_text
+
+
+class TestPossessiveFormsHashTheSame:
+    """The same person must produce the same value however the name is written.
+
+    spaCy includes the possessive in the PERSON span, so "Vandenberg's" used to
+    be hashed as a different string from "Vandenberg" — and differently again
+    for the typographic apostrophe Word autocorrects to. Three tokens, one
+    person, and no way for a reader of the anonymized folder to tell.
+    """
+
+    def _value(self, anonymizer: Anonymizer, text: str) -> str:
+        result = anonymizer.anonymize(text, language="en")
+        people = [e.original_text for e in result.entities if e.entity_type == "PERSON"]
+        assert people, f"no PERSON detected in {text!r}"
+        return people[0]
+
+    def test_straight_apostrophe_matches_the_bare_name(self, anonymizer) -> None:
+        bare = self._value(anonymizer, "Marcus Vandenberg submitted the report late.")
+
+        assert self._value(anonymizer, "Marcus Vandenberg's report was late.") == bare
+
+    def test_typographic_apostrophe_matches_the_bare_name(self, anonymizer) -> None:
+        bare = self._value(anonymizer, "Marcus Vandenberg submitted the report late.")
+
+        assert self._value(anonymizer, "Marcus Vandenberg’s report was late.") == bare
+
+    def test_apostrophe_stays_in_the_output_text(self, anonymizer) -> None:
+        """Trimming the span must not eat the punctuation the sentence needs."""
+        result = anonymizer.anonymize("Marcus Vandenberg's report was late.", language="en")
+
+        assert "'s report was late." in result.anonymized_text
+        assert "Vandenberg" not in result.anonymized_text
+
+    def test_plural_possessive_keeps_the_s(self, anonymizer) -> None:
+        """"Vandenbergs'" is a different surname form, so only the quote comes off."""
+        result = anonymizer.anonymize("The Vandenbergs' address is on file.", language="en")
+        people = [e.original_text for e in result.entities if e.entity_type == "PERSON"]
+
+        assert people == ["Vandenbergs"]
+        assert "' address is on file." in result.anonymized_text
+
+    def test_a_span_that_is_only_an_apostrophe_is_left_alone(self) -> None:
+        """Guard against trimming a span down to nothing and inverting start/end."""
+        span = RecognizerResult(entity_type="PERSON", start=0, end=1, score=0.85)
+
+        trimmed = Anonymizer._trim_possessive([span], "'")
+
+        assert (trimmed[0].start, trimmed[0].end) == (0, 1)

@@ -13,66 +13,6 @@
 
     <div class="setting-group">
         <label class="toggle">
-            <input type="checkbox" id="dates-toggle" {% if anonymize_dates %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Anonymize dates</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="urls-toggle" {% if anonymize_urls %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Detect URLs</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="locations-toggle" {% if anonymize_locations %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Anonymize locations</span>
-        </label>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="numeric-id-toggle" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Numeric ID</span>
-        </label>
-        <input
-            type="number"
-            id="digit-count"
-            class="digit-input"
-            value="{{ pattern_config.digit_count }}"
-            min="4"
-            max="12"
-            title="Exact digit count to detect"
-        >
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
-            <input type="checkbox" id="hashing-toggle" {% if hashing_enabled %}checked{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="setting-label">Enable hashing</span>
-        </label>
-        <div class="secret-field" id="secret-field" {% if not hashing_enabled %}hidden{% endif %}>
-            <label for="secret-input" class="secret-label">Secret</label>
-            <input
-                type="password"
-                id="secret-input"
-                class="secret-input"
-                placeholder="Enter a secret phrase"
-                value="{{ hashing_secret }}"
-                autocomplete="off"
-            >
-        </div>
-    </div>
-
-    <div class="setting-group">
-        <label class="toggle">
             <input type="checkbox" id="keyref-toggle">
             <span class="toggle-track"></span>
             <span class="setting-label">Key reference</span>
@@ -80,42 +20,10 @@
     </div>
 </section>
 
-<details class="advanced-settings">
-    <summary class="advanced-settings-toggle">Known values</summary>
-    <div class="advanced-settings-body">
-        <p class="advanced-hint">Add values consistently missed by the anonymizer. Applied in every run across Text and Document modes.</p>
-        <div class="advanced-setting-row">
-            <input
-                type="text"
-                id="known-name-input"
-                class="excel-columns-input"
-                placeholder="Enter a name to always anonymize"
-            >
-            <button class="btn btn-secondary btn-sm" id="add-known-name-btn">Add</button>
-        </div>
-        <div id="known-names-tags" class="known-names-tags"></div>
-
-        <div class="advanced-section-heading">Import from class list</div>
-        <p class="advanced-hint">Read a roster spreadsheet and add its columns as known values in bulk.</p>
-        <div class="advanced-setting-row">
-            <input
-                type="text"
-                id="class-list-path"
-                class="folder-path-display"
-                placeholder="Paste or browse to a class list .xlsx file"
-            >
-            <button class="btn btn-secondary btn-sm" id="class-list-browse-btn">Browse&hellip;</button>
-        </div>
-        <div id="class-list-columns" class="class-list-columns" hidden></div>
-        <div class="advanced-setting-row">
-            <button class="btn btn-primary btn-sm" id="class-list-import-btn" hidden>Import</button>
-            <button class="btn btn-secondary btn-sm" id="class-list-resync-btn" hidden>Re-sync</button>
-            <button class="btn btn-secondary btn-sm" id="class-list-clear-btn" hidden>Clear class list values</button>
-        </div>
-        <p class="muted" id="class-list-status" hidden></p>
-        <p class="error-text" id="class-list-error" hidden></p>
-    </div>
-</details>
+<p class="advanced-hint detection-summary">
+    Detecting {{ detection_summary }}. Change any of this in
+    <a href="/settings">Settings</a> &mdash; it applies to every mode.
+</p>
 
 <section class="panels">
     <div class="panel panel-input">
@@ -159,5 +67,4 @@
 {% block scripts %}
 <script>const INITIAL_LANGUAGE = "{{ language }}";</script>
 <script src="{{ url_for('static', filename='js/text_mode.js') }}"></script>
-<script src="{{ url_for('static', filename='js/known_values.js') }}"></script>
 {% endblock %}

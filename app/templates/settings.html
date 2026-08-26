@@ -3,6 +3,12 @@
 {% block title %}Settings{% endblock %}
 
 {% block content %}
+<p class="advanced-hint settings-intro">
+    Everything d-tach remembers lives here. Text, Document, and AI mode all read
+    these same values, so a subject is treated identically whichever way you
+    reach them &mdash; and a one-off run can never quietly change them.
+</p>
+
 <section class="doc-section">
     <h2 class="section-heading">Port</h2>
     <p class="advanced-hint">
@@ -33,6 +39,19 @@
     <p class="advanced-hint">
         Install, remove, and enable language models. Only enabled languages can
         be used for detection. Changes here take effect after restart.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="advanced-label" for="default-language-select">Default language</label>
+        <select id="default-language-select" class="digit-input">
+            <option value="en" {% if default_language == "en" %}selected{% endif %}>English</option>
+            <option value="nl" {% if default_language == "nl" %}selected{% endif %}>Nederlands</option>
+        </select>
+    </div>
+    <p class="advanced-hint">
+        The language each mode starts on. Text and Document mode still let you
+        switch for a single run &mdash; that choice applies to that run only and
+        does not change this default.
     </p>
 
     <div class="advanced-setting-row">
@@ -73,6 +92,245 @@
     </div>
     <p class="muted" id="language-notice" hidden></p>
     <p class="error-text" id="language-error" hidden></p>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Detection</h2>
+    <p class="advanced-hint">
+        What counts as an identifying value. Names and email addresses are always
+        detected; the rest are opt-in because each one is as likely to remove
+        meaning as to protect anyone. Saved immediately and used by every mode.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" class="detection-toggle" id="dates-toggle" data-field="anonymize_dates" {% if anonymize_dates %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Anonymize dates</span>
+        </label>
+        <span class="muted">Ubiquitous in academic documents — off by default.</span>
+    </div>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" class="detection-toggle" id="urls-toggle" data-field="anonymize_urls" {% if anonymize_urls %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Detect URLs</span>
+        </label>
+        <span class="muted">Overlaps with email detection — can garble output.</span>
+    </div>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" class="detection-toggle" id="locations-toggle" data-field="anonymize_locations" {% if anonymize_locations %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Anonymize locations</span>
+        </label>
+        <span class="muted">City and country names often carry meaningful context.</span>
+    </div>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" class="detection-toggle" id="numeric-id-toggle" data-field="numeric_id_enabled" {% if pattern_config.numeric_id_enabled %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Numeric ID</span>
+        </label>
+        <input
+            type="number"
+            id="digit-count"
+            class="digit-input detection-number"
+            data-field="digit_count"
+            value="{{ pattern_config.digit_count }}"
+            min="4"
+            max="12"
+            title="Exact digit count to detect"
+        >
+        <span class="muted">Exact digit count — student numbers, employee numbers.</span>
+    </div>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" class="detection-toggle" id="names-toggle" data-field="check_file_names" {% if pattern_config.check_file_names %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Check file and folder names</span>
+        </label>
+        <span class="muted">Document Mode only — text has no filenames.</span>
+    </div>
+
+    <p class="muted" id="detection-notice" hidden></p>
+    <p class="error-text" id="detection-error" hidden></p>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Known values</h2>
+    <p class="advanced-hint">
+        Values the anonymizer consistently misses. Every one listed here is
+        replaced in every run, across Text, Document, and AI mode.
+    </p>
+
+    <div class="advanced-setting-row">
+        <input
+            type="text"
+            id="known-name-input"
+            class="excel-columns-input"
+            placeholder="Enter a value to always anonymize"
+        >
+        <button class="btn btn-secondary btn-sm" id="add-known-name-btn">Add</button>
+    </div>
+    <div id="known-names-tags" class="known-names-tags"></div>
+
+    <div class="advanced-section-heading">Import from class list</div>
+    <p class="advanced-hint">
+        Read a roster spreadsheet and add its columns as known values in bulk. A
+        class of 500 with a name column and a number column adds over a thousand
+        values, so imported values are summarised rather than listed &mdash; search
+        below to find and remove a specific one.
+    </p>
+    <div class="advanced-setting-row">
+        <input
+            type="text"
+            id="class-list-path"
+            class="folder-path-display"
+            placeholder="Paste or browse to a class list .xlsx file"
+        >
+        <button class="btn btn-secondary btn-sm" id="class-list-browse-btn">Browse&hellip;</button>
+    </div>
+    <div id="class-list-columns" class="class-list-columns" hidden></div>
+    <div class="advanced-setting-row">
+        <button class="btn btn-primary btn-sm" id="class-list-import-btn" hidden>Import</button>
+        <button class="btn btn-secondary btn-sm" id="class-list-resync-btn" hidden>Re-sync</button>
+        <button class="btn btn-secondary btn-sm" id="class-list-clear-btn" hidden>Clear class list values</button>
+    </div>
+    <p class="muted" id="class-list-status" hidden></p>
+    <p class="error-text" id="class-list-error" hidden></p>
+
+    <div class="advanced-setting-row" id="imported-values-row" hidden>
+        <span class="advanced-label" id="imported-values-summary"></span>
+        <input
+            type="text"
+            id="imported-values-search"
+            class="excel-columns-input"
+            placeholder="Search imported values"
+        >
+    </div>
+    <div id="imported-values-results" class="known-names-tags" hidden></div>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Hashing</h2>
+    <p class="advanced-hint">
+        Replaces numbered placeholders like <code>[PERSON_1]</code> with stable ones
+        derived from a secret, so the same person encodes to the same token in every
+        document, in every mode, and in every session. Set the secret once and leave
+        it: change it and every placeholder changes with it.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" id="hashing-toggle" {% if hashing_enabled %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Enable hashing</span>
+        </label>
+    </div>
+
+    <div id="hashing-body" {% if not hashing_enabled %}hidden{% endif %}>
+        <div class="advanced-setting-row">
+            <label class="advanced-label" for="hashing-secret-input">Secret</label>
+            <input
+                type="password"
+                id="hashing-secret-input"
+                class="folder-path-display"
+                placeholder="Enter a secret phrase"
+                value="{{ hashing_secret }}"
+                autocomplete="off"
+            >
+            <button class="btn btn-secondary btn-sm" id="hashing-secret-reveal-btn">Show</button>
+            <button class="btn btn-primary btn-sm" id="hashing-save-btn">Save</button>
+        </div>
+        <p class="advanced-hint">
+            Treat the secret as sensitive. Anyone holding both it and a list of
+            candidate names can reproduce the tokens and undo the pseudonymization.
+        </p>
+    </div>
+
+    <p class="muted" id="hashing-notice" hidden></p>
+    <p class="error-text" id="hashing-error" hidden></p>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Excel (.xlsx)</h2>
+    <p class="advanced-hint">
+        How spreadsheet cells are handled. If both options below are off, Excel
+        files are skipped entirely rather than copied unchecked.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="toggle">
+            <input type="checkbox" class="excel-control" id="excel-ner-toggle" data-field="excel_generic_enabled" {% if excel_generic_enabled %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="setting-label">Generic anonymization (NER)</span>
+        </label>
+        <span class="muted">Runs name detection over string cells.</span>
+    </div>
+
+    <div class="advanced-setting-row">
+        <label class="advanced-label" for="excel-columns">Column names to anonymize</label>
+        <input
+            type="text"
+            id="excel-columns"
+            class="excel-columns-input excel-control"
+            data-field="excel_column_names"
+            placeholder="stnum, email, phone"
+            value="{{ excel_column_names }}"
+        >
+    </div>
+    <p class="advanced-hint">
+        Comma-separated. Replaces every value in those columns regardless of type,
+        which is how numeric IDs get caught. Requires column headers in row 1.
+        Does not affect DOCX, PDF, or Markdown.
+    </p>
+
+    <p class="muted" id="excel-notice" hidden></p>
+    <p class="error-text" id="excel-error" hidden></p>
+</section>
+
+<section class="doc-section">
+    <h2 class="section-heading">Folder output</h2>
+    <p class="advanced-hint">
+        Where Document Mode writes results when processing a whole folder. These
+        do not apply to a rename-only pass, which changes names in place.
+    </p>
+
+    <div class="advanced-setting-row">
+        <label class="advanced-label">Output mode</label>
+        <label class="output-mode-option">
+            <input type="radio" name="output-mode" class="folder-output-control" value="prefix" {% if output_mode == 'prefix' %}checked{% endif %}>
+            Prefix files
+        </label>
+        <label class="output-mode-option">
+            <input type="radio" name="output-mode" class="folder-output-control" value="subfolder" {% if output_mode == 'subfolder' %}checked{% endif %}>
+            Subfolder (<code>anonymized/</code>)
+        </label>
+    </div>
+
+    <div class="advanced-setting-row">
+        <label class="advanced-label" for="pass-through-extensions">Pass-through extensions</label>
+        <input
+            type="text"
+            id="pass-through-extensions"
+            class="excel-columns-input folder-output-control"
+            data-field="pass_through_extensions"
+            placeholder=".sql, .yml, .dbml, .py, .mp4"
+            value="{{ pass_through_extensions }}"
+        >
+    </div>
+    <p class="advanced-hint">
+        Comma-separated. Files with these extensions are copied into the output
+        as-is, with no PII scanning at all. Empty by default.
+    </p>
+
+    <p class="muted" id="folder-output-notice" hidden></p>
+    <p class="error-text" id="folder-output-error" hidden></p>
 </section>
 
 <section class="doc-section">
@@ -139,4 +397,5 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+<script src="{{ url_for('static', filename='js/known_values.js') }}"></script>
 {% endblock %}

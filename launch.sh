@@ -37,7 +37,7 @@ if [ ! -f ".venv/bin/python" ]; then
     echo "Downloading Dutch language model..."
     .venv/bin/python -m spacy download nl_core_news_md
     echo ""
-    echo "Setup complete."
+    echo "Setup complete - starting d-tach now."
     echo ""
 fi
 
@@ -51,17 +51,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# ---- Open browser after Flask has had time to bind ----
-# Assumes the default port (5555); if you changed the port in Settings, open
-# the browser manually from the tray icon instead.
-(sleep 3 && {
-    if command -v open &>/dev/null; then
-        open http://localhost:5555
-    elif command -v xdg-open &>/dev/null; then
-        xdg-open http://localhost:5555
-    fi
-}) &
-
 # ---- Start d-tach (tray app) ----
+# d-tach opens the browser itself once the server is confirmed listening, on
+# whichever port is configured in Settings. Waiting on a fixed delay here
+# opened a dead tab whenever startup ran long or failed.
 echo "Starting d-tach..."
+export DTACH_OPEN_BROWSER=1
 .venv/bin/python tray.py

@@ -17,12 +17,14 @@ import pystray
 from PIL import Image
 
 from app import create_app
+from app.tcl_support import ensure_tcl_available
 
 logger = logging.getLogger(__name__)
 
 TRAY_APP_NAME = "d-tach"
 ICON_PATH = Path(__file__).resolve().parent / "app" / "static" / "favicon.png"
 PORT_IN_USE_NOTIFICATION_SECONDS = 5
+SERVER_READY_TIMEOUT_SECONDS = 30
 STARTUP_REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 LAUNCH_AGENT_LABEL = "org.d-ranged.d-tach"
 
@@ -101,23 +103,35 @@ def _register_startup_macos() -> None:
 
 
 def _prompt_startup_registration() -> bool:
-    """Ask the user (via a native dialog) whether to run d-tach at login."""
+    """Ask the user (via a native dialog) whether to run d-tach at login.
+
+    Returns False when no dialog can be shown. This is a convenience prompt, so
+    every failure here is non-fatal — a Python install that ships tkinter without
+    usable Tcl data files must not stop d-tach from starting.
+    """
     try:
+        ensure_tcl_available()
         import tkinter as tk
         from tkinter import messagebox
-    except ImportError:
-        return False
 
-    root = tk.Tk()
-    root.withdraw()
-    root.wm_attributes("-topmost", True)
-    answer = messagebox.askyesno(
-        "d-tach",
-        "Run d-tach automatically when you log in?\n\n"
-        "This adds a startup entry so d-tach is always available in your system tray.",
-    )
-    root.destroy()
-    return answer
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes("-topmost", True)
+        answer = messagebox.askyesno(
+            "d-tach",
+            "Run d-tach automatically when you log in?\n\n"
+            "This adds a startup entry so d-tach is always available in your system tray.",
+        )
+        root.destroy()
+        return bool(answer)
+    except Exception as exc:  # noqa: BLE001 - never let the prompt block startup
+        logger.warning(
+            "Could not show the startup-registration prompt (%s: %s). "
+            "Skipping it; d-tach will start normally.",
+            type(exc).__name__,
+            exc,
+        )
+        return False
 
 
 def _offer_startup_registration(settings) -> None:
@@ -131,11 +145,28 @@ def _offer_startup_registration(settings) -> None:
                 _register_startup_windows()
             else:
                 _register_startup_macos()
-        except OSError as exc:
+        except Exception as exc:  # noqa: BLE001 - registration is optional
             logger.error("Failed to register startup entry: %s", exc)
 
-    settings.tray_startup_prompt_shown = True
-    settings.save()
+    # Recorded even when the prompt could not be shown, so a machine that can
+    # never display it doesn't retry the prompt on every launch.
+    try:
+        settings.tray_startup_prompt_shown = True
+        settings.save()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Failed to save startup-prompt state: %s", exc)
+
+
+def _wait_for_server(port: int, timeout: float = SERVER_READY_TIMEOUT_SECONDS) -> bool:
+    """Block until the local server accepts a connection on port, or timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            if sock.connect_ex(("127.0.0.1", port)) == 0:
+                return True
+        time.sleep(0.25)
+    return False
 
 
 def main() -> None:
@@ -149,14 +180,26 @@ def main() -> None:
         _notify_port_in_use(port)
         sys.exit(1)
 
-    _offer_startup_registration(settings)
-
+    # The server comes up before anything optional runs, so a failure in the
+    # first-launch prompt below can never leave the user with a dead port.
     server_thread = threading.Thread(
         target=app.run,
         kwargs={"host": "127.0.0.1", "port": port, "debug": False, "use_reloader": False},
         daemon=True,
     )
     server_thread.start()
+
+    if not _wait_for_server(port):
+        logger.error("Server did not start listening on port %d within the timeout.", port)
+        sys.exit(1)
+
+    print(f"d-tach is running on http://localhost:{port}", flush=True)
+
+    # Only the launch scripts set this — logging in shouldn't pop a browser open.
+    if os.environ.get("DTACH_OPEN_BROWSER") == "1":
+        webbrowser.open(f"http://localhost:{port}")
+
+    _offer_startup_registration(settings)
 
     def open_dtach(icon: pystray.Icon = None, item: pystray.MenuItem = None) -> None:
         webbrowser.open(f"http://localhost:{app.user_settings.port}")

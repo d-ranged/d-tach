@@ -1,20 +1,16 @@
 "use strict";
 
+// Detection settings, hashing, and known values are configured in Settings and
+// read by the server on every run, so this page only carries the two choices
+// that belong to a single run: which language to read the text as, and whether
+// to show the key reference.
 const inputEl              = document.getElementById("input-text");
 const outputEl             = document.getElementById("output-text");
 const copyBtn              = document.getElementById("copy-btn");
-const hashingToggle        = document.getElementById("hashing-toggle");
-const secretField          = document.getElementById("secret-field");
-const secretInput          = document.getElementById("secret-input");
 const keyrefToggle         = document.getElementById("keyref-toggle");
 const keyrefSection        = document.getElementById("keyref-section");
 const keyrefBody           = document.getElementById("keyref-body");
 const exportKeyrefBtn      = document.getElementById("export-keyref-btn");
-const datesToggle          = document.getElementById("dates-toggle");
-const urlsToggle           = document.getElementById("urls-toggle");
-const locationsToggle      = document.getElementById("locations-toggle");
-const numericIdToggle      = document.getElementById("numeric-id-toggle");
-const digitCountInput      = document.getElementById("digit-count");
 const langSelector         = document.getElementById("lang-selector");
 
 const DEBOUNCE_MS = 600;
@@ -51,11 +47,6 @@ async function runAnonymize() {
         return;
     }
 
-    if (hashingToggle.checked && !secretInput.value.trim()) {
-        showError("Enter a secret phrase to use hashing.");
-        return;
-    }
-
     setOutputLoading();
 
     try {
@@ -65,14 +56,7 @@ async function runAnonymize() {
             body: JSON.stringify({
                 text,
                 language: selectedLanguage,
-                hashing_enabled: hashingToggle.checked,
-                secret: secretInput.value,
                 key_reference_enabled: keyrefToggle.checked,
-                anonymize_dates: datesToggle.checked,
-                anonymize_locations: locationsToggle.checked,
-                anonymize_urls: urlsToggle.checked,
-                numeric_id_enabled: numericIdToggle.checked,
-                digit_count: parseInt(digitCountInput.value, 10) || 7,
             }),
         });
 
@@ -165,30 +149,6 @@ copyBtn.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // Toggles
 // ---------------------------------------------------------------------------
-
-hashingToggle.addEventListener("change", () => {
-    secretField.hidden = !hashingToggle.checked;
-    if (!hashingToggle.checked) secretInput.value = "";
-    if (inputEl.value.trim()) runAnonymize();
-});
-
-secretInput.addEventListener("input", scheduleAnonymize);
-
-datesToggle.addEventListener("change", () => {
-    if (inputEl.value.trim()) runAnonymize();
-});
-
-urlsToggle.addEventListener("change", () => {
-    if (inputEl.value.trim()) runAnonymize();
-});
-
-numericIdToggle.addEventListener("change", () => {
-    if (inputEl.value.trim()) runAnonymize();
-});
-
-digitCountInput.addEventListener("change", () => {
-    if (numericIdToggle.checked && inputEl.value.trim()) runAnonymize();
-});
 
 keyrefToggle.addEventListener("change", () => {
     if (!keyrefToggle.checked) keyrefSection.hidden = true;

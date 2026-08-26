@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Generator, Optional
 
 from app.services.file_processor import FileProcessor, FileResult, ProcessingSettings
+from app.services.archive_extractor import ArchiveExtractor, ArchiveResult
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,27 @@ class FolderProcessor:
                 for r in completed:
                     all_replacements.update(r.replacements)
                 self._rename_output_folders(anonymized_root, all_replacements, settings)
+
+    def expand_archives(
+        self, folder: Path, settings: ProcessingSettings
+    ) -> Generator[ArchiveResult, None, None]:
+        """Expand zip/tar archives under folder so the tree on disk is the whole tree.
+
+        A no-op unless settings.expand_archives is on. Runs before any renaming
+        so that files which only exist inside an archive are named, counted and
+        enumerable like everything else.
+
+        Usage mirrors process()::
+
+            for result in processor.expand_archives(folder, settings):
+                # stream result to UI
+        """
+        if not settings.expand_archives:
+            return
+        extractor = ArchiveExtractor()
+        yield from extractor.expand_all(
+            folder, delete_after=settings.delete_archives_after_expand
+        )
 
     def rename_in_place(
         self, folder: Path, settings: ProcessingSettings

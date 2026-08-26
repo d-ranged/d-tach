@@ -919,3 +919,24 @@ details[open] .advanced-settings-toggle::before {
     color: var(--color-text);
     min-width: 180px;
 }
+
+/* ---- Settings pointers: page intro and the per-mode detection summary ---- */
+
+.settings-intro {
+    margin: 0 0 1.5rem;
+    max-width: 62ch;
+}
+
+.detection-summary {
+    margin: 0 0 1rem;
+}
+
+/* ---- Imported-value search ---- */
+
+#imported-values-results {
+    margin-top: 0.6rem;
+    max-height: 220px;
+    overflow-y: auto;
+    align-items: flex-start;
+    align-content: flex-start;
+}

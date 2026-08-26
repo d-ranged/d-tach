@@ -141,23 +141,48 @@ def build_numeric_id_recognizer(
 def build_known_value_recognizers(
     known_values: list[dict], language: str
 ) -> list[PatternRecognizer]:
-    """Return one high-confidence PatternRecognizer per known value.
+    """Return one high-confidence PatternRecognizer per entity type.
 
     Each known_values entry is a dict {"value": str, "entity_type": str, ...}.
-    Each recognizer matches its value case-insensitively as a whole word and
-    assigns its entry's entity_type (default PERSON) with confidence 0.99.
-    Recognizers are prepended before NER so known values are always caught
-    regardless of model detection.
+    Values are matched case-insensitively as whole words and assigned their
+    entry's entity_type (default PERSON) with confidence 0.99. Recognizers are
+    prepended before NER so known values are always caught regardless of model
+    detection.
+
+    All values sharing an entity type are combined into a single alternation
+    rather than getting a recognizer each. A class list of 500 students expands
+    to well over a thousand known values, and a thousand recognizers means a
+    thousand separate passes over every document. Grouping keeps that to one
+    pass per entity type.
     """
-    recognizers: list[PatternRecognizer] = []
+    values_by_entity: dict[str, list[str]] = {}
+    seen: set[tuple[str, str]] = set()
     for entry in known_values:
         value = str(entry.get("value", "")).strip()
         if not value:
             continue
         entity_type = str(entry.get("entity_type") or "PERSON")
+        # Matching is case-insensitive, so values differing only in case are
+        # duplicates and would otherwise bloat the alternation.
+        key = (entity_type, value.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        values_by_entity.setdefault(entity_type, []).append(value)
+
+    recognizers: list[PatternRecognizer] = []
+    for entity_type, values in values_by_entity.items():
+        # Longest first: alternation returns the first branch that matches, so
+        # without this "An" would win over "An Nguyen" and leave the surname.
+        values.sort(key=len, reverse=True)
+        alternation = "|".join(re.escape(value) for value in values)
+        # Lookarounds rather than word-boundary escapes: they behave correctly
+        # even when the value starts or ends with a non-word character. Without
+        # them a short known value such as "An" matches inside "Thank", "and"
+        # and "standard", corrupting ordinary words throughout the document.
         pattern = Pattern(
-            name=f"KNOWN_{re.sub(r'[^A-Z0-9]', '_', value.upper())[:30]}",
-            regex=re.escape(value),
+            name=f"KNOWN_{entity_type}",
+            regex=rf"(?<!\w)(?:{alternation})(?!\w)",
             score=0.99,
         )
         recognizers.append(
@@ -169,6 +194,13 @@ def build_known_value_recognizers(
             )
         )
     return recognizers
+
+
+
+# Longest first: "'s" must be tried before a bare "'", or the s would be kept.
+# Both the straight and the typographic apostrophe appear in real documents —
+# Word autocorrects to the typographic one, and PDF extraction returns it too.
+_POSSESSIVE_SUFFIXES = ("'s", "\u2019s", "'S", "\u2019S", "'", "\u2019")
 
 
 class Anonymizer:
@@ -287,6 +319,7 @@ class Anonymizer:
             if not _is_existing_placeholder(text, r.start, r.end)
         ]
 
+        results = self._trim_possessive(results, text)
         results = self._resolve_overlaps(results)
 
         counters: dict[str, int] = {}
@@ -320,21 +353,64 @@ class Anonymizer:
         return AnonymizationResult(anonymized_text=anonymized, entities=detected)
 
     @staticmethod
-    def _resolve_overlaps(results: list) -> list:
-        """Remove lower-confidence duplicates when NUMERIC_ID overlaps another entity.
+    def _trim_possessive(results: list, text: str) -> list:
+        """Shrink a span so a trailing possessive stays in the text, not in the value.
 
-        When numeric ID detection is active with a digit count matching a phone
-        number length, Presidio fires both NUMERIC_ID and PHONE_NUMBER on the
-        same span. This resolver keeps only the higher-confidence detection for
-        any overlapping spans — but only when NUMERIC_ID is actually present in
-        results, so it has no effect on normal processing without numeric ID enabled.
+        spaCy hands back "Vandenberg's" as the PERSON span, apostrophe and s
+        included, so the possessive ends up inside the value that gets hashed.
+        The same person then encodes to one token where their name is possessive
+        and another where it is not — and to a third if the apostrophe happens to
+        be typographic rather than straight, since the bytes differ and so does
+        the hash. An agent reading a folder sees three people instead of one.
+
+        Keeping the same subject on one token across every document is the whole
+        point of hashing, so the suffix is trimmed off the span before the value
+        is taken. The apostrophe and s stay in the output text, where they belong:
+        "[Ma-EJIN CX66]'s report", not "[Ma-EJIN MW5H] report".
+
+        Runs before overlap resolution so a possessive NER span and a plain
+        known-value match of the same name compare on equal terms.
         """
-        if not any(r.entity_type == NUMERIC_ID_ENTITY for r in results):
-            return results
+        for result in results:
+            span = text[result.start:result.end]
+            for suffix in _POSSESSIVE_SUFFIXES:
+                if span.endswith(suffix) and len(span) > len(suffix):
+                    result.end -= len(suffix)
+                    break
+        return results
 
-        sorted_by_conf = sorted(results, key=lambda r: r.score, reverse=True)
+    @staticmethod
+    def _resolve_overlaps(results: list) -> list:
+        """Keep one detection per overlapping span, preferring the widest.
+
+        Two recognizers routinely fire on overlapping spans:
+
+        - A known value and NER on the same name. A surname-only roster makes
+          this the normal case rather than the exception: NER reports "Din
+          Bakker" while the known value reports "Bakker".
+        - NUMERIC_ID and PHONE_NUMBER, when the configured digit count matches
+          a phone number length.
+
+        Left unresolved, both spans get replaced and the output is corrupted —
+        "Din Bakker" came out as "[PERSON_1]N_2]", which no restore pass can
+        map back.
+
+        The widest span wins, with confidence as the tie-break. Preferring the
+        wider span rather than the higher score matters: a known value scores
+        0.99 and NER around 0.85, so scoring first would let a surname-only
+        roster shrink every full name down to its surname and leave the first
+        name standing in text NER had already covered. Anonymizing more than
+        strictly needed is the safe direction to err in; anonymizing less is not.
+        """
+        ordered = sorted(
+            results,
+            # Start position last, purely so the result is deterministic when
+            # two spans are the same width and score.
+            key=lambda r: (r.end - r.start, r.score, -r.start),
+            reverse=True,
+        )
         accepted: list = []
-        for result in sorted_by_conf:
+        for result in ordered:
             if not any(r.start < result.end and result.start < r.end for r in accepted):
                 accepted.append(result)
         return accepted

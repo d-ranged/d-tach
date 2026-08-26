@@ -29,6 +29,7 @@ _DEFAULTS: Final[dict] = {
     "hashing_secret": "",
     "port": DEFAULT_PORT,
     "tray_startup_prompt_shown": False,
+    "expand_archives_enabled": False,
     "language": "en",
     "anonymize_dates": False,
     "anonymize_locations": False,
@@ -114,6 +115,19 @@ class UserSettings:
     @tray_startup_prompt_shown.setter
     def tray_startup_prompt_shown(self, value: bool) -> None:
         self._data["tray_startup_prompt_shown"] = bool(value)
+
+    @property
+    def expand_archives_enabled(self) -> bool:
+        """Whether a folder run expands zip/tar archives before processing.
+
+        Off by default: expanding writes new folders into the user's tree, which
+        should be a deliberate choice rather than a surprise.
+        """
+        return self._data.get("expand_archives_enabled", False)
+
+    @expand_archives_enabled.setter
+    def expand_archives_enabled(self, value: bool) -> None:
+        self._data["expand_archives_enabled"] = bool(value)
 
     @property
     def language(self) -> str:
@@ -397,6 +411,8 @@ class UserSettings:
             merged["port"] = raw["port"]
         if isinstance(raw.get("tray_startup_prompt_shown"), bool):
             merged["tray_startup_prompt_shown"] = raw["tray_startup_prompt_shown"]
+        if isinstance(raw.get("expand_archives_enabled"), bool):
+            merged["expand_archives_enabled"] = raw["expand_archives_enabled"]
         if raw.get("language") in ("en", "nl"):
             merged["language"] = raw["language"]
         if isinstance(raw.get("anonymize_dates"), bool):

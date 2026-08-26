@@ -382,3 +382,189 @@
         });
     }
 })();
+
+// ---------------------------------------------------------------------------
+// Saved-section helper
+//
+// Every section below saves as soon as a control changes, rather than behind a
+// Save button. These are the values every mode reads, so leaving an edited but
+// unsaved control on screen would misrepresent what the next run will do.
+// ---------------------------------------------------------------------------
+
+function makeSectionSaver(endpoint, noticeId, errorId) {
+    const notice = document.getElementById(noticeId);
+    const errorText = document.getElementById(errorId);
+
+    return async function save(payload) {
+        if (notice) notice.hidden = true;
+        if (errorText) errorText.hidden = true;
+        try {
+            const resp = await fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                if (errorText) {
+                    errorText.textContent = data.error || "Could not save.";
+                    errorText.hidden = false;
+                }
+                return null;
+            }
+            if (notice) {
+                notice.textContent = "Saved.";
+                notice.hidden = false;
+            }
+            return data;
+        } catch (_) {
+            if (errorText) {
+                errorText.textContent = "Could not reach the server.";
+                errorText.hidden = false;
+            }
+            return null;
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Default language
+// ---------------------------------------------------------------------------
+
+(function () {
+    const select = document.getElementById("default-language-select");
+    if (!select) return;
+    const save = makeSectionSaver(
+        "/settings/default-language", "language-notice", "language-error"
+    );
+    select.addEventListener("change", function () {
+        save({ language: select.value });
+    });
+})();
+
+// ---------------------------------------------------------------------------
+// Detection
+// ---------------------------------------------------------------------------
+
+(function () {
+    const toggles = document.querySelectorAll(".detection-toggle");
+    const numbers = document.querySelectorAll(".detection-number");
+    if (!toggles.length && !numbers.length) return;
+
+    const save = makeSectionSaver(
+        "/settings/detection", "detection-notice", "detection-error"
+    );
+
+    toggles.forEach(function (el) {
+        el.addEventListener("change", async function () {
+            const result = await save({ [el.dataset.field]: el.checked });
+            if (!result) el.checked = !el.checked;
+        });
+    });
+
+    numbers.forEach(function (el) {
+        const previous = { value: el.value };
+        el.addEventListener("change", async function () {
+            const parsed = parseInt(el.value, 10);
+            if (Number.isNaN(parsed)) {
+                el.value = previous.value;
+                return;
+            }
+            const result = await save({ [el.dataset.field]: parsed });
+            if (result) {
+                previous.value = String(result[el.dataset.field]);
+            }
+            el.value = previous.value;
+        });
+    });
+})();
+
+// ---------------------------------------------------------------------------
+// Excel
+// ---------------------------------------------------------------------------
+
+(function () {
+    const controls = document.querySelectorAll(".excel-control");
+    if (!controls.length) return;
+
+    const save = makeSectionSaver("/settings/excel", "excel-notice", "excel-error");
+
+    controls.forEach(function (el) {
+        el.addEventListener("change", function () {
+            const value = el.type === "checkbox" ? el.checked : el.value.trim();
+            save({ [el.dataset.field]: value });
+        });
+    });
+})();
+
+// ---------------------------------------------------------------------------
+// Folder output
+// ---------------------------------------------------------------------------
+
+(function () {
+    const controls = document.querySelectorAll(".folder-output-control");
+    if (!controls.length) return;
+
+    const save = makeSectionSaver(
+        "/settings/folder-output", "folder-output-notice", "folder-output-error"
+    );
+
+    controls.forEach(function (el) {
+        el.addEventListener("change", function () {
+            if (el.type === "radio") {
+                if (el.checked) save({ output_mode: el.value });
+                return;
+            }
+            save({ [el.dataset.field]: el.value.trim() });
+        });
+    });
+})();
+
+// ---------------------------------------------------------------------------
+// Hashing
+// ---------------------------------------------------------------------------
+
+(function () {
+    const toggle = document.getElementById("hashing-toggle");
+    const body = document.getElementById("hashing-body");
+    const secretInput = document.getElementById("hashing-secret-input");
+    const revealBtn = document.getElementById("hashing-secret-reveal-btn");
+    const saveBtn = document.getElementById("hashing-save-btn");
+    const notice = document.getElementById("hashing-notice");
+    if (!toggle || !body || !secretInput) return;
+
+    const save = makeSectionSaver("/settings/hashing", "hashing-notice", "hashing-error");
+
+    toggle.addEventListener("change", async function () {
+        body.hidden = !toggle.checked;
+        // Enabling with no secret yet is not an error — the field has only just
+        // been revealed. Wait for Save rather than rejecting the click.
+        if (toggle.checked && !secretInput.value.trim()) {
+            if (notice) {
+                notice.textContent = "Enter a secret phrase, then press Save.";
+                notice.hidden = false;
+            }
+            secretInput.focus();
+            return;
+        }
+        const result = await save({ enabled: toggle.checked, secret: secretInput.value });
+        if (!result) {
+            toggle.checked = !toggle.checked;
+            body.hidden = !toggle.checked;
+        }
+    });
+
+    if (saveBtn) {
+        saveBtn.addEventListener("click", function () {
+            save({ enabled: toggle.checked, secret: secretInput.value });
+        });
+    }
+
+    if (revealBtn) {
+        revealBtn.addEventListener("click", function () {
+            const hidden = secretInput.type === "password";
+            secretInput.type = hidden ? "text" : "password";
+            revealBtn.textContent = hidden ? "Hide" : "Show";
+        });
+    }
+})();

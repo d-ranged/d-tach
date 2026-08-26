@@ -127,6 +127,8 @@ class ProcessingSettings:
     known_values: list[dict] = field(default_factory=list)
     pass_through_extensions: list[str] = field(default_factory=list)
     loading_strategy: str = "eager"  # "eager" | "lazy"
+    expand_archives: bool = False
+    delete_archives_after_expand: bool = False
 
 
 @dataclass
@@ -320,20 +322,45 @@ class FileProcessor:
 
         text, doc = self._doc_processor.load_pdf(path)
 
+        # pymupdf does not OCR, so a page with no text layer yields nothing and
+        # would be written out with every real name still legible in the image.
+        image_only_pages = [
+            number for number, page in enumerate(doc, start=1)
+            if not page.get_text().strip()
+        ]
+
         if not text.strip():
             doc.close()
             logger.warning(
                 "PDF %s yielded no extractable text — may be image-based or have non-standard encoding.", path
             )
-            output_path = self._output_path(path, "UNREADABLE_", {}, settings, settings.language, output_path_override)
-            unreadable_doc = fitz.open(str(path))
-            self._doc_processor.save_pdf_copy(unreadable_doc, output_path)
-            unreadable_doc.close()
+            # Deliberately writes nothing. Everything in the output is taken to
+            # be safe to pass on, and a PDF that could not be read has had no
+            # PII removed at all — a scanned letter would land there with the
+            # name and signature intact. An earlier version copied it in under
+            # an UNREADABLE_ prefix, but subfolder mode drops the prefix, so it
+            # arrived indistinguishable from properly anonymized output.
             return FileResult(
                 status="unreadable",
                 source_path=path,
-                output_path=output_path,
-                error_message="PDF could not be read — may be image-based or have non-standard encoding. Convert to a text-based PDF and retry.",
+                error_message=(
+                    "PDF could not be read — may be image-based or have non-standard "
+                    "encoding. Nothing was written to the output. Convert it to a "
+                    "text-based PDF and retry."
+                ),
+            )
+
+        warnings: list[str] = []
+        if image_only_pages:
+            pages = ", ".join(str(n) for n in image_only_pages)
+            warnings.append(
+                f"Page {pages} has no extractable text (may be image-only) and was "
+                f"copied unchanged — any name shown there is still in the output. "
+                f"Review manually."
+                if len(image_only_pages) == 1 else
+                f"Pages {pages} have no extractable text (may be image-only) and were "
+                f"copied unchanged — any names shown there are still in the output. "
+                f"Review manually."
             )
 
         language = settings.language
@@ -345,7 +372,10 @@ class FileProcessor:
             clean_doc = fitz.open(str(path))
             self._doc_processor.save_pdf_copy(clean_doc, output_path)
             clean_doc.close()
-            return FileResult(status="clean", source_path=path, output_path=output_path)
+            return FileResult(
+                status="clean", source_path=path, output_path=output_path,
+                warnings=warnings,
+            )
 
         replacements = detection.replacements
         output_path = self._output_path(path, "ANON_", replacements, settings, language, output_path_override)
@@ -364,6 +394,7 @@ class FileProcessor:
             keyref_path=keyref_path,
             entities_found=len({e.original_text for e in detection.entities}),
             replacements=replacements,
+            warnings=warnings,
         )
 
     def _process_xlsx(
@@ -509,6 +540,17 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = compose_replacements(result.entities, encoder)
+
+        # The Anonymizer numbers placeholders sequentially, but compose_replacements
+        # is what decides the token that actually lands in the text. With hashing on
+        # the two disagree, and an entity list still reporting [PERSON_1] describes a
+        # placeholder that appears nowhere in the output. Worse, [PERSON_1] means a
+        # different person in every document, so anything reading the entity list to
+        # identify subjects across a folder merges them — the exact confusion hashing
+        # exists to prevent. Report what was actually written.
+        for entity in result.entities:
+            entity.placeholder = replacements.get(entity.original_text, entity.placeholder)
+
         return DetectionResult(entities=result.entities, replacements=replacements)
 
     def _build_ad_hoc_recognizers(

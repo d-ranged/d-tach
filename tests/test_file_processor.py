@@ -32,6 +32,23 @@ def make_pdf(path: Path, lines: list[str]) -> None:
     doc.close()
 
 
+def make_pdf_pages(path: Path, pages: list[list[str]]) -> None:
+    """Create a multi-page PDF. An empty inner list makes a page with no text layer.
+
+    That is what an image-only page looks like to pymupdf, which does not OCR —
+    the page exists but yields nothing extractable.
+    """
+    doc = fitz.open()
+    for lines in pages:
+        page = doc.new_page()
+        y = 72
+        for line in lines:
+            page.insert_text((72, y), line)
+            y += 20
+    doc.save(str(path))
+    doc.close()
+
+
 def make_xlsx(path: Path, cells: dict[str, object]) -> None:
     """Create an xlsx file with the given cell address → value mapping."""
     wb = Workbook()
@@ -646,3 +663,100 @@ class TestBuildEntityListKnownValues:
         output_text = result.output_path.read_text(encoding="utf-8")
         assert "1234567" not in output_text
         assert "[NUMERIC_ID_1]" in output_text
+
+
+class TestUnreadablePdf:
+    """A PDF with no text layer must not reach the output at all.
+
+    Everything in the output is taken to be safe to pass on. A PDF that could
+    not be read has had nothing removed from it, so a scanned letter would
+    arrive there with the name and signature fully legible. An earlier version
+    wrote it out under an UNREADABLE_ prefix, but subfolder mode drops prefixes
+    entirely, so it landed looking exactly like properly anonymized output.
+    """
+
+    def test_image_only_pdf_is_not_written(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "scan.pdf"
+        make_pdf_pages(source, [[]])
+
+        result = file_processor.process(source, ProcessingSettings())
+
+        assert result.status == "unreadable"
+        assert result.output_path is None
+
+    def test_image_only_pdf_leaves_no_file_behind(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "scan.pdf"
+        make_pdf_pages(source, [[]])
+
+        file_processor.process(source, ProcessingSettings())
+
+        assert [p.name for p in tmp_path.iterdir()] == ["scan.pdf"]
+
+    def test_image_only_pdf_not_written_to_subfolder_override(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        """The case that was actually reported: subfolder mode drops the prefix."""
+        source = tmp_path / "scan.pdf"
+        make_pdf_pages(source, [[]])
+        override = tmp_path / "anonymized" / "scan.pdf"
+        override.parent.mkdir()
+
+        result = file_processor.process(source, ProcessingSettings(), override)
+
+        assert result.status == "unreadable"
+        assert not override.exists()
+        assert list(override.parent.iterdir()) == []
+
+    def test_error_message_says_nothing_was_written(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "scan.pdf"
+        make_pdf_pages(source, [[]])
+
+        result = file_processor.process(source, ProcessingSettings())
+
+        assert "Nothing was written" in result.error_message
+
+
+class TestPartiallyReadablePdf:
+    """Readable pages are redacted; image-only pages pass through and must be flagged.
+
+    Refusing to write these would block ordinary work — a signed letter with a
+    scanned final page is the common case. But the pass-through is silent
+    otherwise, and a name visible only in the image survives it.
+    """
+
+    def test_image_only_page_is_flagged(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "letter.pdf"
+        make_pdf_pages(source, [["Ali Hassan attended the meeting."], []])
+
+        result = file_processor.process(source, ProcessingSettings())
+
+        assert result.status == "anonymized"
+        assert any("Page 2" in w for w in result.warnings)
+
+    def test_several_image_only_pages_are_listed(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "letter.pdf"
+        make_pdf_pages(source, [["Ali Hassan attended."], [], []])
+
+        result = file_processor.process(source, ProcessingSettings())
+
+        assert any("Pages 2, 3" in w for w in result.warnings)
+
+    def test_fully_readable_pdf_has_no_warnings(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "letter.pdf"
+        make_pdf_pages(source, [["Ali Hassan attended."], ["Nothing of note."]])
+
+        result = file_processor.process(source, ProcessingSettings())
+
+        assert result.warnings == []
