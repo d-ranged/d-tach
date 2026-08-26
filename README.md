@@ -4,11 +4,11 @@
 
 Everything runs locally on your machine. No files or text are ever sent anywhere.
 
-[![Version](https://img.shields.io/badge/version-1.2.0-blue)](https://codeberg.org/d-craig/d-tach/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue)](https://codeberg.org/d-ranged/d-tach/releases)
 &nbsp;
 [![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-green)](LICENSE)
 
-[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)
+[⬇ Download Latest Release](https://codeberg.org/d-ranged/d-tach/releases)
 &nbsp;
 [▶ Watch the Tutorial](https://youtu.be/8uLj6M8AUug)
 
@@ -49,7 +49,7 @@ You need **Python 3.11 or newer** installed on your machine. This is a one-time 
 
 ### Installation and first run (Windows)
 
-1. Click **[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
+1. Click **[⬇ Download Latest Release](https://codeberg.org/d-ranged/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
 2. Double-click **`launch.bat`**.
 
 On first run, the launcher checks your Python version, then installs all required dependencies automatically. This takes a few minutes and only happens once. On all future runs it starts immediately.
@@ -60,7 +60,7 @@ A browser window opens at `http://localhost:5555`, and a d-tach icon appears in 
 
 ### Installation and first run (macOS / Linux)
 
-1. Click **[⬇ Download Latest Release](https://codeberg.org/d-craig/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
+1. Click **[⬇ Download Latest Release](https://codeberg.org/d-ranged/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
 2. Open Terminal, navigate to the extracted folder, and run:
    ```bash
    bash launch.sh
@@ -224,7 +224,7 @@ _For developers and IT-literate users who want to clone the repository and run f
 ### Installation
 
 ```bash
-git clone https://codeberg.org/d-craig/d-tach.git
+git clone https://codeberg.org/d-ranged/d-tach.git
 cd d-tach
 python -m venv .venv
 

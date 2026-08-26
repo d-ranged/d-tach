@@ -9,6 +9,28 @@ Version numbers follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.P
 
 ---
 
+## [1.3.0] — 2026-08-26
+
+### Added
+
+- **System tray app** — d-tach now runs as a persistent background process with a tray icon (Open d-tach / Quit) instead of something launched and closed each session. Offers a one-time prompt to register as a Windows startup program.
+- **Configurable port** — the listening port (default changed from 5000 to 5555, avoiding conflicts with other local Flask projects) is set in Settings rather than fixed at launch; changing it prompts for a restart.
+- **On-demand language management** — spaCy language models are downloaded and loaded on demand rather than bundled with the app, chosen at first launch and changeable later in Settings. Keeps the persistent tray process from holding memory for models never used, and shrinks what a future packaged installer needs to ship.
+- **Class list import** — bulk-populate known values from a roster file (e.g. student number and name columns) instead of adding names one at a time. Re-syncing the same file only adds new rows; a "Clear class list values" action removes only imported entries, leaving manually-added ones in place.
+- **AI Mode** — a local, token-authenticated API (`/ai/extract`, `/ai/restore`, `/ai/flag-term`) that lets an AI assistant work through real documents without ever reading a file's contents directly. Extract returns anonymized text and a session-scoped placeholder map; restore substitutes real values back in, optionally writing straight to an output path so restored content never has to pass back through the assistant at all. Includes a "Rename names only" pass that anonymizes every file and folder name in a tree in place, so the tree is safe to enumerate before any content is read.
+- **Settings is now the single writer** for everything a run reads — hashing, detection toggles, Excel handling, folder output mode, default language. Every mode reads from Settings; a run's per-request overrides apply to that run only and are never written back.
+
+### Fixed
+
+- **Double-anonymization of already-anonymized text** — re-running anonymization on text that already contained d-tach placeholders corrupted them into nested, malformed brackets. Already-anonymized spans are now recognized and left untouched.
+- **Known values matching inside longer words** — a known value could match as a substring of an unrelated word, corrupting prose and creating a false replacement that restore would later reinsert mid-word. Matching is now whole-word only.
+- **Overlapping detections producing malformed placeholders** — two detections covering overlapping spans were both replaced independently, producing a placeholder no restore pass could map back to a real value. Overlaps are now resolved to one detection per span before replacement.
+- **Possessive names hashing inconsistently** — a trailing possessive (`'s`, including the typographic `'s`) was included in the detected name span, so the same person could hash to three different placeholders depending on how their name was written. The possessive is now trimmed from the span before hashing and left in place in the surrounding text.
+- **Image-based PDFs written into anonymized output unreadable** — a PDF with no extractable text (e.g. a scanned page) was still copied into the output, indistinguishable from a properly anonymized file once the destination folder dropped identifying prefixes. Nothing is now written for a PDF that can't be read at all; a PDF with only some image-only pages is anonymized on its text pages, with the image-only ones named in a warning.
+- **AI Mode reporting the wrong placeholder** — `/ai/extract`'s entity list reported sequential placeholders (`[PERSON_1]`) while the returned text carried hashed ones, so the entity list named tokens absent from the document and reused the same label for a different person in every file. The entity list now reports the placeholder actually written into the text.
+
+---
+
 ## [1.2.0] — 2026-06-07
 
 ### Added
