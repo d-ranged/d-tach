@@ -17,12 +17,21 @@ Consult `project_guide.md` for architectural decisions and documented alternativ
 | 3 | Fix double-anonymization of already-anonymized text | ✅ Complete |
 | 4 | Class list import — bulk-populate known values from a roster file | ✅ Complete |
 | 5 | AI Mode — filename-only rename prerequisite + local API for AI-assisted anonymize/restore | ✅ Complete |
-| 6 | Acceptance Testing — real-work run through the finished feature set | ⬜ Not started |
+| 6 | Acceptance Testing — real-work run through the finished feature set | ✅ Complete |
 
 Acceptance testing moved from position 3 to position 6 (24-8-2026). It is no longer a
 self-administered feature checklist run against test data — it is a real piece of the
 tester's own work, done end to end through the finished feature set. That only works once
 every step is in, so it goes last. See Step 6.
+
+Step 6 closed 25-8-2026. The real task was a MoMi retroactive-absence warning letter,
+built end to end through AI Mode from two real source documents. No student name,
+surname or student number reached the assistant's context at any point in the run — the
+tester confirmed this independently. Three defects were found and fixed inside this step
+rather than deferred (rows 10-12 below); see the defect log below for the full list of
+twelve. One completeness criterion — a roster/known-values entry catching a name that NER
+missed — was not separately exercised in this run, since the real task didn't produce
+that case; noted here rather than silently checked off.
 
 ---
 
@@ -809,7 +818,7 @@ temp dir).
 
 ---
 
-## Step 6 — Acceptance Testing
+## <completed>Step 6 — Acceptance Testing</completed>
 
 **Codeberg issue to create first:**
 `test: acceptance testing — v1.3.0 end-to-end on real data`
@@ -1134,14 +1143,88 @@ one, and should be made consciously rather than by drift.
 
 ---
 
-## Release — v1.3.0
+## Release Runbook — v1.3.0
 
-Once all steps including acceptance testing are complete:
+All six build steps and acceptance testing are done. What is left is mechanical —
+merge the branch, bump the version, publish. Two sittings, in order. Per `CLAUDE.md`,
+**Claude does not commit directly to `main` and does not merge PRs** — both sittings
+below are Craig's own actions on Codeberg/git, with Claude preparing content and
+giving exact commands to run. This is a standing project rule, not a default that a
+future session can quietly relax.
 
-1. Bump `__version__` in `app/__init__.py`
-2. Update version badge in `README.md`
-3. Add v1.3.0 entry to `CHANGELOG.md`
-4. Commit: `Update version to v1.3.0`
-5. Tag: `git tag v1.3.0 -m "Release v1.3.0"`
-6. Push commits and tag: `git push && git push origin v1.3.0`
-7. Codeberg → Releases → New Release → select tag → paste CHANGELOG entry → publish
+### Sitting 1 — Merge issue #70 into `main`
+
+**Who:** Craig, via the Codeberg GUI. **Tier:** none needed, no AI session required
+for this sitting.
+
+- `fix/issue-70-launcher-startup` is 10 commits ahead of `main`, `main` has nothing
+  it doesn't (verified 25-8-2026 — reverify if time has passed and other branches
+  merged since)
+- Codeberg → Pull Requests → New → `fix/issue-70-launcher-startup` into `main` →
+  `Closes #70`
+- Review, merge, delete the branch
+
+**Comes out of this sitting:** `main` contains everything in v1.3.0 Steps 1-6,
+including all twelve defects fixed during acceptance testing.
+
+### Sitting 2 — Cut the release
+
+**Who:** Craig, in a fresh session, Claude assisting. **Tier:** Sonnet — this is
+execution against a fully written spec, no judgement calls left. **Opening line to
+paste into a new session:**
+
+> Follow the Release Runbook for v1.3.0 in `docs/step_1.3.0_next.md` — Sitting 2.
+> `main` already has issue #70 merged. Walk me through it.
+
+**What Claude does in this sitting:**
+
+1. `git checkout main && git pull` — confirm `main` now has issue #70 merged
+2. Run `pytest` — confirm the full suite is still green on `main` (431+ tests at
+   last count; note the number if it's changed)
+3. Bump `__version__` in `app/__init__.py`: `"1.2.0"` → `"1.3.0"`
+4. Update the version badge in `README.md`: `version-1.2.0-blue` → `version-1.3.0-blue`
+5. While touching `README.md`: fix five links still pointing at
+   `codeberg.org/d-craig/d-tach` (lines 7, 11, 52, 63, 227) — the repo has been
+   `d-ranged/d-tach` since the branding change and these currently 404. Pre-existing,
+   unrelated to v1.3.0, but cheap to fix in the same pass rather than leaving a
+   release with dead download links.
+6. Paste the CHANGELOG entry below into `CHANGELOG.md`, above the `[1.2.0]` entry,
+   with today's date filled in
+
+**What Craig does — the parts `CLAUDE.md` reserves for him:**
+
+1. Review the diff, then commit directly to `main` himself:
+   `Update version to v1.3.0` with `Co-authored by d-craig and Claude Code`
+2. Tag: `git tag v1.3.0 -m "Release v1.3.0"`
+3. Push: `git push && git push origin v1.3.0`
+4. Codeberg → Releases → New Release → select the `v1.3.0` tag → paste the
+   CHANGELOG entry as the release notes → publish
+
+**Comes out of this sitting:** a tagged, pushed, published v1.3.0 release.
+
+**Optional follow-up, not part of the release itself:** update the test clone at
+`C:\tools\d-tach` — quit the tray app, `git pull`, delete `.venv`, rerun `launch.bat`.
+
+### CHANGELOG entry — ready to paste
+
+```markdown
+## [1.3.0] — <DATE>
+
+### Added
+
+- **System tray app** — d-tach now runs as a persistent background process with a tray icon (Open d-tach / Quit) instead of something launched and closed each session. Offers a one-time prompt to register as a Windows startup program.
+- **Configurable port** — the listening port (default changed from 5000 to 5555, avoiding conflicts with other local Flask projects) is set in Settings rather than fixed at launch; changing it prompts for a restart.
+- **On-demand language management** — spaCy language models are downloaded and loaded on demand rather than bundled with the app, chosen at first launch and changeable later in Settings. Keeps the persistent tray process from holding memory for models never used, and shrinks what a future packaged installer needs to ship.
+- **Class list import** — bulk-populate known values from a roster file (e.g. student number and name columns) instead of adding names one at a time. Re-syncing the same file only adds new rows; a "Clear class list values" action removes only imported entries, leaving manually-added ones in place.
+- **AI Mode** — a local, token-authenticated API (`/ai/extract`, `/ai/restore`, `/ai/flag-term`) that lets an AI assistant work through real documents without ever reading a file's contents directly. Extract returns anonymized text and a session-scoped placeholder map; restore substitutes real values back in, optionally writing straight to an output path so restored content never has to pass back through the assistant at all. Includes a "Rename names only" pass that anonymizes every file and folder name in a tree in place, so the tree is safe to enumerate before any content is read.
+- **Settings is now the single writer** for everything a run reads — hashing, detection toggles, Excel handling, folder output mode, default language. Every mode reads from Settings; a run's per-request overrides apply to that run only and are never written back.
+
+### Fixed
+
+- **Double-anonymization of already-anonymized text** — re-running anonymization on text that already contained d-tach placeholders corrupted them into nested, malformed brackets. Already-anonymized spans are now recognized and left untouched.
+- **Known values matching inside longer words** — a known value could match as a substring of an unrelated word, corrupting prose and creating a false replacement that restore would later reinsert mid-word. Matching is now whole-word only.
+- **Overlapping detections producing malformed placeholders** — two detections covering overlapping spans were both replaced independently, producing a placeholder no restore pass could map back to a real value. Overlaps are now resolved to one detection per span before replacement.
+- **Possessive names hashing inconsistently** — a trailing possessive (`'s`, including the typographic `'s`) was included in the detected name span, so the same person could hash to three different placeholders depending on how their name was written. The possessive is now trimmed from the span before hashing and left in place in the surrounding text.
+- **Image-based PDFs written into anonymized output unreadable** — a PDF with no extractable text (e.g. a scanned page) was still copied into the output, indistinguishable from a properly anonymized file once the destination folder dropped identifying prefixes. Nothing is now written for a PDF that can't be read at all; a PDF with only some image-only pages is anonymized on its text pages, with the image-only ones named in a warning.
+- **AI Mode reporting the wrong placeholder** — `/ai/extract`'s entity list reported sequential placeholders (`[PERSON_1]`) while the returned text carried hashed ones, so the entity list named tokens absent from the document and reused the same label for a different person in every file. The entity list now reports the placeholder actually written into the text.
+```
