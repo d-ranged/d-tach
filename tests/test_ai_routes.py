@@ -401,3 +401,80 @@ class TestFlagTerm:
 
         values = [v["value"] for v in resp.get_json()["known_values"]]
         assert values.count("Repeat Name") + values.count("repeat name") == 1
+
+
+class TestReportedPlaceholdersMatchTheText:
+    """The entity list must name the placeholders that are actually in the output.
+
+    With hashing on, the Anonymizer's sequential numbering and the hashed token
+    that lands in the text are two different strings. Reporting the sequential
+    one gave an agent a placeholder that appeared nowhere in the document it had
+    just been handed — and worse, [PERSON_1] means a different person in every
+    file, so an agent identifying subjects across a folder merged them. That is
+    precisely the confusion hashing exists to prevent.
+    """
+
+    def _extract(self, client, auth_headers: dict, source: Path) -> dict:
+        resp = client.post("/ai/extract", json={"file_path": str(source)}, headers=auth_headers)
+        assert resp.status_code == 200
+        return resp.get_json()
+
+    def test_every_reported_placeholder_is_in_the_text_when_hashing_is_on(
+        self, client, auth_headers: dict, user_settings: UserSettings, tmp_path: Path
+    ) -> None:
+        user_settings.hashing_enabled = True
+        user_settings.hashing_secret = "pepper"
+        source = tmp_path / "notes.md"
+        source.write_text("John Smith emailed john.smith@example.com.", encoding="utf-8")
+
+        data = self._extract(client, auth_headers, source)
+
+        assert data["entities"]
+        for entity in data["entities"]:
+            assert entity["placeholder"] in data["anonymized_text"], entity
+
+    def test_reported_person_placeholder_is_hashed_not_sequential(
+        self, client, auth_headers: dict, user_settings: UserSettings, tmp_path: Path
+    ) -> None:
+        user_settings.hashing_enabled = True
+        user_settings.hashing_secret = "pepper"
+        source = tmp_path / "notes.md"
+        source.write_text("John Smith missed the deadline.", encoding="utf-8")
+
+        data = self._extract(client, auth_headers, source)
+        people = [e["placeholder"] for e in data["entities"] if e["type"] == "PERSON"]
+
+        assert people and people[0] != "[PERSON_1]"
+
+    def test_sequential_placeholders_still_reported_when_hashing_is_off(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "notes.md"
+        source.write_text("John Smith missed the deadline.", encoding="utf-8")
+
+        data = self._extract(client, auth_headers, source)
+        people = [e["placeholder"] for e in data["entities"] if e["type"] == "PERSON"]
+
+        assert people == ["[PERSON_1]"]
+        assert "[PERSON_1]" in data["anonymized_text"]
+
+    def test_the_reported_placeholder_is_the_one_restore_maps_back(
+        self, client, auth_headers: dict, user_settings: UserSettings, tmp_path: Path
+    ) -> None:
+        """An agent that composes output from the entity list must get a working restore."""
+        user_settings.hashing_enabled = True
+        user_settings.hashing_secret = "pepper"
+        source = tmp_path / "notes.md"
+        source.write_text("John Smith missed the deadline.", encoding="utf-8")
+
+        data = self._extract(client, auth_headers, source)
+        placeholder = next(e["placeholder"] for e in data["entities"] if e["type"] == "PERSON")
+
+        resp = client.post(
+            "/ai/restore",
+            json={"session_id": data["session_id"], "text": f"Re: {placeholder}"},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        assert resp.get_json()["restored_text"] == "Re: John Smith"

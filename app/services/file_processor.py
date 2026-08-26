@@ -540,6 +540,17 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = compose_replacements(result.entities, encoder)
+
+        # The Anonymizer numbers placeholders sequentially, but compose_replacements
+        # is what decides the token that actually lands in the text. With hashing on
+        # the two disagree, and an entity list still reporting [PERSON_1] describes a
+        # placeholder that appears nowhere in the output. Worse, [PERSON_1] means a
+        # different person in every document, so anything reading the entity list to
+        # identify subjects across a folder merges them — the exact confusion hashing
+        # exists to prevent. Report what was actually written.
+        for entity in result.entities:
+            entity.placeholder = replacements.get(entity.original_text, entity.placeholder)
+
         return DetectionResult(entities=result.entities, replacements=replacements)
 
     def _build_ad_hoc_recognizers(
