@@ -204,7 +204,7 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
   to the processed folder listing each file's status, entity count, and output path.
 
 - **Standalone packaged installer (PyInstaller)**
-  ➡️ **Planned for v1.4.0** — see `step_1.3.0_next.md` for the planning note.
+  ➡️ **Planned for v1.4.0** — see `step_1.4.0_next.md`, Step 3.
 
   v1.3.0 language management (on-demand model download) unlocks this: the binary
   ships without models, making it small enough (~80–150 MB) to publish on Codeberg's
