@@ -1207,12 +1207,12 @@ paste into a new session:**
 
 ### CHANGELOG entry — ready to paste
 
-```markdown
-## [1.3.0] — <DATE>
+
+## [1.3.0] —  2026-8-26
 
 ### Added
-
-- **System tray app** — d-tach now runs as a persistent background process with a tray icon (Open d-tach / Quit) instead of something launched and closed each session. Offers a one-time prompt to register as a Windows startup program.
+-
+- **-System tray app** — d-tach now runs as a persistent background process with a tray icon (Open d-tach / Quit) instead of something launched and closed each session. Offers a one-time prompt to register as a Windows startup program.
 - **Configurable port** — the listening port (default changed from 5000 to 5555, avoiding conflicts with other local Flask projects) is set in Settings rather than fixed at launch; changing it prompts for a restart.
 - **On-demand language management** — spaCy language models are downloaded and loaded on demand rather than bundled with the app, chosen at first launch and changeable later in Settings. Keeps the persistent tray process from holding memory for models never used, and shrinks what a future packaged installer needs to ship.
 - **Class list import** — bulk-populate known values from a roster file (e.g. student number and name columns) instead of adding names one at a time. Re-syncing the same file only adds new rows; a "Clear class list values" action removes only imported entries, leaving manually-added ones in place.
@@ -1227,4 +1227,3 @@ paste into a new session:**
 - **Possessive names hashing inconsistently** — a trailing possessive (`'s`, including the typographic `'s`) was included in the detected name span, so the same person could hash to three different placeholders depending on how their name was written. The possessive is now trimmed from the span before hashing and left in place in the surrounding text.
 - **Image-based PDFs written into anonymized output unreadable** — a PDF with no extractable text (e.g. a scanned page) was still copied into the output, indistinguishable from a properly anonymized file once the destination folder dropped identifying prefixes. Nothing is now written for a PDF that can't be read at all; a PDF with only some image-only pages is anonymized on its text pages, with the image-only ones named in a warning.
 - **AI Mode reporting the wrong placeholder** — `/ai/extract`'s entity list reported sequential placeholders (`[PERSON_1]`) while the returned text carried hashed ones, so the entity list named tokens absent from the document and reused the same label for a different person in every file. The entity list now reports the placeholder actually written into the text.
-```
