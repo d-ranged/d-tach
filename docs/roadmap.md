@@ -90,6 +90,19 @@ API appears, re-evaluate.
   the model more context. Create a small anonymized test corpus of representative
   document structures to make accuracy improvements measurable and repeatable.
 
+- **Values broken across a line break are never detected**
+  Seen in AI Mode on a real internship PDF, 10-09-2026. A company name sat in a
+  table cell narrow enough that the PDF renderer wrapped it across two lines. The
+  same company name was detected and replaced everywhere else in the document, but
+  not at that one occurrence, because the extracted text carries a newline in the
+  middle of the value and nothing matches it. Affects known values as well as NER,
+  so it defeats even a term the user has explicitly flagged. Likely fix: normalise
+  whitespace (and soft hyphens) in the extracted text before matching, keeping an
+  offset map so replacements still land in the right place in the original. Applies
+  to every mode, not only AI Mode. Craig's call on 10-09-2026 was to log it and move
+  on rather than hand-check each extraction, so the practical impact is that a
+  reader of anonymised output should not assume a clean pass.
+
 - **Key reference export — folder mode and improved single-file export**
   - **Folder mode:** consolidated `KEYREF_<folder-name>.csv` at the root of the
     processed folder, listing all placeholder → original mappings across all files.
