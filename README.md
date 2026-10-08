@@ -12,6 +12,8 @@ Everything runs locally on your machine. No files or text are ever sent anywhere
 &nbsp;
 [▶ Watch the Tutorial](https://youtu.be/8uLj6M8AUug)
 
+Developed on [Codeberg](https://codeberg.org/d-ranged/d-tach), mirrored to [GitHub](https://github.com/d-ranged/d-tach). Issues and pull requests on Codeberg.
+
 ---
 
 **Jump to:** [Download to Use](#download-to-use) · [Technical Setup](#technical-setup)
