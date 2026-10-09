@@ -15,8 +15,9 @@ Consult `step_1.3.0_next.md` for the acceptance-run defect log these items came 
 
 | Step | Description | Status |
 |---|---|---|
+| 0 | Fixes from the tutorial dry run (8-10-2026), plus the class list name columns | ⬜ Not started |
 | 1 | `/ai/restore` accepts a KEYREF file, not just a live session | ⬜ Not started |
-| 2 | OCR fallback for image-based PDFs — text only, quarantined output | ⬜ Not started |
+| 2 | OCR fallback for image-based PDFs. Moved to v1.5.0 on 9-10-2026, [#78](https://codeberg.org/d-ranged/d-tach/issues/78) | ➡️ Moved |
 | 3 | Standalone packaged installer (PyInstaller) | ⬜ Not started |
 
 Steps 1 and 2 came out of the v1.3.0 Step 6 acceptance run (25-8-2026). Step 3 was
@@ -43,11 +44,55 @@ has to be dealt with, and the tester ends up doing by hand what the tool exists 
 Scanned letters and signed declarations are exactly the documents that carry the most
 sensitive content, so this is not an edge case.
 
+## Step 0 — Fixes From the Tutorial Dry Run
+
+**Codeberg issues:** [#72](https://codeberg.org/d-ranged/d-tach/issues/72) (0a), [#73](https://codeberg.org/d-ranged/d-tach/issues/73) (0b), [#74](https://codeberg.org/d-ranged/d-tach/issues/74) (0c), [#75](https://codeberg.org/d-ranged/d-tach/issues/75) (0d), [#76](https://codeberg.org/d-ranged/d-tach/issues/76) (0e)
+
+Found 8-10-2026 while dry-running the usage-video demo kit through v1.3.0
+(`d-ranged/tutorials/d-tach/demo/build_demo.py` in d-workspace rebuilds it). The video
+runbook currently steers around each of these. All four reproduced again on main 9-10-2026.
+The issues hold the full reproduction and the fix direction.
+
+| # | Defect | Reproduce | Likely cause |
+|---|---|---|---|
+| 0a | Output files renamed twice: `progress_[[L-ISB7_3PIB]].pdf` | Document Mode, subfolder output, hashing on, Check file and folder names on | Filename pass re-wraps a name that is already a placeholder, as body text did before issue #64 |
+| 0b | Folder KEYREF is ambiguous without hashing | Document Mode on a folder, hashing off, Key reference on | Sequential numbering restarts per file, so one KEYREF maps `[PERSON_2]` to two people. Restore from it is then wrong |
+| 0c | A name at the end of a line swallows the next line's first word | `Joris van Dijk` at a line end, `Guide` starting the next line, became one PERSON | Entity span crosses a newline. Trim spans at the first line break |
+| 0d | A lone first name is missed in one file and caught in another | Class list holds `Lotte Vermeulen`. NER catches `Lotte` alone in the DOCX, the PDF line `Lotte is on track.` stays in the clear | NER is inconsistent on lone first names. Known values work as designed, see below |
+
+0d is not a known-values bug. Class lists deliberately leave out the first-name column,
+because short first names (An, En, El) match far too much ordinary text. Lone first names
+are left to NER, which misses some. Agreed fix, 9-10-2026: when a document contains a full
+name that was replaced, also match that name's first word on its own, in the same document
+only, under the same rules as 0e below, so a lone name is treated one way whatever its
+source. The source is every full name replaced in the document, known values and NER
+alike (option B, decided 9-10-2026 in #75). Build 0e's rule first and call it from 0d.
+
+0e, added 9-10-2026, is the feature that makes the first-name column safe to import.
+Name columns become First name, Surname and Full name, and each student gives all three,
+built or split when a column is missing. A first name or surname on its own is never
+matched at 2 letters or fewer. One that is also an ordinary word (Will, Mark) only matches
+with a capital. Every other name matches case-insensitively, as today. Detail in #76,
+rules corrected by Craig 9-10-2026. 0d covers a lone
+first name after the full name, 0e one in a document where the full name never appears.
+
+**Tutorial impact.** The usage video keeps Check file and folder names off because of 0a.
+On v1.3.0 the AI-mode extract shows `Lotte is on track` in the clear because of 0d. 0e changes the class list
+import in Part 1. Each changes the
+runbook (`d-ranged/tutorials/d-tach/usage-runbook.md` in d-workspace). Re-check it before
+recording on v1.4.0.
+
+### ✅ Complete when
+
+- The four reproductions above (0a to 0d) give clean output on the demo kit.
+- The class list cases in #76 pass (0e).
+- Each fix has a regression test.
+
 ---
 
 ## Step 1 — `/ai/restore` Accepts a KEYREF File
 
-**Codeberg issue:** _create before starting_
+**Codeberg issue:** [#77](https://codeberg.org/d-ranged/d-tach/issues/77)
 
 ### Background
 
@@ -120,120 +165,11 @@ restore at all.
 
 ## Step 2 — OCR Fallback for Image-Based PDFs
 
-**Codeberg issue:** _create before starting_
-
-### The rule this step must not break
-
-**A complete failure is better than a partial anonymization.** This is settled and is
-not up for renegotiation inside this step.
-
-v1.3.0 defect 10 was exactly this: an image-based PDF was copied into the `anonymized/`
-output with every name still legible, indistinguishable from properly processed files.
-The fix was to write nothing at all. OCR reintroduces the same risk in a subtler form —
-a name lost to a low-resolution scan, a stamp, a signature or a handwritten note means
-d-tach produces output that *looks* anonymized and is not.
-
-So OCR does not change the failure mode. It adds a clearly-labelled, quarantined side
-channel and leaves the main output path exactly as strict as it is today.
-
-### Scope
-
-**In scope:** extracting text from image-based PDF pages so the content can be read and
-anonymized at all.
-
-**Out of scope:** preserving formatting. The output is plain text. Layout, tables,
-letterheads and signatures are lost. This is accepted and stated up front.
-
-**Out of scope:** producing a redacted PDF. Drawing boxes over the detected regions and
-keeping the file a PDF is the better long-term answer for scanned letters, and it is
-genuinely useful, but it is a larger piece of work. See "Deferred" below.
-
-### Design — quarantined output
-
-The core of this step is not the OCR call. It is making OCR output impossible to
-mistake for a finished anonymized document.
-
-- **Off by default.** A setting in Settings > Folder output, plus a per-run override on
-  the Document Mode folder panel. With OCR off, behaviour is identical to v1.3.0:
-  the file is reported unreadable and nothing is written.
-- **Separate destination.** OCR results never go into `anonymized/`. They go to a
-  sibling folder — `anonymized-ocr-unverified/` — mirroring the source tree.
-- **Always `.txt`, never the source extension.** A scanned `Verklaring.pdf` produces
-  `Verklaring.pdf.txt`. It cannot be opened as a PDF, cannot be attached in place of
-  the original, and sorts away from real documents. Keeping the full original name
-  including its extension makes the provenance obvious.
-- **A banner in every file.** The first lines of every OCR output state that the text
-  was machine-read from an image, that no formatting survived, and that it must be
-  checked by eye before use. The banner is part of the file, not just the UI, because
-  the UI is not there when someone opens the file three weeks later.
-- **Counted separately.** The folder summary reports OCR files on their own line and
-  never folds them into the anonymized count.
-- **Distinct in the results list.** Their own section with their own heading, in the
-  same visual register as the existing unreadable-PDF section — not alongside successes.
-
-### Design — AI Mode
-
-- `POST /ai/extract` on an image-based PDF continues to return **422** by default.
-- With OCR enabled, it returns the extracted text with a mandatory entry in `warnings`
-  saying the text was machine-read and may be incomplete.
-- The warning must be impossible to miss in the response shape. An agent that ignores
-  `warnings` should still be told: prefix the returned `anonymized_text` with the same
-  banner that goes into the `.txt` file.
-
-### Library choice
-
-🟡 Assessment, to be confirmed with a real spike on the actual scanned documents.
-
-| Option | Size | External install | Notes |
-|---|---|---|---|
-| `rapidocr-onnxruntime` | ~50–80 MB | None | ONNX-based, pip-installable, no PyTorch. Best fit for the v1.4.0 packaging goal |
-| Tesseract + `pytesseract` | ~50–100 MB | **Yes** — separate Windows installer | More accurate on clean print. The external binary conflicts with a single-file installer |
-| EasyOCR / PaddleOCR | 2 GB+ | None | Pulls in PyTorch. Far too heavy |
-| Windows OCR API | 0 | None | Built into Windows 10/11, but Windows-only and an awkward API |
-
-**Leaning to `rapidocr-onnxruntime`**, because Step 3 packages d-tach as a standalone
-binary and an external Tesseract install would defeat that. Confirm accuracy on real
-Dutch and English scans before committing — if it is materially worse than Tesseract on
-the documents that actually matter, the packaging cost may be worth paying.
-
-OCR models can ride the on-demand download mechanism built in v1.3.0 rather than
-shipping in the binary.
-
-### What to build
-
-| Component | Description |
-|---|---|
-| `app/services/ocr.py` | New service wrapping the chosen engine; returns text per page |
-| `UserSettings` | `ocr_enabled: bool = False`; OCR model download state |
-| `_process_pdf` | Branch at the existing image-only-page detection to call OCR when enabled |
-| `_extract_pdf` | Same branch for AI Mode; add the mandatory warning |
-| Output writer | Write `.txt` with banner into `anonymized-ocr-unverified/` |
-| `FolderProcessor` | Count and report OCR files as their own category |
-| Document Mode UI | Setting, per-run toggle, separate results section |
-| Settings UI | OCR section with the accuracy warning stated plainly |
-| `README.md` | Document the limitation, not just the feature |
-| Tests | Off by default; quarantine path; banner present; never in `anonymized/`; summary counts separate; AI Mode warning present |
-
-### ✅ Complete when
-
-- With OCR off, an image-based PDF behaves exactly as it does in v1.3.0.
-- With OCR on, its text lands in `anonymized-ocr-unverified/<name>.pdf.txt`, with a
-  banner, and nothing is written into `anonymized/`.
-- The folder summary shows OCR files on a separate line from anonymized files.
-- `/ai/extract` returns the text with a warning the caller cannot silently drop.
-
-### Deferred — visual redaction of scanned pages
-
-The better answer for a scanned letter, and the one to build once OCR is proven:
-
-- OCR returns bounding boxes as well as text.
-- `pymupdf`'s `add_redact_annot` can black out just the PII regions and draw the
-  placeholder into the box.
-- The file stays a PDF, formatting intact, names gone from the image.
-
-This is a v1.5.0-shaped piece of work. It is recorded here so the OCR service in Step 2
-is designed to return coordinates, not just a text blob — retrofitting that later would
-mean rewriting the service.
+**Moved to v1.5.0 on 9-10-2026.** It is a piece of work on its own, with more to sort out
+than fits v1.4.0. The full design (quarantined output, AI Mode warning, engine choice,
+bounding boxes for later redaction) now lives in
+[#78](https://codeberg.org/d-ranged/d-tach/issues/78), open to contributors. Copy it into
+`step_1.5.0_next.md` when that file is started.
 
 ---
 
@@ -249,8 +185,10 @@ Codeberg's free storage tier without a quota increase.
   launcher scripts.
 - **Known challenges:** Flask static file paths under `sys._MEIPASS`, `tkinter`
   bundling on macOS, confirming actual binary size on a clean build.
-- **Interaction with Step 2:** the OCR engine choice directly affects whether this
-  stays a single-file install. Settle Step 2's library before building the spec.
+- **Platforms:** Windows, macOS and Linux, decided 9-10-2026. Craig's laptop builds
+  Windows only, so the other two need CI. Mac colleagues test the macOS build.
+- **OCR:** moved to v1.5.0 (#78), so it does not affect this build. Whoever takes #78
+  must check its engine against the packaged build.
 
 See `roadmap.md` for the original planning note.
 
