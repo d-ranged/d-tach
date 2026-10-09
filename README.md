@@ -42,39 +42,84 @@ You can also give d-tach a list of names it must always catch — typed in one a
 - It does not send your data anywhere. There is no internet connection, no account, and no telemetry.
 - It is not 100% accurate. Always review the output before sharing. A disclaimer is shown in the application as a reminder.
 
-### Prerequisites
+### Install
 
-You need **Python 3.11 or newer** installed on your machine. This is a one-time requirement.
+Pick the download for your computer. Nothing else needs to be installed first.
+
+| Computer | Download |
+|---|---|
+| Windows 10 or 11 | [d-tach-windows.zip](https://github.com/d-ranged/d-tach/releases/latest/download/d-tach-windows.zip) |
+| Mac with Apple Silicon (M1 or newer) | [d-tach-macos-arm.zip](https://github.com/d-ranged/d-tach/releases/latest/download/d-tach-macos-arm.zip) |
+| Linux, or a Mac with an Intel chip | [Run from source](#run-from-source), needs Python |
+
+Not sure which Mac you have? Apple menu, **About This Mac**. "Chip: Apple M..." means Apple Silicon. "Processor: Intel" means Intel.
+
+The same files are attached to the latest release on [Codeberg](https://codeberg.org/d-ranged/d-tach/releases). Older versions are on [GitHub](https://github.com/d-ranged/d-tach/releases).
+
+d-tach is not signed with a paid developer certificate, so Windows and macOS warn you the first time you open it. The steps below show how to get past that. It happens once.
+
+#### Windows
+
+1. Download **d-tach-windows.zip**.
+2. Right-click the zip, choose **Extract All**, and extract it to a folder you keep, for example `Documents`. Do not run d-tach from inside the zip.
+3. Open the extracted **d-tach** folder and double-click **d-tach.exe**.
+4. Windows shows **"Windows protected your PC"**. Click **More info**, then **Run anyway**.
+5. Your browser opens d-tach. Continue with [First run](#first-run).
+
+To start d-tach from the Start menu or the desktop, right-click **d-tach.exe**, choose **Show more options**, then **Send to**, **Desktop (create shortcut)** or **Pin to Start**.
+
+#### Mac (Apple Silicon)
+
+1. Download **d-tach-macos-arm.zip**. Safari unpacks it for you. Otherwise double-click the zip in Downloads.
+2. Drag **d-tach** into your **Applications** folder. Do this before you open it: an app opened from Downloads runs from a temporary copy, and "start at login" then points to the wrong place.
+3. Double-click **d-tach** in Applications. macOS says it cannot verify d-tach. Click **Done**, not Move to Trash.
+4. Open **System Settings**, **Privacy & Security**, and scroll down to **Security**. Next to "d-tach was blocked", click **Open Anyway**. Enter your password, then click **Open Anyway** once more.
+5. The d icon appears in the menu bar at the top of the screen and your browser opens d-tach. Continue with [First run](#first-run).
+
+#### First run
+
+1. d-tach asks which languages your documents are in. English is always included. Tick Dutch if you need it and click **Download and continue**. Each language is about 50 MB and downloads once.
+2. d-tach asks whether to start automatically when you log in. Choose either, you can change it later.
+
+The d icon in the system tray (Windows) or menu bar (Mac) is how you get back to d-tach after closing the browser tab. Click it for **Open d-tach**, or right-click it for **Quit**. Starting d-tach again while it is already running just opens the running one in your browser.
+
+#### Updating
+
+Quit d-tach from the tray icon, then replace the old **d-tach** folder (Windows) or app (Mac) with the new download. Your settings, AI mode token and languages are kept. They live apart from the app, in `%LOCALAPPDATA%\d-tach` on Windows and `~/Library/Application Support/d-tach` on a Mac.
+
+### Run from source
+
+For Linux, Intel Macs, or anyone who prefers to run the Python code directly. You need **Python 3.11 or newer**.
 
 - **Windows:** Download from [python.org/downloads](https://www.python.org/downloads/). During installation, tick **"Add Python to PATH"**.
-- **macOS:** Python is often pre-installed. Open Terminal and run `python3 --version` to check.
+- **macOS / Linux:** Open Terminal and run `python3 --version` to check what you have.
 
-### Installation and first run (Windows)
+**Windows**
 
-1. Click **[⬇ Download Latest Release](https://codeberg.org/d-ranged/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
+1. Download the source zip of the latest release from [Codeberg](https://codeberg.org/d-ranged/d-tach/releases) and extract it to a folder of your choice.
 2. Double-click **`launch.bat`**.
 
 On first run, the launcher checks your Python version, then installs all required dependencies automatically. This takes a few minutes and only happens once. On all future runs it starts immediately.
 
 > **Python not installed yet?** The launcher will display a clear error message with a download link and step-by-step instructions. Install Python, then double-click `launch.bat` again.
 
-A browser window opens at `http://localhost:5555`, and a d-tach icon appears in the system tray — this is how you keep using the app after closing the browser tab. Right-click the tray icon for **Open d-tach** and **Quit**; left-click it to open d-tach directly. Starting d-tach again while it is already running just opens the running one in your browser. On first launch you'll be asked whether d-tach should start automatically when you log in — a one-time choice you can decline.
+**macOS / Linux**
 
-### Installation and first run (macOS / Linux)
-
-1. Click **[⬇ Download Latest Release](https://codeberg.org/d-ranged/d-tach/releases)**, select the most recent release, and download the source zip. Extract it to a folder of your choice.
+1. Download the source zip of the latest release from [Codeberg](https://codeberg.org/d-ranged/d-tach/releases) and extract it to a folder of your choice.
 2. Open Terminal, navigate to the extracted folder, and run:
    ```bash
    bash launch.sh
    ```
 
-On first run, the launcher checks your Python version, installs all dependencies automatically, and opens the app in your browser. Subsequent runs start immediately. A d-tach icon also appears in the system tray (menu bar on macOS) — this is how you keep using the app after closing the browser tab, and how you quit it.
+On first run, the launcher checks your Python version, installs all dependencies automatically, and opens the app in your browser. Subsequent runs start immediately. From then on, [First run](#first-run) above applies too.
 
 > **Python not installed or too old?** The launcher will display a clear error message. Install Python 3.11+ and run `bash launch.sh` again.
 
 > **Optional:** Run `chmod +x launch.sh` once if you prefer to launch with `./launch.sh` or by double-clicking the file in future.
 
 > **macOS — Browse buttons not working?** If the Browse buttons are disabled, tkinter is not installed. Run `brew install python-tk@3.x` (replace `3.x` with your Python version, e.g. `python-tk@3.11`) and restart the launcher.
+
+> **Linux — no tray icon?** GNOME shows no tray icons without an extension such as AppIndicator. d-tach still runs; open `http://localhost:5555` in your browser.
 
 ### Using the application
 
@@ -268,6 +313,20 @@ The app is available at `http://localhost:5555` by default (configurable in Sett
 pytest
 ```
 
+### Building the packaged app
+
+The Windows and Mac downloads are built with PyInstaller from `packaging/d-tach.spec`. From the repo root, in the venv:
+
+```bash
+pip install -r packaging/requirements-build.txt
+pyinstaller packaging/d-tach.spec --noconfirm
+python packaging/smoke_test.py dist/d-tach/d-tach.exe
+```
+
+That builds for the machine you run it on: `dist/d-tach/` on Windows, `dist/d-tach.app` on macOS (smoke test `dist/d-tach.app/Contents/MacOS/d-tach`). PyInstaller cannot build for another platform. The smoke test starts the build on its own port and data folder, downloads English and anonymizes one line.
+
+Releases are built by GitHub Actions (`.github/workflows/build.yml`) on the GitHub mirror. Pushing a `v*` tag to Codeberg reaches GitHub through the mirror, builds Windows and Apple Silicon Mac, and attaches both zips to a GitHub release for that tag. A tag with a dash, such as `v1.4.0-test.1`, makes a pre-release. The app icons are built from `app/static/d-logo.png` by `tools/build_icons.py`.
+
 ### Project structure
 
 ```
@@ -279,6 +338,9 @@ d-tach/
 │   └── templates/       # HTML templates
 ├── tests/
 ├── docs/                # project_guide.md, original_steps.md, roadmap.md, step files
+├── packaging/           # PyInstaller spec, app icons, smoke test for the packaged build
+├── tools/               # Scripts that rebuild the word lists and the app icons
+├── .github/workflows/   # Packaged builds on GitHub Actions
 ├── launch.bat           # Windows launcher (auto-setup on first run)
 ├── launch.sh            # macOS / Linux launcher (auto-setup on first run)
 ├── tray.py              # Normal launch path — Flask + system tray icon
@@ -292,7 +354,7 @@ d-tach/
 - **No logic in routes.** Routes receive a request, call a service method, and return a response.
 - **Anonymizer** wraps Microsoft Presidio with English and Dutch spaCy models.
 - **FileProcessor** handles a single file; **FolderProcessor** handles recursive batch runs.
-- **UserSettings** persists preferences to a local `user_settings.json` (gitignored).
+- **UserSettings** persists preferences to `user_settings.json` in the per-user data folder (`%LOCALAPPDATA%\d-tach`, `~/Library/Application Support/d-tach` or `~/.local/share/d-tach`), with the downloaded language models and the log file. `DTACH_DATA_DIR` overrides the folder.
 - **HashEncoder** provides optional consistent pseudonymization using a user-supplied secret as salt.
 
 See `docs/project_guide.md` for full design decisions and `docs/original_steps.md` for the build plan.

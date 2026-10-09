@@ -1,0 +1,2 @@
+# Build-only dependency for the packaged d-tach, on top of requirements.txt.
+pyinstaller==6.22.3

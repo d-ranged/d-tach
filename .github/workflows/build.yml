@@ -1,0 +1,123 @@
+# Packaged builds for Windows and Apple Silicon Mac.
+#
+# Runs on GitHub, which gets the repo and its tags from the Codeberg push mirror.
+# A version tag (v1.4.0) builds both, smoke-tests each, and attaches the zips to
+# one GitHub release for that tag. A tag with a dash (v1.4.0-test.1) makes a
+# pre-release, so it never shows as the latest. Run by hand from the Actions tab
+# to build without a release. Every run keeps the zips as run artifacts.
+#
+# Linux and Intel Macs use the source install, see the README.
+
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            runner: windows-latest
+            asset: d-tach-windows.zip
+            executable: dist/d-tach/d-tach.exe
+            unpacked: dist/d-tach
+          - name: macOS Apple Silicon
+            runner: macos-14
+            asset: d-tach-macos-arm.zip
+            executable: dist/d-tach.app/Contents/MacOS/d-tach
+            unpacked: dist/d-tach.app
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the images from Codeberg
+        # The PNGs (tray icon, logo) are in Git LFS, and the mirror pushes the
+        # pointers but not the files. Codeberg serves them without a login.
+        run: |
+          git config lfs.url https://codeberg.org/d-ranged/d-tach.git/info/lfs
+          git lfs pull --include="app/static/*.png"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            packaging/requirements-build.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r packaging/requirements-build.txt
+
+      - name: Check tkinter works
+        # Without it the Browse buttons and the first-run prompt are dead.
+        run: python -c "import tkinter; tkinter.Tcl().eval('info patchlevel')"
+
+      - name: Build
+        run: pyinstaller packaging/d-tach.spec --noconfirm
+
+      - name: Smoke test
+        run: python packaging/smoke_test.py "${{ matrix.executable }}"
+
+      - name: Zip
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # ditto keeps the .app's symlinks and signature intact, zip does not.
+            ditto -c -k --keepParent "${{ matrix.unpacked }}" "${{ matrix.asset }}"
+          else
+            7z a -tzip -mx=9 "${{ matrix.asset }}" ./dist/d-tach > /dev/null
+          fi
+
+      - name: Sizes and checksum
+        run: |
+          unpacked=$(du -sh "${{ matrix.unpacked }}" | cut -f1)
+          zipped=$(du -h "${{ matrix.asset }}" | cut -f1)
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            checksum=$(shasum -a 256 "${{ matrix.asset }}" | cut -d' ' -f1)
+          else
+            checksum=$(sha256sum "${{ matrix.asset }}" | cut -d' ' -f1)
+          fi
+          {
+            echo "### ${{ matrix.name }}"
+            echo "- \`${{ matrix.asset }}\`: ${zipped} download, ${unpacked} unpacked"
+            echo "- SHA-256: \`${checksum}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+          compression-level: 0
+
+  release:
+    name: GitHub release
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: d-tach-*.zip
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            Packaged d-tach for Windows and Apple Silicon Mac. Release notes, issues and the source are on Codeberg: https://codeberg.org/d-ranged/d-tach/releases
+
+            How to install, and how to get past the first-run security warning: see "Download to Use" in the README.
