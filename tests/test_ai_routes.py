@@ -377,6 +377,171 @@ class TestRestore:
         assert "John Smith" in temp_path.read_text(encoding="utf-8")
 
 
+class TestRestoreFromKeyref:
+    """#77 — /ai/restore accepts a KEYREF CSV, alone or merged with a session."""
+
+    @staticmethod
+    def _write_keyref(path: Path, rows: list[tuple[str, str]]) -> Path:
+        lines = ["Placeholder,Original value"] + [f"{p},{o}" for p, o in rows]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    @staticmethod
+    def _extract(client, auth_headers: dict, tmp_path: Path) -> dict:
+        source = tmp_path / "report.docx"
+        make_docx(source, ["My name is John Smith and I work here."])
+        resp = client.post("/ai/extract", json={"file_path": str(source)}, headers=auth_headers)
+        assert resp.status_code == 200
+        return resp.get_json()
+
+    def test_keyref_only_restores_without_a_session(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        keyref = self._write_keyref(
+            tmp_path / "KEYREF_a.csv", [("[PERSON_1]", "Ada Lovelace"), ("[PERSON_2]", "Alan Turing")]
+        )
+
+        resp = client.post(
+            "/ai/restore",
+            json={"keyref_path": str(keyref), "text": "[PERSON_1] met [PERSON_2]."},
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["restored_text"] == "Ada Lovelace met Alan Turing."
+        assert data["replacements_applied"] == 2
+
+    def test_keyref_restores_a_placeholder_the_session_does_not_know(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        extracted = self._extract(client, auth_headers, tmp_path)
+        keyref = self._write_keyref(tmp_path / "KEYREF_b.csv", [("[PERSON_9]", "Grace Hopper")])
+
+        resp = client.post(
+            "/ai/restore",
+            json={
+                "session_id": extracted["session_id"],
+                "keyref_path": str(keyref),
+                "text": f"{extracted['anonymized_text']} Also [PERSON_9].",
+            },
+            headers=auth_headers,
+        )
+
+        restored = resp.get_json()["restored_text"]
+        assert "John Smith" in restored
+        assert "Grace Hopper" in restored
+
+    def test_session_wins_when_keyref_disagrees(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        extracted = self._extract(client, auth_headers, tmp_path)
+        placeholder = extracted["entities"][0]["placeholder"]
+        keyref = self._write_keyref(tmp_path / "KEYREF_c.csv", [(placeholder, "Stale Name")])
+
+        resp = client.post(
+            "/ai/restore",
+            json={
+                "session_id": extracted["session_id"],
+                "keyref_path": str(keyref),
+                "text": extracted["anonymized_text"],
+            },
+            headers=auth_headers,
+        )
+
+        restored = resp.get_json()["restored_text"]
+        assert "John Smith" in restored
+        assert "Stale Name" not in restored
+
+    def test_neither_session_nor_keyref_returns_400(self, client, auth_headers: dict) -> None:
+        resp = client.post("/ai/restore", json={"text": "hello"}, headers=auth_headers)
+        assert resp.status_code == 400
+
+    def test_missing_keyref_file_returns_404(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        resp = client.post(
+            "/ai/restore",
+            json={"keyref_path": str(tmp_path / "nope.csv"), "text": "[PERSON_1]"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+        assert "KEYREF file not found" in resp.get_json()["error"]
+
+    def test_malformed_keyref_returns_400(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        bad = tmp_path / "KEYREF_bad.csv"
+        bad.write_bytes(bytes([0xFF, 0xFE, 0x00, 0x67, 0x80]))
+        resp = client.post(
+            "/ai/restore",
+            json={"keyref_path": str(bad), "text": "[PERSON_1]"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
+    def test_keyref_with_no_mappings_returns_400(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        empty = self._write_keyref(tmp_path / "KEYREF_empty.csv", [])
+        resp = client.post(
+            "/ai/restore",
+            json={"keyref_path": str(empty), "text": "[PERSON_1]"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+
+    def test_unknown_session_still_404_even_with_keyref(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        keyref = self._write_keyref(tmp_path / "KEYREF_d.csv", [("[PERSON_1]", "Ada")])
+        resp = client.post(
+            "/ai/restore",
+            json={"session_id": "gone", "keyref_path": str(keyref), "text": "[PERSON_1]"},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    def test_output_path_still_writes_and_omits_text_with_keyref_only(
+        self, client, auth_headers: dict, tmp_path: Path
+    ) -> None:
+        keyref = self._write_keyref(tmp_path / "KEYREF_e.csv", [("[PERSON_1]", "Ada Lovelace")])
+        output_path = tmp_path / "out" / "final.txt"
+
+        resp = client.post(
+            "/ai/restore",
+            json={
+                "keyref_path": str(keyref),
+                "text": "Hello [PERSON_1]",
+                "output_path": str(output_path),
+            },
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "written"
+        assert "restored_text" not in data
+        assert "Ada Lovelace" not in str(data)
+        assert output_path.read_text(encoding="utf-8") == "Hello Ada Lovelace"
+
+    def test_large_keyref_only_result_goes_to_a_temp_file(
+        self, client, auth_headers: dict, user_settings: UserSettings, tmp_path: Path
+    ) -> None:
+        keyref = self._write_keyref(tmp_path / "KEYREF_f.csv", [("[PERSON_1]", "Ada Lovelace")])
+        user_settings.ai_inline_text_max_chars = 5
+
+        resp = client.post(
+            "/ai/restore",
+            json={"keyref_path": str(keyref), "text": "Hello [PERSON_1]"},
+            headers=auth_headers,
+        )
+
+        data = resp.get_json()
+        assert "restored_text" not in data
+        assert "Ada Lovelace" in Path(data["restored_text_path"]).read_text(encoding="utf-8")
+
+
 class TestFlagTerm:
     def test_flag_term_adds_known_value(
         self, client, auth_headers: dict, user_settings: UserSettings

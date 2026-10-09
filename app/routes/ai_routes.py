@@ -6,6 +6,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 
 from app.services.document_processor import DocumentProcessor
 from app.services.file_processor import ProcessingSettings
+from app.services.key_reference_reader import KeyrefError, read_keyref
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +89,11 @@ def extract():
 
 @bp.route("/restore", methods=["POST"])
 def restore():
-    """Substitute placeholders back to real values for a given session.
+    """Substitute placeholders back to real values from a session, a KEYREF, or both.
 
+    Body: `session_id` and/or `keyref_path`. With both, the maps are merged and
+    the session wins on conflict, because it came from the document actually in
+    hand while a KEYREF may be older or written under a different secret.
     Accepts inline `text` or a `text_path` to read from. With `output_path`,
     writes the restored text directly to disk and the response carries no
     restored content — only status and path. Without it, returns the restored
@@ -97,12 +101,21 @@ def restore():
     """
     data = request.get_json(force=True, silent=True) or {}
     session_id = str(data.get("session_id", "")).strip()
-    if not session_id:
-        return jsonify({"error": "session_id is required."}), 400
+    keyref_path_str = str(data.get("keyref_path", "")).strip()
+    if not session_id and not keyref_path_str:
+        return jsonify({"error": "session_id or keyref_path is required."}), 400
 
-    session = current_app.ai_session_store.get(session_id)
-    if session is None:
-        return jsonify({"error": "Unknown or expired session_id."}), 404
+    replacements: dict[str, str] = {}
+    if keyref_path_str:
+        try:
+            replacements.update(read_keyref(keyref_path_str))
+        except KeyrefError as exc:
+            return jsonify({"error": exc.message}), exc.status
+    if session_id:
+        session = current_app.ai_session_store.get(session_id)
+        if session is None:
+            return jsonify({"error": "Unknown or expired session_id."}), 404
+        replacements.update(session.replacements)
 
     text = data.get("text")
     text_path_str = str(data.get("text_path", "")).strip()
@@ -114,7 +127,7 @@ def restore():
             return jsonify({"error": f"text_path not found: {text_path_str}"}), 404
         text = text_path.read_text(encoding="utf-8")
 
-    restored_text, replacements_applied = DocumentProcessor.restore_string(text, session.replacements)
+    restored_text, replacements_applied = DocumentProcessor.restore_string(text, replacements)
 
     output_path_str = str(data.get("output_path", "")).strip()
     if output_path_str:
@@ -127,6 +140,10 @@ def restore():
             "replacements_applied": replacements_applied,
         })
 
+    if not session_id:
+        # A KEYREF-only call has no session to own a temp file, so open one
+        # purely so a large result is cleaned up on expiry like any other.
+        session_id = current_app.ai_session_store.create(replacements, Path(keyref_path_str))
     user_settings = current_app.user_settings
     response = {"replacements_applied": replacements_applied}
     response.update(_inline_or_temp_file(
