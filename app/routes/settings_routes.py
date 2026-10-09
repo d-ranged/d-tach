@@ -549,5 +549,8 @@ def _build_ai_instructions(port: int, token: str) -> str:
         "the subject of each file only by its placeholder/hash, never a name you weren't given. "
         "When producing final output that needs real values restored, call POST /ai/restore "
         "with an output_path so the restored text is written straight to disk — never ask "
-        f"for it inline. Include header X-D-Tach-Token: {token} on every request."
+        "for it inline. Pass the session_id from /ai/extract, a keyref_path pointing at a "
+        "KEYREF_*.csv, or both (the session wins on conflict). Use keyref_path when composing "
+        "one output from several documents, or when the session has expired. "
+        f"Include header X-D-Tach-Token: {token} on every request."
     )

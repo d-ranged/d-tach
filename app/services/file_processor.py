@@ -17,6 +17,7 @@ from app.services.anonymizer import (
 )
 from app.services.document_processor import DocumentProcessor
 from app.services.hash_encoder import HashEncoder
+from app.services.key_reference_reader import KeyrefError, read_keyref
 from app.services.language_detector import LanguageDetector
 from app.services.pattern_config import PatternConfig
 
@@ -865,20 +866,13 @@ class FileProcessor:
             )
 
         try:
-            replacements = self._doc_processor.load_keyref_csv(keyref_path)
-        except Exception as exc:
-            logger.error("Failed to read KEYREF %s: %s", keyref_path, exc)
+            replacements = read_keyref(str(keyref_path))
+        except KeyrefError as exc:
+            logger.error("Failed to read KEYREF %s: %s", keyref_path, exc.message)
             return FileResult(
                 status="error",
                 source_path=input_path,
-                error_message=f"Could not read KEYREF file: {exc}",
-            )
-
-        if not replacements:
-            return FileResult(
-                status="error",
-                source_path=input_path,
-                error_message="KEYREF file contained no placeholder mappings.",
+                error_message=exc.message,
             )
 
         # Apply replacements to the filename stem so any placeholders in the
