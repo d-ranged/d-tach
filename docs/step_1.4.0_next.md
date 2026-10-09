@@ -175,18 +175,19 @@ bounding boxes for later redaction) now lives in
 
 ## Step 3 — Standalone Packaged Installer (PyInstaller)
 
-**Codeberg issue:** _create before starting_
+**Codeberg issue:** [#79](https://codeberg.org/d-ranged/d-tach/issues/79)
 
-Carried unchanged from `roadmap.md`. v1.3.0's on-demand language download makes this
-feasible: the binary ships without models, at an estimated 80–150 MB, small enough for
-Codeberg's free storage tier without a quota increase.
+Carried from `roadmap.md`. v1.3.0's on-demand language download makes this
+feasible: the build ships without models. A spike on 9-10-2026 measured the Windows
+build at about 300 MB installed and a 101 MB zip. #79 holds what the frozen build needs.
 
 - **Target audience:** users without Python experience who cannot or will not run the
   launcher scripts.
 - **Known challenges:** Flask static file paths under `sys._MEIPASS`, `tkinter`
   bundling on macOS, confirming actual binary size on a clean build.
-- **Platforms:** Windows, macOS and Linux, decided 9-10-2026. Craig's laptop builds
-  Windows only, so the other two need CI. Mac colleagues test the macOS build.
+- **Platforms:** packaged builds for Windows and Apple Silicon Mac, built by GitHub
+  Actions. Linux and Intel Macs keep the source install, which stays for every platform.
+  Unsigned, binaries on GitHub Releases with the latest also on Codeberg. Decided 9-10-2026.
 - **OCR:** moved to v1.5.0 (#78), so it does not affect this build. Whoever takes #78
   must check its engine against the packaged build.
 
