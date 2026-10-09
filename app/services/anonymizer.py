@@ -294,6 +294,10 @@ class Anonymizer:
         """Load the given language's model into RAM now, if not already loaded."""
         self._load_language(language)
 
+    def unload(self, language: str) -> bool:
+        """Drop a language's model from RAM. Returns False if it was not loaded."""
+        return self._analyzers.pop(language, None) is not None
+
     @property
     def loaded_languages(self) -> list[str]:
         """Codes of every language currently loaded into RAM."""

@@ -1,8 +1,10 @@
-from flask import Flask, redirect, request, url_for
+from flask import Flask, jsonify, redirect, request, url_for
 
 from app.app_paths import bundle_dir, resolve_settings_path
 
 __version__ = "1.3.0"
+
+APP_ID = "d-tach"
 
 
 def create_app() -> Flask:
@@ -41,6 +43,22 @@ def create_app() -> Flask:
     app.anonymizer = Anonymizer(languages=startup_languages)  # type: ignore[attr-defined]
     registry.set_anonymizer(app.anonymizer)
     app.language_registry = registry  # type: ignore[attr-defined]
+
+    def activate_installed_language(code: str) -> None:
+        """Switch a just-installed language on and load it, so no restart is needed."""
+        settings = app.user_settings
+        if code not in settings.enabled_languages:
+            settings.enabled_languages = settings.enabled_languages + [code]
+            settings.save()
+        if settings.loading_strategy == "eager":
+            app.anonymizer.ensure_loaded(code)
+
+    registry.set_install_callback(activate_installed_language)
+
+    @app.context_processor
+    def inject_usable_languages() -> dict:
+        """Make the installed-and-enabled language codes available in all templates."""
+        return {"usable_languages": registry.usable_languages(app.user_settings.enabled_languages)}
     app.language_detector = LanguageDetector(registry=registry)  # type: ignore[attr-defined]
 
     from app.services.file_processor import FileProcessor
@@ -81,7 +99,12 @@ def create_app() -> Flask:
     app.register_blueprint(setup_bp)
     app.register_blueprint(ai_bp)
 
-    _EXEMPT_ENDPOINTS = {"setup.setup_page", "setup.start_setup_install", "setup.setup_status", "setup.complete_setup", "static"}
+    @app.route("/ping")
+    def ping():
+        """Say this port is d-tach, so a second start can hand over to it (see tray.py)."""
+        return jsonify({"app": APP_ID, "version": __version__})
+
+    _EXEMPT_ENDPOINTS = {"setup.setup_page", "setup.start_setup_install", "setup.setup_status", "setup.complete_setup", "static", "ping"}
 
     @app.before_request
     def require_language_setup():

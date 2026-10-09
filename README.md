@@ -58,7 +58,7 @@ On first run, the launcher checks your Python version, then installs all require
 
 > **Python not installed yet?** The launcher will display a clear error message with a download link and step-by-step instructions. Install Python, then double-click `launch.bat` again.
 
-A browser window opens at `http://localhost:5555`, and a d-tach icon appears in the system tray — this is how you keep using the app after closing the browser tab. Right-click the tray icon for **Open d-tach** and **Quit**; left-click it to open d-tach directly. On first launch you'll be asked whether d-tach should start automatically when you log in — a one-time choice you can decline.
+A browser window opens at `http://localhost:5555`, and a d-tach icon appears in the system tray — this is how you keep using the app after closing the browser tab. Right-click the tray icon for **Open d-tach** and **Quit**; left-click it to open d-tach directly. Starting d-tach again while it is already running just opens the running one in your browser. On first launch you'll be asked whether d-tach should start automatically when you log in — a one-time choice you can decline.
 
 ### Installation and first run (macOS / Linux)
 
@@ -99,10 +99,13 @@ application already uses that port, or your institution's firewall blocks it.
 Changing the port requires restarting d-tach (quit and reopen from the tray icon)
 to take effect.
 
-**Languages.** Install or remove language models, and choose which ones load when
-d-tach starts. Models are downloaded only when you ask for them, so you are not
-carrying the memory cost of a language you never use. A model you have installed
-but not set to load on startup is loaded the first time a document needs it.
+**Languages.** Install or remove language models, and switch each one on or off.
+Models are downloaded only when you ask for them, so you are not carrying the
+memory cost of a language you never use. A language you install is switched on
+and ready straight away, and removing or switching one off applies at once, with
+no restart. Text and Document mode only offer the languages that are installed
+and switched on. With the Lazy loading strategy a language is loaded the first
+time a document needs it instead of at startup.
 
 **Known values.** The list of names and numbers d-tach must always anonymize,
 whether or not the language model recognises them. Add them one at a time, or

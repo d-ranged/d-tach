@@ -30,7 +30,7 @@
         <button class="btn btn-primary btn-sm" id="save-port-btn">Save</button>
     </div>
 
-    <p class="muted" id="port-restart-notice" hidden>Restart d-tach to apply the new port.</p>
+    <p class="muted" id="port-restart-notice" hidden>Restart d-tach to apply the new port: Quit from the tray icon, then start d-tach again.</p>
     <p class="error-text" id="port-error" hidden></p>
 </section>
 
@@ -38,14 +38,14 @@
     <h2 class="section-heading">Languages</h2>
     <p class="advanced-hint">
         Install, remove, and enable language models. Only enabled languages can
-        be used for detection. Changes here take effect after restart.
+        be used for detection. A language you install is enabled straight away.
     </p>
 
     <div class="advanced-setting-row">
         <label class="advanced-label" for="default-language-select">Default language</label>
         <select id="default-language-select" class="digit-input">
-            <option value="en" {% if default_language == "en" %}selected{% endif %}>English</option>
-            <option value="nl" {% if default_language == "nl" %}selected{% endif %}>Nederlands</option>
+            <option value="en" {% if default_language == "en" %}selected{% endif %} {% if 'en' not in usable_languages %}disabled{% endif %}>English</option>
+            <option value="nl" {% if default_language == "nl" %}selected{% endif %} {% if 'nl' not in usable_languages %}disabled{% endif %}>Nederlands</option>
         </select>
     </div>
     <p class="advanced-hint">
@@ -65,7 +65,6 @@
         Eager uses more RAM up front but avoids a short delay the first time a
         language is used. Lazy keeps RAM usage low until a language is actually needed.
     </p>
-    <p class="muted" id="loading-strategy-restart-notice" hidden>Restart d-tach to apply the new loading strategy.</p>
     <p class="error-text" id="loading-strategy-error" hidden></p>
 
     <div id="language-list">
@@ -79,7 +78,7 @@
             <label class="toggle">
                 <input type="checkbox" class="language-enabled-toggle" {% if lang.enabled %}checked{% endif %} {% if not lang.installed %}disabled{% endif %}>
                 <span class="toggle-track"></span>
-                <span class="setting-label">Load on startup</span>
+                <span class="setting-label">Enabled</span>
             </label>
             {% if lang.installed %}
             <button class="btn btn-secondary btn-sm language-remove-btn">Remove</button>

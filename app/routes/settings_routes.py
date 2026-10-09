@@ -260,7 +260,7 @@ def language_install_status():
 
 @bp.route("/settings/languages/remove", methods=["POST"])
 def remove_language():
-    """Uninstall a language's spaCy model and disable it.
+    """Uninstall a language's spaCy model and disable it. Applies straight away.
 
     Body: {"code": "nl"}
     """
@@ -285,7 +285,10 @@ def remove_language():
 
 @bp.route("/settings/languages/enabled", methods=["POST"])
 def set_language_enabled():
-    """Enable or disable a language for startup loading / detection.
+    """Enable or disable a language for detection. Applies straight away.
+
+    Enabling loads the model now in eager mode (lazy mode loads it on first
+    use), disabling drops it from RAM.
 
     Body: {"code": "nl", "enabled": true}
     """
@@ -308,6 +311,14 @@ def set_language_enabled():
     settings.enabled_languages = current
     settings.save()
 
+    if not enabled:
+        registry.unload(code)
+    elif settings.loading_strategy == "eager":
+        try:
+            registry.ensure_loaded(code)
+        except Exception as exc:
+            return jsonify({"error": f"Could not load language: {exc}"}), 500
+
     return jsonify({"enabled_languages": settings.enabled_languages})
 
 
@@ -316,7 +327,8 @@ def update_loading_strategy():
     """Update the loading strategy: 'eager' (all enabled languages at startup) or 'lazy'.
 
     Body: {"strategy": "eager"}
-    Takes effect after restart.
+    Switching to eager loads every enabled language now. Switching to lazy
+    keeps what is loaded; nothing more loads until a run needs it.
     """
     data = request.get_json(force=True, silent=True) or {}
     strategy = str(data.get("strategy", ""))
@@ -327,6 +339,14 @@ def update_loading_strategy():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     settings.save()
+
+    if settings.loading_strategy == "eager":
+        registry = current_app.language_registry
+        try:
+            for code in registry.usable_languages(settings.enabled_languages):
+                registry.ensure_loaded(code)
+        except Exception as exc:
+            return jsonify({"error": f"Could not load language: {exc}"}), 500
 
     return jsonify({"loading_strategy": settings.loading_strategy})
 

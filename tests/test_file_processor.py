@@ -608,7 +608,7 @@ class TestLanguageNotLoadedPropagation:
         assert result.status == "error"
         assert result.error_message == (
             "Dutch detected but Dutch model is not enabled. "
-            "Enable it in Settings > Languages and restart d-tach."
+            "Enable it in Settings > Languages."
         )
 
 

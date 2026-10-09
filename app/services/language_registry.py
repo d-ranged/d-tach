@@ -1,9 +1,10 @@
+import importlib
 import logging
 import subprocess
 import sys
 import threading
 from dataclasses import dataclass
-from typing import Final, Optional
+from typing import Callable, Final, Optional, Sequence
 
 from app.app_paths import is_frozen
 from app.services.model_store import ModelStore
@@ -31,6 +32,17 @@ SUPPORTED_LANGUAGE_CODES: Final[frozenset[str]] = frozenset(lang.code for lang i
 _BY_CODE: Final[dict[str, LanguageInfo]] = {lang.code: lang for lang in SUPPORTED_LANGUAGES}
 
 
+def pick_language(preferred: str, usable: Sequence[str]) -> str:
+    """Return preferred if it can be used, else the first usable language.
+
+    Keeps a mode page from starting on a language whose model was removed.
+    With nothing usable, preferred comes back unchanged.
+    """
+    if preferred in usable or not usable:
+        return preferred
+    return usable[0]
+
+
 class LanguageRegistry:
     """Central authority for supported/installed/loaded language state.
 
@@ -50,10 +62,19 @@ class LanguageRegistry:
         self._model_store = model_store if model_store is not None else ModelStore()
         self._download_status: dict[str, dict] = {}
         self._lock = threading.Lock()
+        self._on_installed: Optional[Callable[[str], None]] = None
 
     def set_anonymizer(self, anonymizer: object) -> None:
         """Attach (or replace) the Anonymizer instance used to report loaded state."""
         self._anonymizer = anonymizer
+
+    def set_install_callback(self, callback: Callable[[str], None]) -> None:
+        """Run callback(code) after a download, before its status turns "done".
+
+        The app uses it to switch the new language on and load it, so a
+        language is ready to use the moment its install finishes.
+        """
+        self._on_installed = callback
 
     # ------------------------------------------------------------------
     # Supported
@@ -84,6 +105,10 @@ class LanguageRegistry:
         """Return codes of every supported language whose model is installed."""
         return [lang.code for lang in SUPPORTED_LANGUAGES if self.is_installed(lang.code)]
 
+    def usable_languages(self, enabled: Sequence[str]) -> list[str]:
+        """Return codes that are both installed and enabled, in supported order."""
+        return [code for code in self.installed_languages() if code in enabled]
+
     # ------------------------------------------------------------------
     # Loaded (RAM, current session)
     # ------------------------------------------------------------------
@@ -107,6 +132,12 @@ class LanguageRegistry:
         if self._anonymizer is None:
             raise RuntimeError("LanguageRegistry has no Anonymizer attached.")
         self._anonymizer.ensure_loaded(code)
+
+    def unload(self, code: str) -> bool:
+        """Drop the given language's model from the running Anonymizer, if loaded."""
+        if self._anonymizer is None:
+            return False
+        return self._anonymizer.unload(code)
 
     # ------------------------------------------------------------------
     # Install (background thread + polled status): `spacy download` from
@@ -156,6 +187,10 @@ class LanguageRegistry:
                     capture_output=True,
                     text=True,
                 )
+                # pip installed a package this process has not seen yet.
+                importlib.invalidate_caches()
+            if self._on_installed is not None:
+                self._on_installed(lang.code)
             with self._lock:
                 self._download_status[lang.code] = {"state": "done", "message": ""}
         except subprocess.CalledProcessError as exc:
@@ -180,12 +215,14 @@ class LanguageRegistry:
         Deletes the ModelStore copy if there is one. From source it then runs
         `pip uninstall` as before; a frozen build has no pip and needs nothing
         more. Raises subprocess.CalledProcessError or OSError on failure.
-        Callers are responsible for also removing the language from
+        The model is dropped from RAM first, so the change applies without a
+        restart. Callers are responsible for also removing the language from
         enabled_languages, since a removed model can no longer be loaded.
         """
         lang = _BY_CODE.get(code)
         if lang is None:
             raise ValueError(f"Unsupported language code: {code!r}")
+        self.unload(code)
         self._model_store.remove(lang.spacy_model)
         if not is_frozen():
             subprocess.run(

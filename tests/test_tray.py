@@ -1,5 +1,7 @@
 """Tests for tray.py helpers that don't require an actual tray icon or GUI."""
 
+import io
+import json
 import plistlib
 import socket
 import sys
@@ -23,6 +25,17 @@ class TestIsPortAvailable:
 
     def test_occupied_port_is_not_available(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as holder:
+            holder.bind(("127.0.0.1", 0))
+            holder.listen(1)
+            occupied_port = holder.getsockname()[1]
+
+            assert _is_port_available(occupied_port) is False
+
+    def test_port_held_with_reuse_address_is_not_available(self) -> None:
+        # Werkzeug listens with SO_REUSEADDR. On Windows that let the old check
+        # bind the same port, so a second d-tach started alongside the first.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as holder:
+            holder.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             holder.bind(("127.0.0.1", 0))
             holder.listen(1)
             occupied_port = holder.getsockname()[1]
@@ -177,3 +190,69 @@ class TestShouldOpenBrowser:
 
     def test_frozen_at_login_does_not(self, frozen_windows: Path) -> None:
         assert tray._should_open_browser(["--at-login"], {}) is False
+
+
+def _ping_reply(payload: dict):
+    """Fake urlopen that answers /ping with the given JSON."""
+    def _urlopen(url, timeout=None):
+        assert url.endswith("/ping")
+        return io.BytesIO(json.dumps(payload).encode("utf-8"))
+    return _urlopen
+
+
+class TestIsDtachRunning:
+    def test_dtach_answers_the_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(tray.urllib.request, "urlopen", _ping_reply({"app": "d-tach", "version": "1.4.0"}))
+        assert tray._is_dtach_running(5555) is True
+
+    def test_another_program_does_not(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(tray.urllib.request, "urlopen", _ping_reply({"status": "ok"}))
+        assert tray._is_dtach_running(5555) is False
+
+    def test_not_json_does_not(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(tray.urllib.request, "urlopen", lambda url, timeout=None: io.BytesIO(b"<html>"))
+        assert tray._is_dtach_running(5555) is False
+
+    def test_nothing_listening(self) -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        assert tray._is_dtach_running(port) is False
+
+
+class TestHandlePortInUse:
+    @pytest.fixture
+    def opened(self, monkeypatch: pytest.MonkeyPatch) -> list:
+        urls: list = []
+        monkeypatch.setattr(tray.webbrowser, "open", urls.append)
+        return urls
+
+    @pytest.fixture
+    def notified(self, monkeypatch: pytest.MonkeyPatch) -> list:
+        ports: list = []
+        monkeypatch.setattr(tray, "_notify_port_in_use", ports.append)
+        return ports
+
+    def test_second_double_click_opens_the_running_one(
+        self, monkeypatch: pytest.MonkeyPatch, frozen_windows: Path, opened: list, notified: list
+    ) -> None:
+        monkeypatch.setattr(tray, "_is_dtach_running", lambda port: True)
+        assert tray._handle_port_in_use(5555, [], {}) == 0
+        assert opened == ["http://localhost:5555"]
+        assert notified == []
+
+    def test_second_start_at_login_exits_quietly(
+        self, monkeypatch: pytest.MonkeyPatch, frozen_windows: Path, opened: list, notified: list
+    ) -> None:
+        monkeypatch.setattr(tray, "_is_dtach_running", lambda port: True)
+        assert tray._handle_port_in_use(5555, ["--at-login"], {}) == 0
+        assert opened == []
+        assert notified == []
+
+    def test_another_program_on_the_port_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch, opened: list, notified: list
+    ) -> None:
+        monkeypatch.setattr(tray, "_is_dtach_running", lambda port: False)
+        assert tray._handle_port_in_use(5555, [], {"DTACH_OPEN_BROWSER": "1"}) == 1
+        assert notified == [5555]
+        assert opened == []

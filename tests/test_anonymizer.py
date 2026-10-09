@@ -422,7 +422,7 @@ class TestLanguageDetectorEnsureLoaded:
             detector.ensure_loaded("nl", "eager")
         assert str(exc_info.value) == (
             "Dutch detected but Dutch model is not enabled. "
-            "Enable it in Settings > Languages and restart d-tach."
+            "Enable it in Settings > Languages."
         )
 
 
