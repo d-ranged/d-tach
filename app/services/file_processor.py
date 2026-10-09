@@ -11,6 +11,7 @@ from app.services.anonymizer import (
     DetectedEntity,
     LOCATION_ENTITY,
     NUMERIC_ID_ENTITY,
+    PLACEHOLDER_PATTERN,
     URL_ENTITY,
     build_numeric_id_recognizer,
 )
@@ -27,6 +28,9 @@ SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf", ".md", ".xlsx
 # ligature extraction artefacts (e.g. "ci", "fi") rather than real PII.
 # Replacing them would corrupt the entire document, so they are skipped.
 MIN_ENTITY_TEXT_LENGTH: int = 3
+
+# A hashed full name as it reads in a file name: [Lo-NUSA_0W3X].
+_FILE_NAME_HASHED_NAME: re.Pattern[str] = re.compile(r"\[[A-Za-z]{1,2}-[A-Z0-9]{4}_[A-Z0-9]{4}\]")
 
 
 def _build_entity_list(
@@ -656,8 +660,11 @@ class FileProcessor:
         so callers (e.g. rename-only mode, which has no document content to
         scan) can build a KEYREF from filename-only detections.
         """
-        # Treat underscores and hyphens as spaces for analysis
-        readable = re.sub(r"[_\-]+", " ", stem)
+        # Treat underscores and hyphens as spaces for analysis, except inside a
+        # placeholder already in the name: its hyphen belongs to the placeholder,
+        # and rewriting it would stop the next pass recognising it.
+        readable = self._readable_stem(stem)
+        normalised = readable
 
         # Apply known content replacements first using case-insensitive matching,
         # sorted longest-first to avoid replacing a substring before the full match.
@@ -675,8 +682,33 @@ class FileProcessor:
         ):
             readable = readable.replace(original, placeholder)
 
+        # Nothing about the PII in this name changed, so neither does the name.
+        # Without this, separator tidying alone renames a file and reports it clean.
+        if readable == normalised:
+            return stem, remaining
+
         # Restore separator style (spaces → underscores in the new stem)
         return readable.replace(" ", "_"), remaining
+
+    @staticmethod
+    def _readable_stem(stem: str) -> str:
+        """Return stem with separators as spaces, leaving placeholders in canonical form.
+
+        A hashed full name written into a file name reads [Lo-NUSA_0W3X]. It is
+        turned back into [Lo-NUSA 0W3X], the form every other part of d-tach
+        uses, and the later space-to-underscore step writes it out the same way.
+        """
+        parts: list[str] = []
+        last = 0
+        for match in PLACEHOLDER_PATTERN.finditer(stem):
+            parts.append(re.sub(r"[_\-]+", " ", stem[last:match.start()]))
+            placeholder = match.group()
+            if _FILE_NAME_HASHED_NAME.fullmatch(placeholder):
+                placeholder = placeholder.replace("_", " ")
+            parts.append(placeholder)
+            last = match.end()
+        parts.append(re.sub(r"[_\-]+", " ", stem[last:]))
+        return "".join(parts)
 
     def rename_file(self, path: Path, settings: ProcessingSettings) -> FileResult:
         """Rename a single file's name in place using the same detection as content mode.
