@@ -111,6 +111,38 @@ def compose_replacements(
     return replacements
 
 
+class PlaceholderLedger:
+    """One sequential numbering shared by every file of a folder run.
+
+    The Anonymizer numbers placeholders from 1 in every call, so two files of the
+    same folder both hand out [PERSON_1] to different people. The consolidated
+    KEYREF then lists one placeholder against two values, and a restore puts the
+    wrong name back. Hashing cannot do this, because the same value always
+    encodes the same way.
+
+    The ledger remembers which placeholder each original value was given and
+    numbers new values per entity type, so within a run the same value always
+    gets the same placeholder and different values never share one.
+    """
+
+    def __init__(self) -> None:
+        """Start empty: no values seen, every counter at zero."""
+        self._by_value: dict[str, str] = {}
+        self._counters: dict[str, int] = {}
+
+    def assign(self, original: str, label: str) -> str:
+        """Return the run-wide placeholder for original, numbering it if new.
+
+        label is the placeholder's type part, e.g. PERSON or EMAIL_ADDRESS.
+        """
+        placeholder = self._by_value.get(original)
+        if placeholder is None:
+            self._counters[label] = self._counters.get(label, 0) + 1
+            placeholder = f"[{label}_{self._counters[label]}]"
+            self._by_value[original] = placeholder
+        return placeholder
+
+
 @dataclass
 class ProcessingSettings:
     """Configuration for a single file processing run."""
@@ -133,6 +165,9 @@ class ProcessingSettings:
     loading_strategy: str = "eager"  # "eager" | "lazy"
     expand_archives: bool = False
     delete_archives_after_expand: bool = False
+    # Set by FolderProcessor for a run with hashing off, so numbering is shared
+    # across the files of that run. None means each call numbers on its own.
+    placeholder_ledger: Optional[PlaceholderLedger] = None
 
 
 @dataclass
@@ -444,6 +479,16 @@ class FileProcessor:
                 substring_replacements = detection.replacements
                 ner_entities = detection.entities
 
+        # Column placeholders are numbered per file too, so they share the run's
+        # numbering. Hashed ones already agree across files and are left alone.
+        if encoder is None and settings.placeholder_ledger is not None:
+            exact_replacements = {
+                original: settings.placeholder_ledger.assign(
+                    original, placeholder.strip("[]").rsplit("_", 1)[0]
+                )
+                for original, placeholder in exact_replacements.items()
+            }
+
         # --- Nothing to replace → clean ---
         if not exact_replacements and not substring_replacements:
             output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
@@ -544,6 +589,12 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = compose_replacements(result.entities, encoder)
+        if encoder is None and settings.placeholder_ledger is not None:
+            types = {e.original_text: e.entity_type for e in result.entities}
+            replacements = {
+                original: settings.placeholder_ledger.assign(original, types[original])
+                for original in replacements
+            }
 
         # The Anonymizer numbers placeholders sequentially, but compose_replacements
         # is what decides the token that actually lands in the text. With hashing on
