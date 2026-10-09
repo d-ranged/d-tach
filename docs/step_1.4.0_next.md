@@ -188,6 +188,10 @@ build at about 300 MB installed and a 101 MB zip. #79 holds what the frozen buil
 - **Platforms:** packaged builds for Windows and Apple Silicon Mac, built by GitHub
   Actions. Linux and Intel Macs keep the source install, which stays for every platform.
   Unsigned, binaries on GitHub Releases with the latest also on Codeberg. Decided 9-10-2026.
+- **Build sizes:** first GitHub Actions run, 9-10-2026 (test tag `v1.4.0-test.1`).
+  Windows `d-tach-windows.zip` 102 MB, about 300 MB unpacked (296 MB in the local
+  build). Apple Silicon Mac `d-tach-macos-arm.zip` 88 MB. Both smoke tests passed:
+  start, English download, anonymize.
 - **OCR:** moved to v1.5.0 (#78), so it does not affect this build. Whoever takes #78
   must check its engine against the packaged build.
 
