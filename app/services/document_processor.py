@@ -7,7 +7,13 @@ import fitz  # pymupdf
 from docx import Document
 from openpyxl import Workbook, load_workbook
 
+from app.services.text_replacer import replace_keys
+
 logger = logging.getLogger(__name__)
+
+# PDF hit check: how far either side of a search hit is read for a touching letter.
+PDF_EDGE_WIDTH = 3.0
+PDF_EDGE_GAP = 0.5
 
 
 class DocumentProcessor:
@@ -67,7 +73,8 @@ class DocumentProcessor:
         Each occurrence of an original string on each page is replaced with its
         placeholder using pymupdf's redaction API. The replacement text is drawn
         at the same position in the default font. Layout of surrounding content
-        is preserved.
+        is preserved. A hit that is part of a longer word, or the wrong case for
+        a key that starts with a capital, is left alone (see _pdf_hit_is_whole).
         """
         # Sort longest first to avoid replacing a substring before the full match
         sorted_replacements = sorted(
@@ -76,12 +83,34 @@ class DocumentProcessor:
 
         for page in doc:
             for original, placeholder in sorted_replacements:
-                rects = page.search_for(original)
-                for rect in rects:
-                    page.add_redact_annot(rect, text=placeholder, fontsize=11)
+                for rect in page.search_for(original):
+                    if self._pdf_hit_is_whole(page, rect, original):
+                        page.add_redact_annot(rect, text=placeholder, fontsize=11)
             page.apply_redactions()
 
         doc.save(str(dest_path))
+
+    @staticmethod
+    def _pdf_hit_is_whole(page: fitz.Page, rect: fitz.Rect, key: str) -> bool:
+        """Return False when a search hit is clearly not the key itself.
+
+        search_for ignores case and word edges, so 'Will' also hits 'will',
+        'Willem' and 'Goodwill'. The hit is dropped when a letter touches it on
+        either side, or when the key starts with a capital and the hit does not.
+        When the text cannot be read the hit is kept: when in doubt, replace.
+        """
+        hit = page.get_textbox(rect).strip()
+        if key[:1].isupper() and hit[:1] and not hit[:1].isupper():
+            return False
+        if key[:1].isalpha():
+            left = fitz.Rect(rect.x0 - PDF_EDGE_WIDTH, rect.y0, rect.x0 - PDF_EDGE_GAP, rect.y1)
+            if page.get_textbox(left)[-1:].isalpha():
+                return False
+        if key[-1:].isalpha():
+            right = fitz.Rect(rect.x1 + PDF_EDGE_GAP, rect.y0, rect.x1 + PDF_EDGE_WIDTH, rect.y1)
+            if page.get_textbox(right)[:1].isalpha():
+                return False
+        return True
 
     def save_pdf_copy(self, doc: fitz.Document, dest_path: Path) -> None:
         """Save an unmodified copy of the PDF to dest_path."""
@@ -147,10 +176,7 @@ class DocumentProcessor:
     def _replace_in_paragraph(paragraph, replacements: dict[str, str]) -> None:
         """Apply all replacements to every run in a single paragraph."""
         for run in paragraph.runs:
-            text = run.text
-            for original, placeholder in replacements.items():
-                text = text.replace(original, placeholder)
-            run.text = text
+            run.text = replace_keys(run.text, replacements)
 
     # ------------------------------------------------------------------
     # Excel methods
@@ -182,7 +208,7 @@ class DocumentProcessor:
            type where str(cell.value) exactly matches a key. Runs first so that
            already-replaced cells are not touched again by the NER pass.
         2. Substring replacements (NER-based): applied to string cells only via
-           str.replace(), longest key first.
+           whole-word replacement (see text_replacer), longest key first.
 
         Formula cells and None cells are skipped in both passes. Cell formatting
         is preserved because only cell.value is modified.
@@ -302,6 +328,36 @@ class DocumentProcessor:
             result[header] = values
         return result
 
+    def read_xlsx_rows(self, path: Path, headers: list[str]) -> list[dict[str, str]]:
+        """Return one {header: value} dict per data row for the given headers.
+
+        Unlike read_xlsx_columns, blank and formula cells are kept as "" so a
+        row stays together when one student has no tussenvoegsel. Header
+        matching is case-insensitive against row 1 of the active sheet. Keys
+        follow the order of the columns in the sheet, not the order of headers.
+        """
+        wb = load_workbook(str(path))
+        sheet = wb.active
+
+        wanted = {header.strip().lower(): header for header in headers}
+        columns: list[tuple[int, str]] = []
+        for cell in sheet[1]:
+            if isinstance(cell.value, str) and cell.value.strip().lower() in wanted:
+                columns.append((cell.column, wanted[cell.value.strip().lower()]))
+
+        rows: list[dict[str, str]] = []
+        for sheet_row in sheet.iter_rows(min_row=2):
+            by_column = {cell.column: cell.value for cell in sheet_row}
+            row: dict[str, str] = {}
+            for column, header in columns:
+                value = by_column.get(column)
+                if value is None or (isinstance(value, str) and value.startswith("=")):
+                    row[header] = ""
+                else:
+                    row[header] = str(value).strip()
+            rows.append(row)
+        return rows
+
     def save_xlsx_copy(self, wb: Workbook, dest_path: Path) -> None:
         """Save an unmodified copy of the workbook to dest_path."""
         wb.save(str(dest_path))
@@ -334,18 +390,12 @@ class DocumentProcessor:
     @staticmethod
     def _apply_xlsx_replacements(wb: Workbook, replacements: dict[str, str]) -> None:
         """Replace all occurrences of original text in string cells across all sheets."""
-        sorted_replacements = sorted(
-            replacements.items(), key=lambda x: len(x[0]), reverse=True
-        )
         for sheet in wb.worksheets:
             for row in sheet.iter_rows():
                 for cell in row:
                     if not isinstance(cell.value, str) or cell.value.startswith("="):
                         continue
-                    new_value = cell.value
-                    for original, placeholder in sorted_replacements:
-                        new_value = new_value.replace(original, placeholder)
-                    cell.value = new_value
+                    cell.value = replace_keys(cell.value, replacements)
 
     @staticmethod
     def _apply_xlsx_exact_replacements(
@@ -391,12 +441,7 @@ class DocumentProcessor:
         Used both to write anonymized plain-text output and, without writing
         to disk, to build AI Mode's in-flight anonymized text.
         """
-        sorted_replacements = sorted(
-            replacements.items(), key=lambda x: len(x[0]), reverse=True
-        )
-        for original, placeholder in sorted_replacements:
-            text = text.replace(original, placeholder)
-        return text
+        return replace_keys(text, replacements)
 
     def save_md_copy(self, text: str, dest_path: Path) -> None:
         """Save an unmodified copy of the markdown text to dest_path."""

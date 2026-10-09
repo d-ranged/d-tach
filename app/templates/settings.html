@@ -181,10 +181,13 @@
 
     <div class="advanced-section-heading">Import from class list</div>
     <p class="advanced-hint">
-        Read a roster spreadsheet and add its columns as known values in bulk. A
-        class of 500 with a name column and a number column adds over a thousand
-        values, so imported values are summarised rather than listed &mdash; search
-        below to find and remove a specific one.
+        Read a roster spreadsheet and add its columns as known values in bulk. Pick
+        First name, Surname or Full name for the name columns: each student gets all
+        three. A class of 500 adds well over a thousand values, so imported values
+        are summarised rather than listed &mdash; search below to find and remove a
+        specific one. Names of two letters or fewer (An, En) are only replaced inside
+        the full name, and names that are also everyday words (Will, Mark) only with
+        a capital letter.
     </p>
     <div class="advanced-setting-row">
         <input
@@ -203,6 +206,7 @@
     </div>
     <p class="muted" id="class-list-status" hidden></p>
     <p class="error-text" id="class-list-error" hidden></p>
+    <p class="muted" id="class-list-legacy-note" hidden>This class list was imported before v1.4.0. Re-sync to add first names and surnames.</p>
 
     <div class="advanced-setting-row" id="imported-values-row" hidden>
         <span class="advanced-label" id="imported-values-summary"></span>

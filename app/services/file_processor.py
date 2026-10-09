@@ -20,6 +20,7 @@ from app.services.hash_encoder import HashEncoder
 from app.services.key_reference_reader import KeyrefError, read_keyref
 from app.services.language_detector import LanguageDetector
 from app.services.pattern_config import PatternConfig
+from app.services.text_replacer import replace_keys
 
 logger = logging.getLogger(__name__)
 
@@ -669,19 +670,13 @@ class FileProcessor:
 
         # Apply known content replacements first using case-insensitive matching,
         # sorted longest-first to avoid replacing a substring before the full match.
-        for original, placeholder in sorted(
-            content_replacements.items(), key=lambda x: len(x[0]), reverse=True
-        ):
-            readable = re.sub(re.escape(original), placeholder, readable, flags=re.IGNORECASE)
+        readable = replace_keys(readable, content_replacements, re.IGNORECASE)
 
         # Run anonymizer on whatever remains for any additional entities
         detection = self._detect(readable, settings, language)
         remaining = detection.replacements
 
-        for original, placeholder in sorted(
-            remaining.items(), key=lambda x: len(x[0]), reverse=True
-        ):
-            readable = readable.replace(original, placeholder)
+        readable = replace_keys(readable, remaining)
 
         # Nothing about the PII in this name changed, so neither does the name.
         # Without this, separator tidying alone renames a file and reports it clean.

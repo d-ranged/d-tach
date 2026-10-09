@@ -252,3 +252,60 @@ class TestRunsDoNotWriteSettings:
         run_client.post("/document/process-file", json={"file_path": str(source)})
 
         assert user_settings.anonymize_dates is True
+
+
+class TestClassListImportRoute:
+    """Issue #76: the import route reports the new counts and rejects bad mappings."""
+
+    @staticmethod
+    def _roster(path: Path, headers: list[str], rows: list[list[str]]) -> Path:
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws = wb.active
+        ws.append(headers)
+        for row in rows:
+            ws.append(row)
+        wb.save(str(path))
+        return path
+
+    @pytest.fixture
+    def import_client(self, app: Flask):
+        from app.services.class_list_importer import ClassListImporter
+        from app.services.document_processor import DocumentProcessor
+
+        app.class_list_importer = ClassListImporter(DocumentProcessor())  # type: ignore[attr-defined]
+        return app.test_client()
+
+    def test_counts_include_updated_and_rule_totals(self, import_client, tmp_path: Path) -> None:
+        roster = self._roster(
+            tmp_path / "r.xlsx", ["First", "Last"], [["An", "Jansen"], ["Will", "Visser"]]
+        )
+        response = import_client.post(
+            "/settings/known-values/class-list/import",
+            json={
+                "file_path": str(roster),
+                "column_mapping": {"First": "FIRST_NAME", "Last": "SURNAME"},
+            },
+        )
+        body = response.get_json()
+        assert response.status_code == 200
+        assert body["added"] == 6
+        assert body["updated"] == 0
+        assert body["full_name_only"] == 1
+        assert body["capital_only"] == 2
+        assert body["total_known_values"] == 6
+
+    def test_two_first_name_columns_is_a_400_with_a_plain_message(
+        self, import_client, tmp_path: Path
+    ) -> None:
+        roster = self._roster(tmp_path / "r.xlsx", ["A", "B"], [["x", "y"]])
+        response = import_client.post(
+            "/settings/known-values/class-list/import",
+            json={
+                "file_path": str(roster),
+                "column_mapping": {"A": "FIRST_NAME", "B": "FIRST_NAME"},
+            },
+        )
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "Pick at most one First name column."

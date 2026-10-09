@@ -149,7 +149,9 @@ class TestKnownValuesSetter:
     def test_dict_entries_round_trip(self, settings_path: Path) -> None:
         settings = UserSettings(settings_path=settings_path)
         settings.known_values = [{"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual"}]
-        assert settings.known_values == [{"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual"}]
+        assert settings.known_values == [
+            {"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual", "rule": "any"}
+        ]
 
     def test_missing_entity_type_defaults_to_person(self, settings_path: Path) -> None:
         settings = UserSettings(settings_path=settings_path)
@@ -167,7 +169,9 @@ class TestKnownValuesSetter:
         settings.save()
 
         reloaded = UserSettings(settings_path=settings_path)
-        assert reloaded.known_values == [{"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}]
+        assert reloaded.known_values == [
+            {"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list", "rule": "any"}
+        ]
 
 
 class TestKnownValuesMigration:
@@ -177,8 +181,8 @@ class TestKnownValuesMigration:
         settings_path.write_text('{"known_values": ["Craig Bradley", "Nick"]}', encoding="utf-8")
         settings = UserSettings(settings_path=settings_path)
         assert settings.known_values == [
-            {"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual"},
-            {"value": "Nick", "entity_type": "PERSON", "source": "manual"},
+            {"value": "Craig Bradley", "entity_type": "PERSON", "source": "manual", "rule": "any"},
+            {"value": "Nick", "entity_type": "PERSON", "source": "manual", "rule": "any"},
         ]
 
     def test_blank_legacy_strings_are_dropped(self, settings_path: Path) -> None:
@@ -193,8 +197,37 @@ class TestKnownValuesMigration:
         )
         settings = UserSettings(settings_path=settings_path)
         assert settings.known_values == [
-            {"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list"}
+            {"value": "123456", "entity_type": "NUMERIC_ID", "source": "class_list", "rule": "any"}
         ]
+
+    def test_entry_saved_before_v140_loads_as_rule_any_with_no_name_part(
+        self, settings_path: Path
+    ) -> None:
+        settings_path.write_text(
+            '{"known_values": [{"value": "An Jansen", "entity_type": "PERSON", "source": "class_list"}]}',
+            encoding="utf-8",
+        )
+        entry = UserSettings(settings_path=settings_path).known_values[0]
+        assert entry["rule"] == "any"
+        assert "name_part" not in entry
+
+    def test_rule_and_name_part_survive_save_and_reload(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.known_values = [{
+            "value": "Will", "entity_type": "PERSON", "source": "class_list",
+            "rule": "capital", "name_part": "first",
+        }]
+        settings.save()
+        entry = UserSettings(settings_path=settings_path).known_values[0]
+        assert entry["rule"] == "capital"
+        assert entry["name_part"] == "first"
+
+    def test_unknown_rule_and_name_part_are_cleaned(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.known_values = [{"value": "x", "rule": "bogus", "name_part": "bogus"}]
+        entry = settings.known_values[0]
+        assert entry["rule"] == "any"
+        assert "name_part" not in entry
 
 
 class TestClassListFields:
@@ -211,7 +244,21 @@ class TestClassListFields:
 
         reloaded = UserSettings(settings_path=settings_path)
         assert reloaded.class_list_path == "C:/roster.xlsx"
-        assert reloaded.class_list_column_mapping == {"Name": "PERSON", "Student number": "NUMERIC_ID"}
+        assert reloaded.class_list_column_mapping == {"Name": "FULL_NAME", "Student number": "NUMERIC_ID"}
+
+    def test_saved_person_mapping_is_read_as_full_name(self, settings_path: Path) -> None:
+        settings_path.write_text(
+            '{"class_list_column_mapping": {"Name": "PERSON"}}', encoding="utf-8"
+        )
+        settings = UserSettings(settings_path=settings_path)
+        assert settings.class_list_column_mapping == {"Name": "FULL_NAME"}
+
+    def test_new_column_types_round_trip(self, settings_path: Path) -> None:
+        settings = UserSettings(settings_path=settings_path)
+        settings.class_list_column_mapping = {"Voornaam": "FIRST_NAME", "Achternaam": "SURNAME"}
+        settings.save()
+        reloaded = UserSettings(settings_path=settings_path)
+        assert reloaded.class_list_column_mapping == {"Voornaam": "FIRST_NAME", "Achternaam": "SURNAME"}
 
     def test_missing_fields_in_older_file_default_cleanly(self, settings_path: Path) -> None:
         settings_path.write_text('{"port": 6000}', encoding="utf-8")

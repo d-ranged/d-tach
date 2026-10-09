@@ -1,0 +1,19 @@
+English ordinary-word list (ordinary_words_en.txt)
+
+Derived from SCOWL / ESDB, the official Hunspell dictionaries en_US and
+en_GB-ise, release rel-2026.02.25, https://github.com/en-wl/wordlist
+Lowercase words of 3 to 12 letters only, affix rules expanded.
+
+The notice below is the one that applies to these dictionaries.
+
+Copyright 2000-2026 by Kevin Atkinson
+
+Permission to use, copy, modify, distribute, and sell any part of SCOWLv2, or
+word lists created from it, is hereby granted without fee, provided that the
+above copyright notice appears in all copies and that both the above
+copyright notice and this notice appear in supporting documentation.  Kevin
+Atkinson makes no representations about the suitability of this database for
+any purpose.  It is provided "as is" without express or implied warranty.
+
+SCOWL is derived from many sources, most of which are in the Public Domain.
+Data from the Corpus of Contemporary American English (COCA) was also used.

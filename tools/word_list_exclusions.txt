@@ -1,0 +1,30 @@
+# Names that are also a rare word. Removed from the ordinary-word lists at build
+# time, so a student with one of these names is matched however it is written
+# (a lowercase "koen" in a chat log still counts).
+# Everyday words stay on the lists: ben, dan, mark, will, bill, frank, roos, merel.
+# Confirmed by Craig on issue #76, 9-10-2026.
+adam
+aya
+benjamin
+bram
+charlie
+emir
+eva
+hans
+harry
+henry
+jan
+kees
+kim
+koen
+maarten
+mia
+mila
+piet
+rik
+sara
+sem
+thomas
+tom
+victor
+wim
