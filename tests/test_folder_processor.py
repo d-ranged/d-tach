@@ -734,3 +734,90 @@ class TestRenameInPlace:
         self, tmp_path: Path, folder_processor: FolderProcessor, settings: ProcessingSettings
     ) -> None:
         assert list(folder_processor.rename_in_place(tmp_path, settings)) == []
+
+
+# ---------------------------------------------------------------------------
+# Shared numbering across a folder run (#73)
+# ---------------------------------------------------------------------------
+
+class TestFolderKeyrefNumbering:
+    """Without hashing, one placeholder must never stand for two people."""
+
+    @staticmethod
+    def _run_two_files(tmp_path: Path, folder_processor: FolderProcessor, **overrides):
+        folder = tmp_path / "internship"
+        folder.mkdir()
+        make_docx(folder / "a.docx", [
+            "Joris van Dijk wrote to Femke Jansen about the plan.",
+            "Contact j.vandijk@kestreldata.example.nl for details.",
+        ])
+        make_docx(folder / "b.docx", [
+            "Sanne de Wit asked Femke Jansen for feedback.",
+            "Contact s.dewit@school.example.nl for details.",
+        ])
+        settings = ProcessingSettings(
+            language="en", key_reference_enabled=True, output_mode="subfolder", **overrides,
+        )
+        results = [r for r, _n, _t in folder_processor.process(folder, settings)]
+        summary = folder_processor.summarise(
+            results, folder=folder, key_reference_enabled=True, output_mode="subfolder",
+        )
+        return folder, results, summary
+
+    @staticmethod
+    def _read_keyref(path: Path) -> list[tuple[str, str]]:
+        import csv
+        with path.open(newline="", encoding="utf-8") as f:
+            return [tuple(row) for row in list(csv.reader(f))[1:]]
+
+    def test_every_placeholder_maps_to_one_value(self, tmp_path, folder_processor) -> None:
+        _folder, _results, summary = self._run_two_files(tmp_path, folder_processor)
+
+        rows = self._read_keyref(summary.keyref_csv_path)
+        values_by_placeholder: dict[str, set[str]] = {}
+        for placeholder, original in rows:
+            values_by_placeholder.setdefault(placeholder, set()).add(original)
+
+        assert all(len(values) == 1 for values in values_by_placeholder.values()), rows
+
+    def test_same_person_gets_the_same_placeholder_in_both_files(
+        self, tmp_path, folder_processor
+    ) -> None:
+        _folder, results, _summary = self._run_two_files(tmp_path, folder_processor)
+
+        first, second = results
+        shared = set(first.replacements) & set(second.replacements)
+        assert "Femke Jansen" in shared
+        for original in shared:
+            assert first.replacements[original] == second.replacements[original]
+
+    def test_restore_puts_the_right_name_back_in_each_file(
+        self, tmp_path, folder_processor, file_processor
+    ) -> None:
+        folder, results, summary = self._run_two_files(tmp_path, folder_processor)
+
+        for name, expected in (("a.docx", "Joris van Dijk"), ("b.docx", "Sanne de Wit")):
+            restored = file_processor.restore_file(
+                folder / "anonymized" / name, summary.keyref_csv_path
+            )
+            assert restored.status == "restored"
+            text = "\n".join(p.text for p in Document(str(restored.output_path)).paragraphs)
+            assert expected in text
+            assert "[PERSON_" not in text
+
+    def test_numbering_restarts_for_a_new_run(self, tmp_path, folder_processor) -> None:
+        """The ledger lives for one run, so a second run starts from 1 again."""
+        (tmp_path / "one").mkdir()
+        (tmp_path / "two").mkdir()
+        _folder, first_results, _ = self._run_two_files(tmp_path / "one", folder_processor)
+        _folder, second_results, _ = self._run_two_files(tmp_path / "two", folder_processor)
+
+        assert first_results[0].replacements == second_results[0].replacements
+
+    def test_hashed_run_is_left_alone(self, tmp_path, folder_processor) -> None:
+        _folder, results, _summary = self._run_two_files(
+            tmp_path, folder_processor, hashing_enabled=True, secret="demo",
+        )
+
+        for result in results:
+            assert not any(p.startswith("[PERSON_") for p in result.replacements.values())

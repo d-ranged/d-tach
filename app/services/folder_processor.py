@@ -5,7 +5,12 @@ from dataclasses import dataclass, field, replace as dc_replace
 from pathlib import Path
 from typing import Generator, Optional
 
-from app.services.file_processor import FileProcessor, FileResult, ProcessingSettings
+from app.services.file_processor import (
+    FileProcessor,
+    FileResult,
+    PlaceholderLedger,
+    ProcessingSettings,
+)
 from app.services.archive_extractor import ArchiveExtractor, ArchiveResult
 
 logger = logging.getLogger(__name__)
@@ -123,6 +128,7 @@ class FolderProcessor:
             if settings.key_reference_enabled
             else settings
         )
+        file_settings = self._with_shared_numbering(file_settings)
 
         completed: list[FileResult] = []
         for index, path in enumerate(files, start=1):
@@ -195,6 +201,7 @@ class FolderProcessor:
             for result, n, total in processor.rename_in_place(folder, settings):
                 # stream result to UI
         """
+        settings = self._with_shared_numbering(settings)
         files = self._collect_all_files(folder)
         total = len(files)
         all_replacements: dict[str, str] = {}
@@ -209,6 +216,19 @@ class FolderProcessor:
             yield result, index, total
 
         self._rename_directories_in_place(folder, all_replacements, settings)
+
+    @staticmethod
+    def _with_shared_numbering(settings: ProcessingSettings) -> ProcessingSettings:
+        """Return settings carrying one numbering for the whole folder run.
+
+        Needed only with hashing off: sequential placeholders restart at 1 in
+        every file, so without a shared ledger the consolidated KEYREF maps one
+        placeholder to several people. With hashing on, the same value already
+        encodes the same way everywhere.
+        """
+        if settings.hashing_enabled or settings.placeholder_ledger is not None:
+            return settings
+        return dc_replace(settings, placeholder_ledger=PlaceholderLedger())
 
     @staticmethod
     def _collect_all_files(folder: Path) -> list[Path]:
