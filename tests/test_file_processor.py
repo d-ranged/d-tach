@@ -823,3 +823,34 @@ class TestFileNamesDoNotRewrapPlaceholders:
         )
 
         assert new_stem == "week-3_notes"
+
+
+class TestLoneFirstNameAfterFullName:
+    """Issue #75: the PDF reproduction, a lone first name after its full name."""
+
+    def test_pdf_lone_first_name_is_replaced(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "visit.pdf"
+        make_pdf(source, [
+            "Progress report for Lotte Vermeulen.",
+            "Midterm visit, week 10. Lotte is on track.",
+        ])
+        settings = ProcessingSettings(known_values=[
+            {"value": "Lotte Vermeulen", "entity_type": "PERSON", "source": "class_list", "rule": "any"},
+        ])
+        result = file_processor.process(source, settings)
+        assert result.output_path is not None
+        out_doc = fitz.open(str(result.output_path))
+        text = out_doc[0].get_text()
+        out_doc.close()
+        assert "Lotte" not in text
+        assert "Vermeulen" not in text
+
+    def test_second_file_without_the_full_name_is_not_touched(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        source = tmp_path / "other.docx"
+        make_docx(source, ["The results showed a fifteen percent improvement."])
+        result = file_processor.process(source, ProcessingSettings())
+        assert result.status == "clean"
