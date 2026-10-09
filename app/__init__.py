@@ -1,13 +1,15 @@
-from pathlib import Path
-
 from flask import Flask, redirect, request, url_for
+
+from app.app_paths import bundle_dir, resolve_settings_path
 
 __version__ = "1.3.0"
 
 
 def create_app() -> Flask:
     """Create and configure the Flask application instance."""
-    app = Flask(__name__)
+    # Templates and static files sit in the bundle: the project from source,
+    # PyInstaller's unpack folder in a frozen build.
+    app = Flask(__name__, root_path=str(bundle_dir() / "app"))
 
     @app.context_processor
     def inject_version() -> dict:
@@ -21,8 +23,10 @@ def create_app() -> Flask:
     from app.services.language_registry import LanguageRegistry
     from app.services.user_settings import UserSettings
 
+    # Per-user, so settings, the AI token and the hashing secret survive
+    # replacing the app folder. A file left next to the code is carried over once.
     app.user_settings = UserSettings(  # type: ignore[attr-defined]
-        settings_path=Path(app.root_path).parent / "user_settings.json"
+        settings_path=resolve_settings_path()
     )
 
     # Eager mode loads every enabled+installed language at startup; lazy mode

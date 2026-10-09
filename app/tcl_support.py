@@ -52,20 +52,3 @@ def ensure_tcl_available() -> None:
             os.environ[var] = str(candidates[-1])
             logger.debug("Set %s=%s", var, os.environ[var])
 
-
-def tk_dialogs_available() -> bool:
-    """Return True if a native dialog can actually be opened right now.
-
-    Stronger than ``import tkinter`` — it constructs and tears down a real root
-    window, which is where a broken Tcl installation actually shows up.
-    """
-    try:
-        ensure_tcl_available()
-        import tkinter as tk
-
-        root = tk.Tk()
-        root.destroy()
-        return True
-    except Exception as exc:  # noqa: BLE001 - any failure means "no dialogs"
-        logger.info("Native dialogs unavailable: %s: %s", type(exc).__name__, exc)
-        return False

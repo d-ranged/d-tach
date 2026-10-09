@@ -59,10 +59,10 @@ class TestSupportedLanguages:
 
 class TestInstalled:
     def test_is_installed_true_for_installed_model(self) -> None:
-        assert LanguageRegistry.is_installed("en") is True
+        assert LanguageRegistry().is_installed("en") is True
 
     def test_is_installed_false_for_unsupported_code(self) -> None:
-        assert LanguageRegistry.is_installed("xx") is False
+        assert LanguageRegistry().is_installed("xx") is False
 
     def test_installed_languages_includes_en(self) -> None:
         registry = LanguageRegistry()
@@ -186,3 +186,94 @@ class TestRemove:
             mock_run.return_value = MagicMock(returncode=0)
             registry.remove("nl")
         assert registry.download_status("nl") == {"state": "idle", "message": ""}
+
+
+# ---------------------------------------------------------------------------
+# Frozen build: no pip, models go through the ModelStore (issue #79)
+# ---------------------------------------------------------------------------
+
+
+class _FakeStore:
+    """Stand-in for ModelStore, recording calls instead of touching disk or network."""
+
+    def __init__(self, installed: set[str] | None = None) -> None:
+        self.installed = set(installed or ())
+        self.downloaded: list[str] = []
+        self.removed: list[str] = []
+
+    def is_installed(self, model: str) -> bool:
+        return model in self.installed
+
+    def download(self, model: str) -> None:
+        self.downloaded.append(model)
+        self.installed.add(model)
+
+    def remove(self, model: str) -> bool:
+        self.removed.append(model)
+        had = model in self.installed
+        self.installed.discard(model)
+        return had
+
+
+@pytest.fixture
+def frozen(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+
+
+class TestModelStoreIntegration:
+    def test_is_installed_asks_the_store(self) -> None:
+        registry = LanguageRegistry(model_store=_FakeStore(installed={"nl_core_news_md"}))
+        assert registry.is_installed("nl") is True
+        assert registry.is_installed("en") is False
+        assert registry.installed_languages() == ["nl"]
+
+    def test_frozen_download_uses_the_store_not_pip(self, frozen) -> None:
+        store = _FakeStore()
+        registry = LanguageRegistry(model_store=store)
+        with patch("app.services.language_registry.threading.Thread", _SyncThread), \
+             patch("app.services.language_registry.subprocess.run") as mock_run:
+            registry.start_download("nl")
+        mock_run.assert_not_called()
+        assert store.downloaded == ["nl_core_news_md"]
+        assert registry.download_status("nl")["state"] == "done"
+
+    def test_frozen_download_failure_sets_error_status(self, frozen) -> None:
+        store = _FakeStore()
+        store.download = MagicMock(side_effect=OSError("network down"))
+        registry = LanguageRegistry(model_store=store)
+        with patch("app.services.language_registry.threading.Thread", _SyncThread):
+            registry.start_download("nl")
+        status = registry.download_status("nl")
+        assert status["state"] == "error"
+        assert "network down" in status["message"]
+
+    def test_source_download_still_runs_spacy_download(self) -> None:
+        store = _FakeStore()
+        registry = LanguageRegistry(model_store=store)
+        with patch("app.services.language_registry.threading.Thread", _SyncThread), \
+             patch("app.services.language_registry.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            registry.start_download("nl")
+        command = mock_run.call_args[0][0]
+        assert command[1:] == ["-m", "spacy", "download", "nl_core_news_md"]
+        assert store.downloaded == []
+
+    def test_frozen_remove_deletes_from_the_store_without_pip(self, frozen) -> None:
+        store = _FakeStore(installed={"nl_core_news_md"})
+        registry = LanguageRegistry(model_store=store)
+        with patch("app.services.language_registry.subprocess.run") as mock_run:
+            registry.remove("nl")
+        mock_run.assert_not_called()
+        assert store.removed == ["nl_core_news_md"]
+        assert registry.is_installed("nl") is False
+
+    def test_source_remove_clears_the_store_and_runs_pip(self) -> None:
+        store = _FakeStore(installed={"nl_core_news_md"})
+        registry = LanguageRegistry(model_store=store)
+        with patch("app.services.language_registry.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            registry.remove("nl")
+        assert store.removed == ["nl_core_news_md"]
+        assert "uninstall" in mock_run.call_args[0][0]

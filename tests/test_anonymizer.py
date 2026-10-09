@@ -845,3 +845,50 @@ class TestLoneFirstNameAfterFullName:
         encoded = HashEncoder("test-secret").encode_full_name("Lotte")
 
         assert re.fullmatch(r"Lo-[A-Z0-9]{4}", encoded)
+
+
+# ---------------------------------------------------------------------------
+# Model loading through the ModelStore (issue #79)
+# ---------------------------------------------------------------------------
+
+
+class _StoreWith:
+    """Stand-in for ModelStore that answers load_target from a fixed dict."""
+
+    def __init__(self, targets: dict) -> None:
+        self._targets = targets
+
+    def load_target(self, model: str):
+        return self._targets.get(model)
+
+
+class TestModelLoading:
+    def test_missing_model_raises_without_downloading(self) -> None:
+        anonymizer = Anonymizer(languages=[], model_store=_StoreWith({}))
+        with pytest.raises(RuntimeError, match="not installed"):
+            anonymizer.ensure_loaded("nl")
+
+    def test_frozen_folder_path_is_handed_to_presidio(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import app.services.anonymizer as anonymizer_module
+
+        captured: dict = {}
+
+        class _FakeProvider:
+            def __init__(self, nlp_configuration: dict) -> None:
+                captured.update(nlp_configuration)
+
+            def create_engine(self):
+                return object()
+
+        class _FakeAnalyzer:
+            def __init__(self, nlp_engine, supported_languages) -> None:
+                self.registry = type("Registry", (), {"add_recognizer": lambda self, r: None})()
+
+        monkeypatch.setattr(anonymizer_module, "NlpEngineProvider", _FakeProvider)
+        monkeypatch.setattr(anonymizer_module, "AnalyzerEngine", _FakeAnalyzer)
+        folder = r"C:\Users\x\AppData\Local\d-tach\models\nl_core_news_md\nl_core_news_md-3.8.0"
+
+        anonymizer = Anonymizer(languages=["nl"], model_store=_StoreWith({"nl_core_news_md": folder}))
+
+        assert captured["models"] == [{"lang_code": "nl", "model_name": folder}]
+        assert anonymizer.loaded_languages == ["nl"]

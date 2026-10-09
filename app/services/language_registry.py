@@ -5,7 +5,8 @@ import threading
 from dataclasses import dataclass
 from typing import Final, Optional
 
-import spacy
+from app.app_paths import is_frozen
+from app.services.model_store import ModelStore
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,15 @@ class LanguageRegistry:
     model is on disk), and Loaded (the model is in RAM for the running
     Anonymizer). All language-state decisions should go through this class
     rather than inspecting spaCy model availability directly.
+
+    Installed means a pip package (source runs) or a folder in the per-user
+    ModelStore (frozen builds, which have no pip).
     """
 
-    def __init__(self, anonymizer: Optional[object] = None) -> None:
+    def __init__(self, anonymizer: Optional[object] = None, model_store: Optional[ModelStore] = None) -> None:
         """Initialise, optionally binding the Anonymizer whose loaded state is reported."""
         self._anonymizer = anonymizer
+        self._model_store = model_store if model_store is not None else ModelStore()
         self._download_status: dict[str, dict] = {}
         self._lock = threading.Lock()
 
@@ -68,13 +73,12 @@ class LanguageRegistry:
     # Installed (disk)
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def is_installed(code: str) -> bool:
+    def is_installed(self, code: str) -> bool:
         """Return True if the spaCy model for this language is installed on disk."""
         lang = _BY_CODE.get(code)
         if lang is None:
             return False
-        return spacy.util.is_package(lang.spacy_model)
+        return self._model_store.is_installed(lang.spacy_model)
 
     def installed_languages(self) -> list[str]:
         """Return codes of every supported language whose model is installed."""
@@ -105,7 +109,8 @@ class LanguageRegistry:
         self._anonymizer.ensure_loaded(code)
 
     # ------------------------------------------------------------------
-    # Install (subprocess `spacy download`, background thread + polled status)
+    # Install (background thread + polled status): `spacy download` from
+    # source, ModelStore.download in a frozen build
     # ------------------------------------------------------------------
 
     def download_status(self, code: str) -> dict:
@@ -116,7 +121,11 @@ class LanguageRegistry:
         return dict(self._download_status.get(code, {"state": "idle", "message": ""}))
 
     def start_download(self, code: str) -> None:
-        """Kick off `python -m spacy download <model>` in a background thread.
+        """Start downloading this language's model in a background thread.
+
+        From source this runs `python -m spacy download <model>`. Frozen,
+        `sys.executable` is d-tach itself and there is no pip, so the model is
+        unpacked into the ModelStore instead.
 
         No-op if a download for this language is already in progress. Progress
         is not parsed from pip's output (no reliable percentage is exposed by
@@ -136,14 +145,17 @@ class LanguageRegistry:
         thread.start()
 
     def _run_download(self, lang: LanguageInfo) -> None:
-        """Run the spaCy download subprocess and record the outcome (thread target)."""
+        """Run the download and record the outcome (thread target)."""
         try:
-            subprocess.run(
-                [sys.executable, "-m", "spacy", "download", lang.spacy_model],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+            if is_frozen():
+                self._model_store.download(lang.spacy_model)
+            else:
+                subprocess.run(
+                    [sys.executable, "-m", "spacy", "download", lang.spacy_model],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
             with self._lock:
                 self._download_status[lang.code] = {"state": "done", "message": ""}
         except subprocess.CalledProcessError as exc:
@@ -159,24 +171,28 @@ class LanguageRegistry:
                 self._download_status[lang.code] = {"state": "error", "message": str(exc)}
 
     # ------------------------------------------------------------------
-    # Remove (pip uninstall, synchronous — fast enough for a request/response)
+    # Remove (synchronous — fast enough for a request/response)
     # ------------------------------------------------------------------
 
     def remove(self, code: str) -> None:
-        """Uninstall the spaCy model package for this language from disk.
+        """Remove this language's spaCy model from disk.
 
-        Raises subprocess.CalledProcessError on failure. Callers are
-        responsible for also removing the language from enabled_languages,
-        since an uninstalled model can no longer be loaded.
+        Deletes the ModelStore copy if there is one. From source it then runs
+        `pip uninstall` as before; a frozen build has no pip and needs nothing
+        more. Raises subprocess.CalledProcessError or OSError on failure.
+        Callers are responsible for also removing the language from
+        enabled_languages, since a removed model can no longer be loaded.
         """
         lang = _BY_CODE.get(code)
         if lang is None:
             raise ValueError(f"Unsupported language code: {code!r}")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "uninstall", "-y", lang.spacy_model],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        self._model_store.remove(lang.spacy_model)
+        if not is_frozen():
+            subprocess.run(
+                [sys.executable, "-m", "pip", "uninstall", "-y", lang.spacy_model],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
         with self._lock:
             self._download_status.pop(code, None)

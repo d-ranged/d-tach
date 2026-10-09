@@ -265,3 +265,11 @@ class TestClassListFields:
         settings = UserSettings(settings_path=settings_path)
         assert settings.class_list_path == ""
         assert settings.class_list_column_mapping == {}
+
+
+def test_save_creates_the_per_user_folder(tmp_path) -> None:
+    """A fresh frozen install has no data folder yet (issue #79)."""
+    path = tmp_path / "AppData" / "Local" / "d-tach" / "user_settings.json"
+    settings = UserSettings(settings_path=path)
+    settings.save()
+    assert path.is_file()

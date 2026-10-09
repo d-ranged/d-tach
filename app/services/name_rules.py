@@ -11,6 +11,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final, Optional
 
+from app.app_paths import bundle_dir
+
 RULE_SHORT: Final[str] = "short"      # 2 letters or fewer, never matched alone
 RULE_CAPITAL: Final[str] = "capital"  # ordinary word, matched only with a capital first letter
 RULE_ANY: Final[str] = "any"          # matched however it is written
@@ -19,7 +21,8 @@ RULES: Final[tuple[str, ...]] = (RULE_SHORT, RULE_CAPITAL, RULE_ANY)
 
 MAX_SHORT_NAME_LENGTH: Final[int] = 2
 
-WORD_LIST_DIR: Final[Path] = Path(__file__).resolve().parent.parent / "data"
+# Shipped with the code: the project root from source, PyInstaller's bundle frozen.
+WORD_LIST_DIR: Final[Path] = bundle_dir() / "app" / "data"
 WORD_LIST_FILES: Final[tuple[str, ...]] = ("ordinary_words_en.txt", "ordinary_words_nl.txt")
 
 _COMMENT_PREFIX: Final[str] = "#"

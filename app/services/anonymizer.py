@@ -3,10 +3,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Final, Optional
 
-import spacy
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
+from app.services.model_store import ModelStore
 from app.services.name_rules import RULE_ANY, RULE_SHORT, classify_name, lone_name_pattern
 from app.services.pattern_config import PatternConfig
 
@@ -247,7 +247,7 @@ class Anonymizer:
     'eager' vs 'lazy' loading strategy in UserSettings).
     """
 
-    def __init__(self, languages: Optional[list[str]] = None) -> None:
+    def __init__(self, languages: Optional[list[str]] = None, model_store: Optional[ModelStore] = None) -> None:
         """Load the given languages now (default: all supported languages).
 
         Pass an empty list to start with nothing loaded (pure lazy mode) or a
@@ -256,6 +256,7 @@ class Anonymizer:
         implicit download.
         """
         self._analyzers: dict[str, AnalyzerEngine] = {}
+        self._model_store = model_store if model_store is not None else ModelStore()
         target_languages = languages if languages is not None else list(_MODEL_BY_LANGUAGE.keys())
         for code in target_languages:
             self._load_language(code)
@@ -269,7 +270,10 @@ class Anonymizer:
         if model_name is None:
             raise ValueError(f"Unsupported language: {language!r}")
 
-        if not spacy.util.is_package(model_name):
+        # A package name from source, a folder path in a frozen build. Presidio
+        # passes either to spacy.load and skips its own download when it loads.
+        load_target = self._model_store.load_target(model_name)
+        if load_target is None:
             raise RuntimeError(
                 f"The {language!r} language model ({model_name}) is not installed. "
                 "Install it in Settings > Languages."
@@ -277,7 +281,7 @@ class Anonymizer:
 
         configuration = {
             "nlp_engine_name": "spacy",
-            "models": [{"lang_code": language, "model_name": model_name}],
+            "models": [{"lang_code": language, "model_name": load_target}],
         }
         provider = NlpEngineProvider(nlp_configuration=configuration)
         nlp_engine = provider.create_engine()
