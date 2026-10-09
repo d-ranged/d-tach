@@ -23,6 +23,10 @@
         manual: "Manual",
         class_list: "Class list",
     };
+    const RULE_LABELS = {
+        short: "kept for the full name only",
+        capital: "matched with a capital letter only",
+    };
 
     // Reassigned below when the class list import UI is present on this page.
     let renderClassListState = function () {};
@@ -39,7 +43,9 @@
         const tag = document.createElement("span");
         tag.className = "known-name-tag";
         const typeLabel = ENTITY_LABELS[entry.entity_type] || entry.entity_type;
-        const sourceLabel = SOURCE_LABELS[entry.source] || entry.source;
+        const ruleLabel = RULE_LABELS[entry.rule];
+        const sourceLabel = (SOURCE_LABELS[entry.source] || entry.source) +
+            (ruleLabel ? ", " + ruleLabel : "");
         tag.innerHTML = escapeHtml(entry.value) +
             ' <span class="known-name-type" title="' + escapeHtml(sourceLabel) + '">' + escapeHtml(typeLabel) + '</span>' +
             ' <button class="known-name-remove" title="Remove">&times;</button>';
@@ -76,6 +82,8 @@
     const importedSearch = document.getElementById("imported-values-search");
     const importedResults = document.getElementById("imported-values-results");
 
+    const legacyNote = document.getElementById("class-list-legacy-note");
+
     const hasImportedUi = importedRow && importedSummary && importedSearch && importedResults;
 
     function renderImportedSummary() {
@@ -83,11 +91,16 @@
         if (importedValues.length === 0) {
             importedRow.hidden = true;
             importedSearch.value = "";
+            if (legacyNote) legacyNote.hidden = true;
             return;
         }
         importedRow.hidden = false;
         importedSummary.textContent =
             importedValues.length.toLocaleString() + " values imported from the class list";
+        if (legacyNote) {
+            // A class list entry without a name_part was imported before v1.4.0.
+            legacyNote.hidden = importedValues.some(function (entry) { return !!entry.name_part; });
+        }
     }
 
     function renderSearchResults() {
@@ -210,11 +223,16 @@
             statusEl.hidden = true;
         };
 
-        const guessEntityType = function (header) {
+        // Guess a column type from its header. "voornamen" is the full given
+        // names (Johanna Maria), not what people use, so it is Ignore.
+        const guessColumnType = function (header) {
             const lower = header.toLowerCase();
+            if (lower.includes("voornamen")) return "";
             if (lower.includes("email")) return "EMAIL_ADDRESS";
             if (lower.includes("number") || lower.includes("id") || lower.includes("nr")) return "NUMERIC_ID";
-            if (lower.includes("name")) return "PERSON";
+            if (["first", "voornaam", "roepnaam"].some(function (w) { return lower.includes(w); })) return "FIRST_NAME";
+            if (["last", "surname", "achternaam", "family", "tussenvoegsel", "prefix"].some(function (w) { return lower.includes(w); })) return "SURNAME";
+            if (lower.includes("name") || lower.includes("naam")) return "FULL_NAME";
             return "";
         };
 
@@ -233,7 +251,9 @@
                 select.className = "class-list-column-select digit-input";
                 [
                     ["", "Ignore"],
-                    ["PERSON", "Person name"],
+                    ["FIRST_NAME", "First name"],
+                    ["SURNAME", "Surname"],
+                    ["FULL_NAME", "Full name"],
                     ["NUMERIC_ID", "Numeric ID"],
                     ["EMAIL_ADDRESS", "Email"],
                 ].forEach(function (pair) {
@@ -242,14 +262,27 @@
                     opt.textContent = pair[1];
                     select.appendChild(opt);
                 });
-                select.value = guessEntityType(header);
+                select.value = guessColumnType(header);
 
                 row.appendChild(label);
                 row.appendChild(select);
                 columnsContainer.appendChild(row);
             });
+            keepFirstGuessOnly("FIRST_NAME");
+            keepFirstGuessOnly("FULL_NAME");
             columnsContainer.hidden = columns.length === 0;
             importBtn.hidden = columns.length === 0;
+        };
+
+        // The import takes one First name and one Full name column, so only the
+        // first match is guessed and the rest stay on Ignore.
+        const keepFirstGuessOnly = function (columnType) {
+            let seen = false;
+            columnsContainer.querySelectorAll(".class-list-column-select").forEach(function (select) {
+                if (select.value !== columnType) return;
+                if (seen) select.value = "";
+                seen = true;
+            });
         };
 
         const currentColumnMapping = function () {
@@ -317,8 +350,11 @@
                 }
                 await loadValues();
                 showStatus(
-                    "Added " + data.added + ", already present " + data.already_present +
-                    " — " + data.total_known_values + " known values total."
+                    "Added " + data.added + ", updated " + data.updated +
+                    ", already present " + data.already_present + ". " +
+                    data.full_name_only + " names kept for the full name only, " +
+                    data.capital_only + " matched with a capital only. " +
+                    data.total_known_values + " known values total."
                 );
             } catch (_) {
                 showError("Import failed.");

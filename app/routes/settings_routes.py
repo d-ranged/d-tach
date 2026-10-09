@@ -2,6 +2,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
+from app.services.class_list_importer import ColumnMappingError
 from app.services.folder_processor import normalize_extensions
 from app.services.user_settings import MAX_PORT, MIN_PORT
 
@@ -156,8 +157,10 @@ def class_list_columns():
 def class_list_import():
     """Import known values from a class list using a column mapping.
 
-    Body: {"file_path": "C:/roster.xlsx", "column_mapping": {"Name": "PERSON"}}
-    Merges new values into the existing known values list (deduped
+    Body: {"file_path": "C:/roster.xlsx", "column_mapping": {"Name": "FULL_NAME"}}
+    Column types: FIRST_NAME, SURNAME, FULL_NAME, NUMERIC_ID, EMAIL_ADDRESS.
+    Each student row gives a full name, first name and surname, each with its
+    matching rule. Merges them into the existing known values list (matched
     case-insensitively across all sources), remembers the file path and
     mapping for Re-sync, and returns import counts.
     """
@@ -175,6 +178,8 @@ def class_list_import():
         updated_values, result = current_app.class_list_importer.import_from_file(
             file_path, column_mapping, settings.known_values
         )
+    except ColumnMappingError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": f"Import failed: {exc}"}), 400
 
@@ -185,7 +190,10 @@ def class_list_import():
 
     return jsonify({
         "added": result.added,
+        "updated": result.updated,
         "already_present": result.already_present,
+        "full_name_only": result.full_name_only,
+        "capital_only": result.capital_only,
         "total_known_values": result.total_known_values,
     })
 

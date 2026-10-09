@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Final
 
 from app.services.folder_processor import normalize_extensions
+from app.services.name_rules import RULE_ANY, RULES
 from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,12 @@ MAX_PORT: Final[int] = 65535
 DEFAULT_KNOWN_VALUE_ENTITY_TYPE: Final[str] = "PERSON"
 KNOWN_VALUE_SOURCES: Final[tuple[str, ...]] = ("manual", "class_list")
 DEFAULT_KNOWN_VALUE_SOURCE: Final[str] = "manual"
+KNOWN_VALUE_NAME_PARTS: Final[tuple[str, ...]] = ("full", "first", "surname")
+
+# Column types a class list column can be mapped to. A mapping saved before
+# v1.4.0 says PERSON for the one name column, which is a full name.
+LEGACY_NAME_COLUMN_TYPE: Final[str] = "PERSON"
+FULL_NAME_COLUMN_TYPE: Final[str] = "FULL_NAME"
 
 DEFAULT_AI_TEMP_DIR: Final[str] = str(Path(tempfile.gettempdir()) / "d-tach-ai")
 DEFAULT_AI_SESSION_TIMEOUT_MINUTES: Final[int] = 60
@@ -219,7 +226,10 @@ class UserSettings:
     def known_values(self) -> list[dict]:
         """Persistent typed values always anonymized regardless of NER detection.
 
-        Each entry is a dict: {"value": str, "entity_type": str, "source": "manual" | "class_list"}.
+        Each entry is a dict: {"value": str, "entity_type": str, "source": "manual" | "class_list",
+        "rule": "short" | "capital" | "any"} plus "name_part": "full" | "first" | "surname" on
+        names imported from a class list. An entry saved before v1.4.0 loads with rule "any" and
+        no name_part.
         """
         return [dict(v) for v in self._data.get("known_values", [])]
 
@@ -229,13 +239,23 @@ class UserSettings:
 
     @staticmethod
     def _normalize_known_value(entry: dict) -> dict:
-        """Coerce one known-value entry to the canonical {value, entity_type, source} shape."""
+        """Coerce one known-value entry to the canonical shape.
+
+        value, entity_type, source and rule are always present; name_part only
+        when the entry came from a class list name column.
+        """
         value = str(entry.get("value", "")).strip()
         entity_type = str(entry.get("entity_type") or DEFAULT_KNOWN_VALUE_ENTITY_TYPE)
         source = entry.get("source")
         if source not in KNOWN_VALUE_SOURCES:
             source = DEFAULT_KNOWN_VALUE_SOURCE
-        return {"value": value, "entity_type": entity_type, "source": source}
+        rule = entry.get("rule")
+        if rule not in RULES:
+            rule = RULE_ANY
+        normalized = {"value": value, "entity_type": entity_type, "source": source, "rule": rule}
+        if entry.get("name_part") in KNOWN_VALUE_NAME_PARTS:
+            normalized["name_part"] = entry["name_part"]
+        return normalized
 
     @property
     def class_list_path(self) -> str:
@@ -248,8 +268,15 @@ class UserSettings:
 
     @property
     def class_list_column_mapping(self) -> dict[str, str]:
-        """Remembered header -> entity_type mapping for the class list, used by Re-sync."""
-        return dict(self._data.get("class_list_column_mapping", {}))
+        """Remembered header -> column type mapping for the class list, used by Re-sync.
+
+        A PERSON column saved before v1.4.0 is read as FULL_NAME, so Re-sync
+        works without picking the columns again.
+        """
+        return {
+            header: FULL_NAME_COLUMN_TYPE if column_type == LEGACY_NAME_COLUMN_TYPE else column_type
+            for header, column_type in self._data.get("class_list_column_mapping", {}).items()
+        }
 
     @class_list_column_mapping.setter
     def class_list_column_mapping(self, value: dict[str, str]) -> None:
@@ -449,6 +476,7 @@ class UserSettings:
                         "value": v.strip(),
                         "entity_type": DEFAULT_KNOWN_VALUE_ENTITY_TYPE,
                         "source": DEFAULT_KNOWN_VALUE_SOURCE,
+                        "rule": RULE_ANY,
                     })
                 elif isinstance(v, dict) and str(v.get("value", "")).strip():
                     migrated.append(UserSettings._normalize_known_value(v))

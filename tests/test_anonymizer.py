@@ -703,3 +703,54 @@ class TestNameSpansStopAtLineBreaks:
         trimmed = Anonymizer._trim_at_line_break([span], "1 May\n2026 x")
 
         assert (trimmed[0].start, trimmed[0].end) == (0, 10)
+
+
+class TestKnownValueRules:
+    """Issue #76: a lone first name or surname is matched by its stored rule."""
+
+    @staticmethod
+    def _anonymize(entries: list[dict], text: str) -> str:
+        anonymizer = Anonymizer(languages=["en"])
+        recognizers = build_known_value_recognizers(entries, "en")
+        return anonymizer.anonymize(
+            text, language="en", ad_hoc_recognizers=recognizers
+        ).anonymized_text
+
+    @staticmethod
+    def _entry(value: str, rule: str, part: str) -> dict:
+        return {
+            "value": value, "entity_type": "PERSON", "source": "class_list",
+            "rule": rule, "name_part": part,
+        }
+
+    def test_short_entry_is_skipped(self) -> None:
+        recognizers = build_known_value_recognizers([self._entry("An", "short", "first")], "en")
+        assert recognizers == []
+
+    def test_an_jansen_full_name_replaced_and_plain_words_stay(self) -> None:
+        entries = [
+            self._entry("An Jansen", "any", "full"),
+            self._entry("An", "short", "first"),
+            self._entry("Jansen", "any", "surname"),
+        ]
+        assert "An Jansen" not in self._anonymize(entries, "An Jansen wrote it.")
+        for text in ("Thank you, an excellent report.", "An handed it in."):
+            assert self._anonymize(entries, text) == text
+
+    def test_will_visser_capital_rule(self) -> None:
+        entries = [
+            self._entry("Will Visser", "any", "full"),
+            self._entry("Will", "capital", "first"),
+            self._entry("Visser", "capital", "surname"),
+        ]
+        assert "Will" not in self._anonymize(entries, "Will did well.")
+        assert self._anonymize(entries, "We will see.") == "We will see."
+
+    def test_lotte_vermeulen_matches_any_case(self) -> None:
+        entries = [
+            self._entry("Lotte Vermeulen", "any", "full"),
+            self._entry("Lotte", "any", "first"),
+            self._entry("Vermeulen", "any", "surname"),
+        ]
+        assert "Lotte" not in self._anonymize(entries, "Lotte was there.")
+        assert "lotte" not in self._anonymize(entries, "I asked lotte about it.")

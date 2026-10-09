@@ -637,3 +637,81 @@ class TestReadXlsxColumns:
         wb.save(str(xlsx_path))
         columns = processor.read_xlsx_columns(xlsx_path, ["Student number"])
         assert columns == {"Student number": ["1234567"]}
+
+
+# ---------------------------------------------------------------------------
+# Whole-word writers and row reading (issue #76)
+# ---------------------------------------------------------------------------
+
+
+class TestWholeWordWriters:
+    def test_docx_eva_does_not_touch_evaluation(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source, dest = tmp_path / "s.docx", tmp_path / "o.docx"
+        make_docx(source, ["Eva wrote the Evaluation."])
+        _, doc = processor.load_docx(source)
+        processor.save_docx_with_replacements(doc, dest, {"Eva": "[P1]"})
+        text, _ = processor.load_docx(dest)
+        assert "[P1] wrote the Evaluation." in text
+
+    def test_xlsx_eva_does_not_touch_evaluation(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source, dest = tmp_path / "s.xlsx", tmp_path / "o.xlsx"
+        make_xlsx(source, {"A1": "Eva", "A2": "Evaluation"})
+        _, wb = processor.load_xlsx(source)
+        processor.save_xlsx_with_replacements(wb, dest, {"Eva": "[P1]"})
+        sheet = load_workbook(str(dest)).active
+        assert (sheet["A1"].value, sheet["A2"].value) == ("[P1]", "Evaluation")
+
+    def test_markdown_eva_does_not_touch_evaluation(self, processor: DocumentProcessor) -> None:
+        result = processor.apply_replacements("Eva did the Evaluation.", {"Eva": "[P1]"})
+        assert result == "[P1] did the Evaluation."
+
+    def test_pdf_eva_does_not_touch_evaluation(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source, dest = tmp_path / "s.pdf", tmp_path / "o.pdf"
+        make_pdf(source, ["Eva met the Evaluation team."])
+        _, doc = processor.load_pdf(source)
+        processor.save_pdf_with_replacements(doc, dest, {"Eva": "[P1]"})
+        doc.close()
+        out = fitz.open(str(dest))
+        text = out[0].get_text()
+        out.close()
+        assert "Evaluation" in text
+        assert "[P1]" in text
+
+    def test_pdf_capitalised_key_does_not_touch_lowercase_word(
+        self, processor: DocumentProcessor, tmp_path: Path
+    ) -> None:
+        source, dest = tmp_path / "s.pdf", tmp_path / "o.pdf"
+        make_pdf(source, ["Will is here and we will see."])
+        _, doc = processor.load_pdf(source)
+        processor.save_pdf_with_replacements(doc, dest, {"Will": "[P1]"})
+        doc.close()
+        out = fitz.open(str(dest))
+        text = out[0].get_text()
+        out.close()
+        assert "we will see" in text
+        assert "[P1]" in text
+
+    def test_number_key_still_replaced_inside_file_style_text(
+        self, processor: DocumentProcessor
+    ) -> None:
+        result = processor.apply_replacements("s1234567_report", {"1234567": "[ID]"})
+        assert result == "s[ID]_report"
+
+
+class TestReadXlsxRows:
+    def test_blank_cells_stay_in_place(self, processor: DocumentProcessor, tmp_path: Path) -> None:
+        path = tmp_path / "rows.xlsx"
+        make_xlsx(path, {"A1": "First", "B1": "Mid", "C1": "Last",
+                         "A2": "Lotte", "C2": "Vermeulen",
+                         "A3": "Joris", "B3": "van", "C3": "Dijk"})
+        rows = processor.read_xlsx_rows(path, ["First", "Mid", "Last"])
+        assert rows == [
+            {"First": "Lotte", "Mid": "", "Last": "Vermeulen"},
+            {"First": "Joris", "Mid": "van", "Last": "Dijk"},
+        ]

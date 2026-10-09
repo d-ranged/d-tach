@@ -7,6 +7,7 @@ import spacy
 from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
+from app.services.name_rules import RULE_ANY, RULE_SHORT, lone_name_pattern
 from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
@@ -156,8 +157,10 @@ def build_known_value_recognizers(
     """Return one high-confidence PatternRecognizer per entity type.
 
     Each known_values entry is a dict {"value": str, "entity_type": str, ...}.
-    Values are matched case-insensitively as whole words and assigned their
-    entry's entity_type (default PERSON) with confidence 0.99. Recognizers are
+    Values are matched as whole words and assigned their entry's entity_type
+    (default PERSON) with confidence 0.99. An entry's "rule" (see name_rules)
+    says how: "any" (the default) case-insensitively, "capital" only with a
+    capital first letter, "short" never. Recognizers are
     prepended before NER so known values are always caught regardless of model
     detection.
 
@@ -167,27 +170,34 @@ def build_known_value_recognizers(
     thousand separate passes over every document. Grouping keeps that to one
     pass per entity type.
     """
-    values_by_entity: dict[str, list[str]] = {}
-    seen: set[tuple[str, str]] = set()
+    values_by_entity: dict[str, list[tuple[str, str]]] = {}
+    seen: set[tuple[str, str, str]] = set()
     for entry in known_values:
         value = str(entry.get("value", "")).strip()
         if not value:
             continue
+        rule = entry.get("rule") or RULE_ANY
+        if rule == RULE_SHORT:
+            # Two letters or fewer never match alone ("an", "En", "El"); the
+            # name is still caught inside the full name, which is its own entry.
+            continue
         entity_type = str(entry.get("entity_type") or "PERSON")
-        # Matching is case-insensitive, so values differing only in case are
-        # duplicates and would otherwise bloat the alternation.
-        key = (entity_type, value.lower())
+        # Same value and rule differing only in case are duplicates and would
+        # otherwise bloat the alternation.
+        key = (entity_type, value.lower(), rule)
         if key in seen:
             continue
         seen.add(key)
-        values_by_entity.setdefault(entity_type, []).append(value)
+        pattern_body = lone_name_pattern(value, rule)
+        if pattern_body is not None:
+            values_by_entity.setdefault(entity_type, []).append((value, pattern_body))
 
     recognizers: list[PatternRecognizer] = []
     for entity_type, values in values_by_entity.items():
         # Longest first: alternation returns the first branch that matches, so
         # without this "An" would win over "An Nguyen" and leave the surname.
-        values.sort(key=len, reverse=True)
-        alternation = "|".join(re.escape(value) for value in values)
+        values.sort(key=lambda item: len(item[0]), reverse=True)
+        alternation = "|".join(body for _, body in values)
         # Lookarounds rather than word-boundary escapes: they behave correctly
         # even when the value starts or ends with a non-word character. Without
         # them a short known value such as "An" matches inside "Thank", "and"
