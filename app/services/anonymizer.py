@@ -36,10 +36,12 @@ NUMERIC_ID_ENTITY: Final[str] = "NUMERIC_ID"
 # produced by _build_replacements (file_processor.py) / HashEncoder:
 #   Sequential: [PERSON_1], [EMAIL_ADDRESS_3], [NUMERIC_ID_2]
 #   Hashed name: [Cr-A2T5], [Cr-A2T5 HY23]           (HashEncoder.encode_full_name)
+#                [Cr-A2T5_HY23] is the same name as it reads in a file name,
+#                where spaces become underscores
 #   Hashed value: [EMAIL_A2B3], [BSN_C4D1], [ID_9F2E]  (HashEncoder.encode_entity)
 _PLACEHOLDER_BODY: Final[str] = (
     r"(?:[A-Z][A-Z_]*_\d+"                          # sequential
-    r"|[A-Za-z]{1,2}-[A-Z0-9]{4}(?: [A-Z0-9]{4})?"   # hashed name
+    r"|[A-Za-z]{1,2}-[A-Z0-9]{4}(?:[ _][A-Z0-9]{4})?"  # hashed name
     r"|[A-Z]+_[A-Z0-9]{4})"                          # hashed value
 )
 PLACEHOLDER_PATTERN: Final[re.Pattern[str]] = re.compile(rf"\[{_PLACEHOLDER_BODY}\]")
@@ -58,6 +60,16 @@ def _is_existing_placeholder(text: str, start: int, end: int) -> bool:
     if start > 0 and end < len(text) and text[start - 1] == "[" and text[end] == "]":
         return bool(PLACEHOLDER_PATTERN.fullmatch(text[start - 1:end + 1]))
     return bool(PLACEHOLDER_PATTERN.fullmatch(text[start:end]))
+
+
+def _overlaps_placeholder(spans: list[tuple[int, int]], start: int, end: int) -> bool:
+    """True if [start:end] touches any of the placeholder spans.
+
+    NER sometimes tags only a piece of a placeholder ('Lo-NUSA 0W3X' without its
+    brackets, or the brackets plus a neighbouring word). Wrapping that piece
+    again corrupts the placeholder, so any overlap counts, not just an exact hit.
+    """
+    return any(p_start < end and start < p_end for p_start, p_end in spans)
 
 
 @dataclass
@@ -316,9 +328,11 @@ class Anonymizer:
         # re-running anonymize() on already-anonymized text (or text containing
         # a mix of real and already-anonymized values) leaves those spans
         # untouched instead of wrapping or re-tagging them.
+        placeholder_spans = [m.span() for m in PLACEHOLDER_PATTERN.finditer(text)]
         results = [
             r for r in results
             if not _is_existing_placeholder(text, r.start, r.end)
+            and not _overlaps_placeholder(placeholder_spans, r.start, r.end)
         ]
 
         results = self._trim_at_line_break(results, text)

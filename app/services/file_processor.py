@@ -11,6 +11,7 @@ from app.services.anonymizer import (
     DetectedEntity,
     LOCATION_ENTITY,
     NUMERIC_ID_ENTITY,
+    PLACEHOLDER_PATTERN,
     URL_ENTITY,
     build_numeric_id_recognizer,
 )
@@ -27,6 +28,9 @@ SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({".docx", ".pdf", ".md", ".xlsx
 # ligature extraction artefacts (e.g. "ci", "fi") rather than real PII.
 # Replacing them would corrupt the entire document, so they are skipped.
 MIN_ENTITY_TEXT_LENGTH: int = 3
+
+# A hashed full name as it reads in a file name: [Lo-NUSA_0W3X].
+_FILE_NAME_HASHED_NAME: re.Pattern[str] = re.compile(r"\[[A-Za-z]{1,2}-[A-Z0-9]{4}_[A-Z0-9]{4}\]")
 
 
 def _build_entity_list(
@@ -107,6 +111,38 @@ def compose_replacements(
     return replacements
 
 
+class PlaceholderLedger:
+    """One sequential numbering shared by every file of a folder run.
+
+    The Anonymizer numbers placeholders from 1 in every call, so two files of the
+    same folder both hand out [PERSON_1] to different people. The consolidated
+    KEYREF then lists one placeholder against two values, and a restore puts the
+    wrong name back. Hashing cannot do this, because the same value always
+    encodes the same way.
+
+    The ledger remembers which placeholder each original value was given and
+    numbers new values per entity type, so within a run the same value always
+    gets the same placeholder and different values never share one.
+    """
+
+    def __init__(self) -> None:
+        """Start empty: no values seen, every counter at zero."""
+        self._by_value: dict[str, str] = {}
+        self._counters: dict[str, int] = {}
+
+    def assign(self, original: str, label: str) -> str:
+        """Return the run-wide placeholder for original, numbering it if new.
+
+        label is the placeholder's type part, e.g. PERSON or EMAIL_ADDRESS.
+        """
+        placeholder = self._by_value.get(original)
+        if placeholder is None:
+            self._counters[label] = self._counters.get(label, 0) + 1
+            placeholder = f"[{label}_{self._counters[label]}]"
+            self._by_value[original] = placeholder
+        return placeholder
+
+
 @dataclass
 class ProcessingSettings:
     """Configuration for a single file processing run."""
@@ -129,6 +165,9 @@ class ProcessingSettings:
     loading_strategy: str = "eager"  # "eager" | "lazy"
     expand_archives: bool = False
     delete_archives_after_expand: bool = False
+    # Set by FolderProcessor for a run with hashing off, so numbering is shared
+    # across the files of that run. None means each call numbers on its own.
+    placeholder_ledger: Optional[PlaceholderLedger] = None
 
 
 @dataclass
@@ -440,6 +479,16 @@ class FileProcessor:
                 substring_replacements = detection.replacements
                 ner_entities = detection.entities
 
+        # Column placeholders are numbered per file too, so they share the run's
+        # numbering. Hashed ones already agree across files and are left alone.
+        if encoder is None and settings.placeholder_ledger is not None:
+            exact_replacements = {
+                original: settings.placeholder_ledger.assign(
+                    original, placeholder.strip("[]").rsplit("_", 1)[0]
+                )
+                for original, placeholder in exact_replacements.items()
+            }
+
         # --- Nothing to replace → clean ---
         if not exact_replacements and not substring_replacements:
             output_path = self._output_path(path, "CHECKED_", {}, settings, settings.language, output_path_override)
@@ -540,6 +589,12 @@ class FileProcessor:
         result = self._anonymizer.anonymize(text, language, entities=entities, ad_hoc_recognizers=ad_hoc)
         encoder = HashEncoder(settings.secret) if settings.hashing_enabled else None
         replacements = compose_replacements(result.entities, encoder)
+        if encoder is None and settings.placeholder_ledger is not None:
+            types = {e.original_text: e.entity_type for e in result.entities}
+            replacements = {
+                original: settings.placeholder_ledger.assign(original, types[original])
+                for original in replacements
+            }
 
         # The Anonymizer numbers placeholders sequentially, but compose_replacements
         # is what decides the token that actually lands in the text. With hashing on
@@ -605,8 +660,11 @@ class FileProcessor:
         so callers (e.g. rename-only mode, which has no document content to
         scan) can build a KEYREF from filename-only detections.
         """
-        # Treat underscores and hyphens as spaces for analysis
-        readable = re.sub(r"[_\-]+", " ", stem)
+        # Treat underscores and hyphens as spaces for analysis, except inside a
+        # placeholder already in the name: its hyphen belongs to the placeholder,
+        # and rewriting it would stop the next pass recognising it.
+        readable = self._readable_stem(stem)
+        normalised = readable
 
         # Apply known content replacements first using case-insensitive matching,
         # sorted longest-first to avoid replacing a substring before the full match.
@@ -624,8 +682,33 @@ class FileProcessor:
         ):
             readable = readable.replace(original, placeholder)
 
+        # Nothing about the PII in this name changed, so neither does the name.
+        # Without this, separator tidying alone renames a file and reports it clean.
+        if readable == normalised:
+            return stem, remaining
+
         # Restore separator style (spaces → underscores in the new stem)
         return readable.replace(" ", "_"), remaining
+
+    @staticmethod
+    def _readable_stem(stem: str) -> str:
+        """Return stem with separators as spaces, leaving placeholders in canonical form.
+
+        A hashed full name written into a file name reads [Lo-NUSA_0W3X]. It is
+        turned back into [Lo-NUSA 0W3X], the form every other part of d-tach
+        uses, and the later space-to-underscore step writes it out the same way.
+        """
+        parts: list[str] = []
+        last = 0
+        for match in PLACEHOLDER_PATTERN.finditer(stem):
+            parts.append(re.sub(r"[_\-]+", " ", stem[last:match.start()]))
+            placeholder = match.group()
+            if _FILE_NAME_HASHED_NAME.fullmatch(placeholder):
+                placeholder = placeholder.replace("_", " ")
+            parts.append(placeholder)
+            last = match.end()
+        parts.append(re.sub(r"[_\-]+", " ", stem[last:]))
+        return "".join(parts)
 
     def rename_file(self, path: Path, settings: ProcessingSettings) -> FileResult:
         """Rename a single file's name in place using the same detection as content mode.

@@ -194,6 +194,26 @@ class TestUrlEntityDefault:
 
 
 class TestPlaceholderGuard:
+    def test_partial_span_inside_a_placeholder_is_not_wrapped_again(
+        self, anonymizer: Anonymizer
+    ) -> None:
+        """NER tagging 'Lo-NUSA 0W3X' without its brackets must not re-wrap it (#72)."""
+        for text in (
+            "progress [Lo-NUSA 0W3X]",
+            "progress [Lo-NUSA_0W3X]",
+            "progress [Lo-NUSA 0W3X] reference",
+        ):
+            assert anonymizer.anonymize(text, "en").anonymized_text == text
+
+    def test_span_overlapping_a_placeholder_is_dropped(self, anonymizer: Anonymizer) -> None:
+        from app.services.anonymizer import _overlaps_placeholder
+
+        spans = [(9, 24)]
+        assert _overlaps_placeholder(spans, 10, 22)
+        assert _overlaps_placeholder(spans, 0, 12)
+        assert not _overlaps_placeholder(spans, 0, 9)
+        assert not _overlaps_placeholder(spans, 24, 30)
+
     def test_second_pass_is_idempotent(self, anonymizer: Anonymizer) -> None:
         """Running anonymize() on its own output must not change it further."""
         first = anonymizer.anonymize(

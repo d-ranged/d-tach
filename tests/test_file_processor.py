@@ -760,3 +760,66 @@ class TestPartiallyReadablePdf:
         result = file_processor.process(source, ProcessingSettings())
 
         assert result.warnings == []
+
+
+class TestFileNamesDoNotRewrapPlaceholders:
+    """A placeholder in a file name must survive further passes untouched (#72)."""
+
+    @staticmethod
+    def _hashed() -> ProcessingSettings:
+        return ProcessingSettings(
+            hashing_enabled=True, secret="demo", check_file_names=True,
+            output_mode="subfolder",
+        )
+
+    def test_folder_run_names_the_file_with_one_pair_of_brackets(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        from app.services.folder_processor import FolderProcessor
+
+        make_docx(tmp_path / "progress-Lotte-Vermeulen.docx", [
+            "Lotte Vermeulen finished the second sprint on time.",
+        ])
+        list(FolderProcessor(file_processor).process(tmp_path, self._hashed()))
+
+        names = [p.name for p in (tmp_path / "anonymized").iterdir()]
+        assert len(names) == 1
+        assert names[0].count("[") == 1 and names[0].count("]") == 1
+        assert names[0].startswith("progress_[Lo-")
+
+    def test_rename_only_twice_changes_nothing_the_second_time(
+        self, file_processor: FileProcessor, tmp_path: Path
+    ) -> None:
+        from app.services.folder_processor import FolderProcessor
+
+        (tmp_path / "progress-Lotte-Vermeulen.pdf").write_bytes(b"x")
+        folder_processor = FolderProcessor(file_processor)
+        settings = self._hashed()
+
+        list(folder_processor.rename_in_place(tmp_path, settings))
+        after_first = sorted(p.name for p in tmp_path.iterdir())
+        results = [r for r, _n, _t in folder_processor.rename_in_place(tmp_path, settings)]
+
+        assert sorted(p.name for p in tmp_path.iterdir()) == after_first
+        assert [r.status for r in results] == ["clean"]
+
+    def test_underscore_form_of_a_hashed_name_is_kept(
+        self, file_processor: FileProcessor
+    ) -> None:
+        stem = "progress_[Lo-NUSA_0W3X]"
+
+        new_stem, replacements = file_processor._anonymize_stem(
+            stem, {}, self._hashed(), "en"
+        )
+
+        assert new_stem == stem
+        assert replacements == {}
+
+    def test_a_name_without_pii_is_not_renamed_for_its_separators(
+        self, file_processor: FileProcessor
+    ) -> None:
+        new_stem, _ = file_processor._anonymize_stem(
+            "week-3_notes", {}, ProcessingSettings(check_file_names=True), "en"
+        )
+
+        assert new_stem == "week-3_notes"
