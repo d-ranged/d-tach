@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 from typing import Final, Optional
 
 import spacy
-from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
+from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer, RecognizerResult
 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
-from app.services.name_rules import RULE_ANY, RULE_SHORT, lone_name_pattern
+from app.services.name_rules import RULE_ANY, RULE_SHORT, classify_name, lone_name_pattern
 from app.services.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,10 @@ ENTITIES: Final[list[str]] = [
 ]
 
 LOCATION_ENTITY: Final[str] = "LOCATION"
+
+PERSON_ENTITY: Final[str] = "PERSON"
+
+LONE_FIRST_NAME_SCORE: Final[float] = 0.85
 
 URL_ENTITY: Final[str] = "URL"
 
@@ -61,6 +65,14 @@ def _is_existing_placeholder(text: str, start: int, end: int) -> bool:
     if start > 0 and end < len(text) and text[start - 1] == "[" and text[end] == "]":
         return bool(PLACEHOLDER_PATTERN.fullmatch(text[start - 1:end + 1]))
     return bool(PLACEHOLDER_PATTERN.fullmatch(text[start:end]))
+
+
+def _strip_possessive(word: str) -> str:
+    """Return word without a trailing possessive suffix such as 's."""
+    for suffix in _POSSESSIVE_SUFFIXES:
+        if word.endswith(suffix) and len(word) > len(suffix):
+            return word[:-len(suffix)]
+    return word
 
 
 def _overlaps_placeholder(spans: list[tuple[int, int]], start: int, end: int) -> bool:
@@ -348,6 +360,7 @@ class Anonymizer:
         results = self._trim_at_line_break(results, text)
         results = self._trim_possessive(results, text)
         results = self._resolve_overlaps(results)
+        results = results + self._lone_first_names(results, text, placeholder_spans)
 
         counters: dict[str, int] = {}
         placeholder_map: dict[str, str] = {}
@@ -428,6 +441,46 @@ class Anonymizer:
                     result.end -= len(suffix)
                     break
         return results
+
+    @staticmethod
+    def _lone_first_names(
+        results: list,
+        text: str,
+        placeholder_spans: list[tuple[int, int]],
+    ) -> list:
+        """Find the first word of every replaced full name standing alone in the same text.
+
+        NER sometimes misses a lone first name ("Lotte is on track.") even though
+        the full name ("Lotte Vermeulen") is replaced a few lines higher. One
+        anonymize() call is one document, so searching this text only keeps the
+        match inside the document. The rule for the first word is the one class
+        list import uses (name_rules.classify_name): under 3 letters is never
+        matched alone, an ordinary word only with a capital, anything else
+        however it is written. A match that overlaps an accepted result or an
+        existing placeholder is dropped, so a full name is never split.
+        """
+        first_names: set[str] = set()
+        for result in results:
+            words = text[result.start:result.end].split()
+            if result.entity_type == PERSON_ENTITY and len(words) > 1:
+                first_names.add(_strip_possessive(words[0]))
+        taken = [(r.start, r.end) for r in results] + placeholder_spans
+        found: list = []
+        for first in sorted(first_names):
+            body = lone_name_pattern(first, classify_name(first))
+            if body is None:
+                continue
+            pattern = re.compile(rf"(?<!\w)(?:{body})(?!\w)", re.IGNORECASE)
+            for match in pattern.finditer(text):
+                if _overlaps_placeholder(taken, match.start(), match.end()):
+                    continue
+                found.append(RecognizerResult(
+                    entity_type=PERSON_ENTITY,
+                    start=match.start(),
+                    end=match.end(),
+                    score=LONE_FIRST_NAME_SCORE,
+                ))
+        return found
 
     @staticmethod
     def _resolve_overlaps(results: list) -> list:

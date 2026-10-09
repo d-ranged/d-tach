@@ -754,3 +754,94 @@ class TestKnownValueRules:
         ]
         assert "Lotte" not in self._anonymize(entries, "Lotte was there.")
         assert "lotte" not in self._anonymize(entries, "I asked lotte about it.")
+
+
+class TestLoneFirstNameAfterFullName:
+    """Issue #75: a lone first name is replaced when its full name is, same text only."""
+
+    @staticmethod
+    def _entry(value: str) -> dict:
+        return {"value": value, "entity_type": "PERSON", "source": "class_list", "rule": "any"}
+
+    def _run(self, anonymizer, full_name: str, text: str) -> AnonymizationResult:
+        recognizers = build_known_value_recognizers([self._entry(full_name)], "en")
+        return anonymizer.anonymize(text, language="en", ad_hoc_recognizers=recognizers)
+
+    @staticmethod
+    def _find(text: str, full_name: str, **kwargs) -> list:
+        start = text.index(full_name)
+        full = RecognizerResult("PERSON", start, start + len(full_name), 0.85)
+        return Anonymizer._lone_first_names([full], text, kwargs.get("placeholders", []))
+
+    def test_lone_first_name_after_full_name_is_replaced(self, anonymizer) -> None:
+        text = "Progress report for Lotte Vermeulen.\nMidterm visit, week 10. Lotte is on track."
+
+        result = self._run(anonymizer, "Lotte Vermeulen", text)
+
+        assert "Lotte" not in result.anonymized_text
+        assert result.anonymized_text.endswith("[PERSON_2] is on track.")
+
+    def test_works_from_a_ner_result_with_no_known_values(self) -> None:
+        text = "Report for Lotte Vermeulen. Later, Lotte is on track."
+
+        found = self._find(text, "Lotte Vermeulen")
+
+        assert [text[r.start:r.end] for r in found] == ["Lotte"]
+
+    def test_lowercase_first_name_is_replaced(self) -> None:
+        text = "Report for Lotte Vermeulen. I asked lotte about it."
+
+        found = self._find(text, "Lotte Vermeulen")
+
+        assert [text[r.start:r.end] for r in found] == ["lotte"]
+
+    def test_short_first_name_is_never_matched_alone(self, anonymizer) -> None:
+        text = "An Jansen handed in. Thank you, an excellent report. An handed it in."
+
+        result = self._run(anonymizer, "An Jansen", text)
+
+        assert "an excellent report" in result.anonymized_text
+        assert "An handed it in" in result.anonymized_text
+        assert "Jansen" not in result.anonymized_text
+
+    def test_ordinary_word_first_name_needs_a_capital(self, anonymizer) -> None:
+        text = "Will Visser presented. We will see. Will did well."
+
+        result = self._run(anonymizer, "Will Visser", text)
+
+        assert "We will see" in result.anonymized_text
+        assert "Will did well" not in result.anonymized_text
+        assert result.anonymized_text.count("[PERSON_") == 2
+
+    def test_not_carried_across_documents(self, anonymizer) -> None:
+        first = self._run(anonymizer, "Lotte Vermeulen", "Report for Lotte Vermeulen, then lotte left.")
+        second = anonymizer.anonymize("Then lotte left.", language="en")
+
+        assert "lotte" not in first.anonymized_text
+        assert second.anonymized_text == "Then lotte left."
+
+    def test_full_name_twice_keeps_the_full_name_placeholder(self, anonymizer) -> None:
+        text = "Lotte Vermeulen wrote it. Lotte Vermeulen signed it."
+
+        result = self._run(anonymizer, "Lotte Vermeulen", text)
+
+        assert result.anonymized_text == "[PERSON_1] wrote it. [PERSON_1] signed it."
+
+    def test_match_inside_an_existing_placeholder_is_dropped(self) -> None:
+        text = "Report for Lotte Vermeulen. See [Lo-NUSA] here."
+        placeholder = [(text.index("[Lo"), text.index("] here") + 1)]
+
+        assert self._find(text, "Lotte Vermeulen", placeholders=placeholder) == []
+
+    def test_single_word_person_gives_no_first_name(self) -> None:
+        text = "Lotte met Lotte."
+        single = RecognizerResult("PERSON", 0, 5, 0.85)
+
+        assert Anonymizer._lone_first_names([single], text, []) == []
+
+    def test_hashed_lone_first_name_uses_the_first_name_form(self) -> None:
+        from app.services.hash_encoder import HashEncoder
+
+        encoded = HashEncoder("test-secret").encode_full_name("Lotte")
+
+        assert re.fullmatch(r"Lo-[A-Z0-9]{4}", encoded)
