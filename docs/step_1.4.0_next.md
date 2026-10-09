@@ -15,8 +15,8 @@ Consult `step_1.3.0_next.md` for the acceptance-run defect log these items came 
 
 | Step | Description | Status |
 |---|---|---|
-| 0 | Fixes from the tutorial dry run (8-10-2026), plus the class list name columns | ⬜ Not started |
-| 1 | `/ai/restore` accepts a KEYREF file, not just a live session | ⬜ Not started |
+| 0 | Fixes from the tutorial dry run (8-10-2026), plus the class list name columns | ✅ Complete |
+| 1 | `/ai/restore` accepts a KEYREF file, not just a live session | ✅ Complete |
 | 2 | OCR fallback for image-based PDFs. Moved to v1.5.0 on 9-10-2026, [#78](https://codeberg.org/d-ranged/d-tach/issues/78) | ➡️ Moved |
 | 3 | Standalone packaged installer (PyInstaller) | ⬜ Not started |
 
