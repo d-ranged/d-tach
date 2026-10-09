@@ -659,3 +659,47 @@ class TestPossessiveFormsHashTheSame:
         trimmed = Anonymizer._trim_possessive([span], "'")
 
         assert (trimmed[0].start, trimmed[0].end) == (0, 1)
+
+
+class TestNameSpansStopAtLineBreaks:
+    """A name at a line end must not swallow the line break or the next word (#74)."""
+
+    def test_signature_keeps_the_line_break_and_next_word(self, anonymizer) -> None:
+        text = "Regards,\nJoris van Dijk\nGuide for the internship"
+
+        result = anonymizer.anonymize(text, language="en")
+
+        assert result.anonymized_text == "Regards,\n[PERSON_1]\nGuide for the internship"
+        assert [e.original_text for e in result.entities] == ["Joris van Dijk"]
+
+    def test_mid_sentence_name_before_a_new_line(self, anonymizer) -> None:
+        text = "Signed by Joris van Dijk\nGuide for the internship"
+
+        result = anonymizer.anonymize(text, language="en")
+
+        assert "\nGuide for the internship" in result.anonymized_text
+        assert "Dijk" not in result.anonymized_text
+
+    def test_windows_line_endings_are_kept(self, anonymizer) -> None:
+        result = anonymizer.anonymize("Regards,\r\nJoris van Dijk\r\nGuide", language="en")
+
+        assert result.anonymized_text.endswith("\r\nGuide")
+
+    def test_span_that_is_only_a_line_break_is_dropped(self) -> None:
+        span = RecognizerResult(entity_type="PERSON", start=0, end=3, score=0.85)
+
+        assert Anonymizer._trim_at_line_break([span], "\nGuide") == []
+
+    def test_location_span_is_cut_too(self) -> None:
+        span = RecognizerResult(entity_type="LOCATION", start=0, end=21, score=0.85)
+
+        trimmed = Anonymizer._trim_at_line_break([span], "Amsterdam\nNetherlands x")
+
+        assert (trimmed[0].start, trimmed[0].end) == (0, 9)
+
+    def test_other_entity_types_are_not_cut(self) -> None:
+        span = RecognizerResult(entity_type="DATE_TIME", start=0, end=10, score=0.85)
+
+        trimmed = Anonymizer._trim_at_line_break([span], "1 May\n2026 x")
+
+        assert (trimmed[0].start, trimmed[0].end) == (0, 10)

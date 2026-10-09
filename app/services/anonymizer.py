@@ -212,6 +212,8 @@ def build_known_value_recognizers(
 # Longest first: "'s" must be tried before a bare "'", or the s would be kept.
 # Both the straight and the typographic apostrophe appear in real documents —
 # Word autocorrects to the typographic one, and PDF extraction returns it too.
+_NAME_ENTITIES: Final[frozenset[str]] = frozenset({"PERSON", LOCATION_ENTITY})
+
 _POSSESSIVE_SUFFIXES = ("'s", "\u2019s", "'S", "\u2019S", "'", "\u2019")
 
 
@@ -333,6 +335,7 @@ class Anonymizer:
             and not _overlaps_placeholder(placeholder_spans, r.start, r.end)
         ]
 
+        results = self._trim_at_line_break(results, text)
         results = self._trim_possessive(results, text)
         results = self._resolve_overlaps(results)
 
@@ -365,6 +368,29 @@ class Anonymizer:
             )
 
         return AnonymizationResult(anonymized_text=anonymized, entities=detected)
+
+    @staticmethod
+    def _trim_at_line_break(results: list, text: str) -> list:
+        """Cut a name span at its first line break and drop it if nothing is left.
+
+        spaCy treats a newline as ordinary whitespace, so in a signature such as
+        "Joris van Dijk\nGuide" the PERSON span runs on into the next line and
+        swallows "Guide" together with the break. A name never spans lines, so
+        PERSON and LOCATION spans stop at the first \n or \r and the rest of the
+        text stays where it was. Other entity types are left alone: an IBAN or
+        phone number is matched by pattern, not by a model guessing at a span.
+        """
+        trimmed: list = []
+        for result in results:
+            if result.entity_type in _NAME_ENTITIES:
+                span = text[result.start:result.end]
+                cut = next((i for i, ch in enumerate(span) if ch in "\r\n"), None)
+                if cut is not None:
+                    result.end = result.start + len(span[:cut].rstrip())
+                    if result.end <= result.start:
+                        continue
+            trimmed.append(result)
+        return trimmed
 
     @staticmethod
     def _trim_possessive(results: list, text: str) -> list:
