@@ -6,6 +6,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 from app.routes import build_detection_summary
 from app.services.file_processor import ProcessingSettings
 from app.services.folder_processor import normalize_extensions
+from app.services.language_registry import pick_language
 
 bp = Blueprint("document", __name__)
 
@@ -16,10 +17,11 @@ _SUPPORTED_LANGUAGES = ("en", "nl")
 def document_mode():
     """Render the Document Mode page."""
     settings = current_app.user_settings
+    registry = current_app.language_registry
     return render_template(
         "document_mode.html",
         active_mode="document",
-        language=settings.language,
+        language=pick_language(settings.language, registry.usable_languages(settings.enabled_languages)),
         detection_summary=build_detection_summary(settings, include_file_names=True),
         output_mode=settings.output_mode,
     )

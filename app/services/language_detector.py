@@ -22,7 +22,7 @@ class LanguageNotLoadedError(Exception):
         self.language = language
         self.message = (
             f"{name} detected but {name} model is not enabled. "
-            "Enable it in Settings > Languages and restart d-tach."
+            "Enable it in Settings > Languages."
         )
         super().__init__(self.message)
 

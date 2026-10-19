@@ -6,8 +6,8 @@
 <section class="settings-bar">
     <div class="setting-group">
         <div class="lang-selector" id="lang-selector">
-            <button class="lang-btn {% if language == 'en' %}active{% endif %}" data-lang="en">EN</button>
-            <button class="lang-btn {% if language == 'nl' %}active{% endif %}" data-lang="nl">NL</button>
+            <button class="lang-btn {% if language == 'en' %}active{% endif %}" data-lang="en" {% if 'en' not in usable_languages %}disabled title="Install English in Settings > Languages"{% endif %}>EN</button>
+            <button class="lang-btn {% if language == 'nl' %}active{% endif %}" data-lang="nl" {% if 'nl' not in usable_languages %}disabled title="Install Dutch in Settings > Languages"{% endif %}>NL</button>
         </div>
     </div>
 

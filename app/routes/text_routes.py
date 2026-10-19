@@ -13,6 +13,7 @@ from app.services.anonymizer import (
 )
 from app.services.hash_encoder import HashEncoder, UNHASHABLE_ENTITIES
 from app.services.language_detector import LanguageNotLoadedError
+from app.services.language_registry import pick_language
 from app.services.pattern_config import PatternConfig
 
 bp = Blueprint("text", __name__)
@@ -191,10 +192,11 @@ def anonymize():
 def _render_text_mode(prefill_text: str = ""):
     """Render text_mode.html with current UserSettings restored from disk."""
     settings = current_app.user_settings
+    registry = current_app.language_registry
     return render_template(
         "text_mode.html",
         active_mode="text",
-        language=settings.language,
+        language=pick_language(settings.language, registry.usable_languages(settings.enabled_languages)),
         detection_summary=build_detection_summary(settings),
         prefill_text=prefill_text,
     )

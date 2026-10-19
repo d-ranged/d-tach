@@ -47,7 +47,6 @@
 
 (function () {
     const strategySelect = document.getElementById("loading-strategy-select");
-    const restartNotice = document.getElementById("loading-strategy-restart-notice");
     const errorText = document.getElementById("loading-strategy-error");
     const languageError = document.getElementById("language-error");
     const languageNotice = document.getElementById("language-notice");
@@ -55,7 +54,6 @@
 
     if (strategySelect) {
         strategySelect.addEventListener("change", async function () {
-            restartNotice.hidden = true;
             errorText.hidden = true;
             try {
                 const resp = await fetch("/settings/languages/loading-strategy", {
@@ -69,7 +67,6 @@
                     errorText.hidden = false;
                     return;
                 }
-                restartNotice.hidden = false;
             } catch (_) {
                 errorText.textContent = "Could not reach the server.";
                 errorText.hidden = false;
@@ -89,12 +86,21 @@
         languageNotice.hidden = false;
     }
 
+    // The default-language list offers only languages that can be used right now.
+    function setDefaultLanguageOption(code, usable) {
+        const option = document.querySelector('#default-language-select option[value="' + code + '"]');
+        if (option) option.disabled = !usable;
+    }
+
     function markRowInstalled(row) {
         const name = row.dataset.languageName;
         const status = row.querySelector(".language-status");
         if (status) status.textContent = "Installed";
         const toggle = row.querySelector(".language-enabled-toggle");
-        if (toggle) toggle.disabled = false;
+        if (toggle) {
+            toggle.disabled = false;
+            toggle.checked = true;
+        }
         const installBtn = row.querySelector(".language-install-btn");
         if (installBtn) {
             const removeBtn = document.createElement("button");
@@ -104,7 +110,8 @@
         }
         const progress = row.querySelector(".language-progress");
         if (progress) progress.hidden = true;
-        showLanguageNotice(name + " installed. Restart d-tach to enable it.");
+        setDefaultLanguageOption(row.dataset.languageCode, true);
+        showLanguageNotice(name + " installed and ready to use.");
     }
 
     function markRowRemoved(row) {
@@ -125,7 +132,8 @@
             installBtn.disabled = false;
             removeBtn.replaceWith(installBtn);
         }
-        showLanguageNotice(name + " removed. Restart d-tach to apply.");
+        setDefaultLanguageOption(row.dataset.languageCode, false);
+        showLanguageNotice(name + " removed.");
     }
 
     async function pollInstallStatus(code, row) {
@@ -231,7 +239,8 @@
                     toggle.checked = !toggle.checked;
                     return;
                 }
-                showLanguageNotice("Restart d-tach to apply language changes.");
+                setDefaultLanguageOption(code, toggle.checked);
+                showLanguageNotice(row.dataset.languageName + (toggle.checked ? " enabled." : " disabled."));
             } catch (_) {
                 showLanguageError("Could not reach the server.");
                 toggle.checked = !toggle.checked;
