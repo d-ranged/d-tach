@@ -1,4 +1,4 @@
-# step_1.4.0_next.md — d-tach v1.4.0 Build Plan
+# step_1.4.0_completed.md — d-tach v1.4.0 Build Plan
 
 This document breaks the v1.4.0 planned work into ordered, testable steps.
 Each step should map to one or more Codeberg issues created before starting.
@@ -206,23 +206,30 @@ Prepared by Claude 23-10-2026: Step 3 ticked, `__version__` and the README badge
 
 ### Craig action
 
-- [ ] Review the staged diff and commit to `main` (message is in Source Control)
-- [ ] Tag: `git tag v1.4.0 -m "Release v1.4.0"`
-- [ ] Push: `git push && git push origin v1.4.0`
-- [ ] GitHub → Actions: wait for the Build run on `v1.4.0` to go green. It attaches
+- [x] Review the staged diff and commit to `main` (message is in Source Control)
+- [x] Tag: `git tag v1.4.0 -m "Release v1.4.0"`
+- [x] Push: `git push && git push origin v1.4.0`
+- [x] GitHub → Actions: wait for the Build run on `v1.4.0` to go green. It attaches
   `d-tach-windows.zip` and `d-tach-macos-arm.zip` to a GitHub release
-- [ ] Download both zips from that GitHub release
-- [ ] Codeberg → Releases → New Release → tag `v1.4.0` → paste the `[1.4.0]`
+- [x] Download both zips from that GitHub release
+- [x] Codeberg → Releases → New Release → tag `v1.4.0` → paste the `[1.4.0]`
   CHANGELOG entry → attach both zips → publish
-- [ ] Close [#79](https://codeberg.org/d-ranged/d-tach/issues/79)
-- [ ] Optional: delete the `v1.4.0-test.1` tag and its GitHub pre-release
+- [x] Close [#79](https://codeberg.org/d-ranged/d-tach/issues/79)
+- [x] Optional: delete the `v1.4.0-test.1` tag and its GitHub pre-release
+
+Released 23-10-2026. The first Build run on the tag failed its smoke test on both
+platforms: PyMuPDF 2.0 (out 19-10-2026) loads a layout module the frozen build can't
+ship. Pinned `pymupdf>=1.27,<2` in [#87](https://codeberg.org/d-ranged/d-tach/issues/87),
+moved the tag to the merge commit, and the next run went green.
+[#76](https://codeberg.org/d-ranged/d-tach/issues/76) shipped in this release but was
+left open. Closed 23-10-2026.
 
 ### After the release
 
 - Re-check `d-ranged/tutorials/d-tach/usage-runbook.md` in d-workspace against
   v1.4.0 before recording (see Step 0, Tutorial impact)
-- Optional: update the test clone at `C:\tools\d-tach`, or switch it to the
-  packaged build
+- [x] Craig's machine runs the packaged build from `C:\tools\d-tach`, started at login
+  from the `d-tach` Run key. Switched 23-10-2026
 
 ---
 
