@@ -2,7 +2,7 @@ from flask import Flask, jsonify, redirect, request, url_for
 
 from app.app_paths import bundle_dir, resolve_settings_path
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 APP_ID = "d-tach"
 

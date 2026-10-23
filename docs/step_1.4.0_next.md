@@ -18,7 +18,7 @@ Consult `step_1.3.0_next.md` for the acceptance-run defect log these items came 
 | 0 | Fixes from the tutorial dry run (8-10-2026), plus the class list name columns | ✅ Complete |
 | 1 | `/ai/restore` accepts a KEYREF file, not just a live session | ✅ Complete |
 | 2 | OCR fallback for image-based PDFs. Moved to v1.5.0 on 9-10-2026, [#78](https://codeberg.org/d-ranged/d-tach/issues/78) | ➡️ Moved |
-| 3 | Standalone packaged installer (PyInstaller) | ⬜ Not started |
+| 3 | Standalone packaged installer (PyInstaller) | ✅ Complete |
 
 Steps 1 and 2 came out of the v1.3.0 Step 6 acceptance run (25-8-2026). Step 3 was
 already committed to v1.4.0 in `roadmap.md` and is carried here unchanged.
@@ -196,6 +196,33 @@ build at about 300 MB installed and a 101 MB zip. #79 holds what the frozen buil
   must check its engine against the packaged build.
 
 See `roadmap.md` for the original planning note.
+
+---
+
+## Release Runbook — v1.4.0
+
+Prepared by Claude 23-10-2026: Step 3 ticked, `__version__` and the README badge at
+1.4.0, the `[1.4.0]` CHANGELOG entry written, full test suite green on `main` (645 passed).
+
+### Craig action
+
+- [ ] Review the staged diff and commit to `main` (message is in Source Control)
+- [ ] Tag: `git tag v1.4.0 -m "Release v1.4.0"`
+- [ ] Push: `git push && git push origin v1.4.0`
+- [ ] GitHub → Actions: wait for the Build run on `v1.4.0` to go green. It attaches
+  `d-tach-windows.zip` and `d-tach-macos-arm.zip` to a GitHub release
+- [ ] Download both zips from that GitHub release
+- [ ] Codeberg → Releases → New Release → tag `v1.4.0` → paste the `[1.4.0]`
+  CHANGELOG entry → attach both zips → publish
+- [ ] Close [#79](https://codeberg.org/d-ranged/d-tach/issues/79)
+- [ ] Optional: delete the `v1.4.0-test.1` tag and its GitHub pre-release
+
+### After the release
+
+- Re-check `d-ranged/tutorials/d-tach/usage-runbook.md` in d-workspace against
+  v1.4.0 before recording (see Step 0, Tutorial impact)
+- Optional: update the test clone at `C:\tools\d-tach`, or switch it to the
+  packaged build
 
 ---
 

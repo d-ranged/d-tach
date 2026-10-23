@@ -4,7 +4,7 @@
 
 Everything runs locally on your machine. No files or text are ever sent anywhere.
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue)](https://codeberg.org/d-ranged/d-tach/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue)](https://codeberg.org/d-ranged/d-tach/releases)
 &nbsp;
 [![License: EUPL-1.2](https://img.shields.io/badge/license-EUPL--1.2-green)](LICENSE)
 

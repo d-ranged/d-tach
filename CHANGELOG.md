@@ -9,6 +9,31 @@ Version numbers follow [Semantic Versioning](https://semver.org/): MAJOR.MINOR.P
 
 ---
 
+## [1.4.0] — 2026-10-23
+
+### Added
+
+- **Packaged builds for Windows and Apple Silicon Mac** — a download that runs without Python. Unzip and start d-tach, then choose a language on first run. Language models are downloaded on demand, so the build ships without them (about 100 MB zipped). The builds are unsigned, so the first start shows an operating system warning (see the README). Linux and Intel Macs keep the source install, which still works on every platform.
+- **`/ai/restore` reads a KEYREF file** — AI Mode restore takes an optional `keyref_path`, alone or together with a `session_id`. An output composed from several extracted documents now restores every placeholder, and a file anonymized in an earlier session restores from its KEYREF with no live session. When both are given the session wins on a conflict. `output_path` still writes restored text straight to disk.
+- **Class list name parts** — class list import takes First name, Surname and Full name columns and builds or splits whichever is missing, so each student gives all three. A first name or surname on its own is never matched at 2 letters or fewer, and one that is also an ordinary word (Will, Mark) only matches with a capital.
+- **Lone first names after a full name** — when a document contains a full name that was replaced, that name's first word on its own is replaced too, in the same document only and under the same rules as class list name parts.
+
+### Changed
+
+- **Settings live in a per-user folder** — settings, the AI token and the hashing secret now live in `%LOCALAPPDATA%\d-tach` on Windows, `~/Library/Application Support/d-tach` on macOS and `$XDG_DATA_HOME/d-tach` on Linux. A `user_settings.json` next to the code is copied over once and left in place, so an older version still finds it.
+- **Languages apply without a restart** — installing a language enables and loads it, removing or switching it off unloads it. Text and Document Mode grey out languages that are not installed and enabled.
+- **A second start opens the running d-tach** — starting d-tach while it is already running opens the existing one in the browser instead of starting a second copy on the same port.
+- **Log file** — a rotating log in the per-user folder, uncaught errors included.
+
+### Fixed
+
+- **File names wrapped twice** — with hashing and Check file and folder names on, an output name that was already a placeholder was wrapped again (`progress_[[L-ISB7_3PIB]].pdf`). File names now leave placeholders untouched, as body text does.
+- **Folder KEYREF mapping one placeholder to two people** — without hashing, sequential numbering restarted in every file, so one folder KEYREF could map `[PERSON_2]` to two different people and restore from it was wrong. A folder run now shares one numbering across all files.
+- **Names swallowing the next line's first word** — a name at the end of a line could take the first word of the next line into the same detection. Name spans are now cut at the first line break.
+- **Lone first names missed in some files** — a first name on its own was caught in one file and left in the clear in another. Fixed by the lone first name rule above.
+
+---
+
 ## [1.3.0] — 2026-08-26
 
 ### Added
