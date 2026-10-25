@@ -206,7 +206,7 @@ They can be picked up as small fixes in v1.1.1 or bundled into v1.2.0.
   Better addressed once the app is stable and has real non-English users requesting it.
 
 - **Multi-language architecture — language selectable at install, addable post-install**
-  ➡️ **Incorporated into v1.3.0 planning** — see `step_1.3.0_next.md`, Language Management section.
+  ➡️ **Incorporated into v1.3.0 planning** — see `step_1.3.0_completed.md`, Language Management section.
   The connection to the v1.3.0 tray/background work is that persistent background
   processes make the RAM cost of always-loaded spaCy models concrete: a large model
   is 400–700 MB, and loading languages the user never uses wastes that RAM all day.

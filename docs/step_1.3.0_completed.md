@@ -1,4 +1,4 @@
-# step_1.3.0_next.md — d-tach v1.3.0 Build Plan
+# step_1.3.0_completed.md — d-tach v1.3.0 Build Plan
 
 This document breaks the v1.3.0 planned work into ordered, testable steps.
 Each step should map to one or more Codeberg issues created before starting.

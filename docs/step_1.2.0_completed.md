@@ -395,7 +395,7 @@ produce `output_approach_d.pdf` using it.
 
 ## v1.3.0
 
-See `step_1.3.0_next.md` for the full build plan.
+See `step_1.3.0_completed.md` for the full build plan.
 
 Summary: system tray app, configurable port, language management (on-demand model
 download). These three are co-designed — the tray makes d-tach a persistent background

@@ -5,7 +5,7 @@ Each step should map to one or more Codeberg issues created before starting.
 
 Consult `roadmap.md` for background context.
 Consult `project_guide.md` for architectural decisions and documented alternatives.
-Consult `step_1.3.0_next.md` for the acceptance-run defect log these items came out of.
+Consult `step_1.3.0_completed.md` for the acceptance-run defect log these items came out of.
 
 **Do not start until v1.3.0 has shipped.**
 
