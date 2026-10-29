@@ -19,9 +19,10 @@ on a schedule.
 |---|---|---|
 | 1 | OCR fallback for image-based PDFs, [#78](https://codeberg.org/d-ranged/d-tach/issues/78) | ⏳ Open to contributors |
 | 2 | PyMuPDF 2.0: lift the `<2` pin or keep it | ⏳ Not started |
+| 3 | AI Mode can keep a KEYREF, [#89](https://codeberg.org/d-ranged/d-tach/issues/89) | ⏳ Open to contributors |
 
 Step 1 moved here from v1.4.0 on 9-10-2026. Step 2 came out of the v1.4.0 release,
-23-10-2026.
+23-10-2026. Step 3 is a real use-case gap, found 29-10-2026.
 
 ---
 
@@ -99,6 +100,36 @@ The pin is fine for now, but 1.x will stop getting fixes at some point.
 - A decision is written here: keep the pin, or lift it with the PyInstaller changes
   that need.
 - If lifted, the packaged build passes the smoke test on both platforms.
+
+---
+
+## Step 3 — AI Mode Can Keep a KEYREF
+
+**Codeberg issue:** [#89](https://codeberg.org/d-ranged/d-tach/issues/89). The issue holds
+the full design and is the source of truth.
+
+### Why
+
+An `/ai/extract` session lives in memory only. It is gone after the idle timeout and on
+every restart, so an answer that comes back later cannot be restored. `/ai/restore`
+already takes a `keyref_path` (#77), but AI Mode has no way to write one.
+
+Found 29-10-2026 from d-desk, which now keeps the names itself. So this is not blocking,
+it is for every other caller with a long conversation.
+
+### Design, in short
+
+- Off by default. Settings > AI Mode: "Allow AI Mode to keep key references", plus a
+  Key reference folder that d-tach owns, not the caller
+- `/ai/extract` takes `keep_keyref: true`, writes `KEYREF_<name>.csv` there, returns
+  `keyref_path`. No real name in any response
+- Optional `keyref_name`: one file per conversation, rows added, a conflicting row refused
+- Asked while off: a 400 that names the setting
+
+### ✅ Complete when
+
+See the issue. In short: off behaves as v1.4.0, on writes the file, and a restore from it
+works after the session expired and after a restart.
 
 ---
 
